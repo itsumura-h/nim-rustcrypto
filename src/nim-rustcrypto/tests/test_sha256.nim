@@ -1,14 +1,7 @@
 import unittest
 
+import ./utils
 import nim_rustcrypto
-
-proc hexOf(bytes: openArray[byte]): string =
-  const hexDigits = "0123456789abcdef"
-  result = newString(bytes.len * 2)
-  for i, value in bytes:
-    let byteValue = int(value)
-    result[2 * i] = hexDigits[byteValue shr 4]
-    result[2 * i + 1] = hexDigits[byteValue and 0x0F]
 
 
 suite "sha256":
@@ -75,3 +68,56 @@ suite "sha256":
     )
 
     check status == RustCryptoErrOutputTooShort
+
+  test "raw SHA-256 sign matches the prehash signature":
+    let message = "abc"
+    let secretKey = basePointSecretKey()
+    let messageDigest = sha256(message)
+    let prehashSignature = secp256k1EcdsaSign(messageDigest, secretKey)
+    var signature: Secp256k1Signature
+
+    let status = secp256k1EcdsaSignSha256Raw(
+      bytesPtr(message),
+      csize_t(message.len),
+      cast[ptr uint8](unsafeAddr secretKey[0]),
+      csize_t(secretKey.len),
+      cast[ptr uint8](addr signature[0]),
+      csize_t(signature.len),
+    )
+
+    check status == RustCryptoOk
+    check signature == prehashSignature
+
+  test "high-level SHA-256 sign and verify accept the message text":
+    let message = "abc"
+    let secretKey = basePointSecretKey()
+    let compressedPublicKey = secp256k1PublicKeyCompressed(secretKey)
+    let uncompressedPublicKey = secp256k1PublicKeyUncompressed(secretKey)
+    let messageDigest = sha256(message)
+    let prehashSignature = secp256k1EcdsaSign(messageDigest, secretKey)
+    let signature = secp256k1EcdsaSignSha256(message, secretKey)
+
+    check signature == prehashSignature
+    check secp256k1EcdsaVerifySha256(message, compressedPublicKey, signature)
+    check secp256k1EcdsaVerifySha256(message, uncompressedPublicKey, signature)
+    check not secp256k1EcdsaVerifySha256("abd", compressedPublicKey, signature)
+
+  test "raw SHA-256 verify rejects tampering":
+    let message = "abc"
+    let secretKey = basePointSecretKey()
+    let publicKey = secp256k1PublicKeyCompressed(secretKey)
+    let signature = secp256k1EcdsaSignSha256(message, secretKey)
+    var tamperedSignature = signature
+    tamperedSignature[0] = tamperedSignature[0] xor 0x01
+
+    let status = secp256k1EcdsaVerifySha256Raw(
+      bytesPtr(message),
+      csize_t(message.len),
+      cast[ptr uint8](unsafeAddr publicKey[0]),
+      csize_t(publicKey.len),
+      Secp256k1PublicKeyFormatCompressed,
+      cast[ptr uint8](addr tamperedSignature[0]),
+      csize_t(tamperedSignature.len),
+    )
+
+    check status == RustCryptoErrVerificationFailed

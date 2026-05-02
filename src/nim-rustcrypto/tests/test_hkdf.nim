@@ -1,14 +1,7 @@
 import unittest
 
+import ./utils
 import nim_rustcrypto
-
-proc hexOf(bytes: openArray[byte]): string =
-  const hexDigits = "0123456789abcdef"
-  result = newString(bytes.len * 2)
-  for i, value in bytes:
-    let byteValue = int(value)
-    result[2 * i] = hexDigits[byteValue shr 4]
-    result[2 * i + 1] = hexDigits[byteValue and 0x0F]
 
 proc bytesString(bytes: openArray[byte]): string =
   result = newString(bytes.len)
