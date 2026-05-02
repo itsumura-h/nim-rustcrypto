@@ -16,6 +16,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::slice;
 
 mod aead_common;
+mod aes_gcm;
 mod argon2;
 mod ed25519;
 mod oid;
@@ -49,6 +50,9 @@ pub const HKDF_SHA256_MAX_OKM_LEN: usize = SHA256_DIGEST_LEN * 255;
 pub const CHACHA20POLY1305_KEY_LEN: usize = 32;
 pub const CHACHA20POLY1305_NONCE_LEN: usize = 12;
 pub const CHACHA20POLY1305_TAG_LEN: usize = 16;
+pub const AES256GCM_KEY_LEN: usize = 32;
+pub const AES256GCM_NONCE_LEN: usize = 12;
+pub const AES256GCM_TAG_LEN: usize = 16;
 pub const SHA3_256_DIGEST_LEN: usize = 32;
 pub const KECCAK_256_DIGEST_LEN: usize = 32;
 pub const SECP256K1_SECRET_KEY_LEN: usize = 32;
@@ -822,6 +826,74 @@ pub extern "C" fn rustcrypto_chacha20poly1305_decrypt(
 ) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         chacha20poly1305_decrypt_impl(
+            key,
+            key_len,
+            nonce,
+            nonce_len,
+            aad,
+            aad_len,
+            ciphertext,
+            ciphertext_len,
+            tag,
+            tag_len,
+            plaintext,
+            plaintext_len,
+        )
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_aes256gcm_encrypt(
+    key: *const u8,
+    key_len: usize,
+    nonce: *const u8,
+    nonce_len: usize,
+    aad: *const u8,
+    aad_len: usize,
+    plaintext: *const u8,
+    plaintext_len: usize,
+    ciphertext: *mut u8,
+    ciphertext_len: usize,
+    tag: *mut u8,
+    tag_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        aes_gcm::encrypt_impl(
+            key,
+            key_len,
+            nonce,
+            nonce_len,
+            aad,
+            aad_len,
+            plaintext,
+            plaintext_len,
+            ciphertext,
+            ciphertext_len,
+            tag,
+            tag_len,
+        )
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_aes256gcm_decrypt(
+    key: *const u8,
+    key_len: usize,
+    nonce: *const u8,
+    nonce_len: usize,
+    aad: *const u8,
+    aad_len: usize,
+    ciphertext: *const u8,
+    ciphertext_len: usize,
+    tag: *const u8,
+    tag_len: usize,
+    plaintext: *mut u8,
+    plaintext_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        aes_gcm::decrypt_impl(
             key,
             key_len,
             nonce,

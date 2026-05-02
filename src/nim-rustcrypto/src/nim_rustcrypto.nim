@@ -1,6 +1,7 @@
 import nim_rustcrypto/ffi
 import nim_rustcrypto/ecdsa
 import nim_rustcrypto/chacha20poly1305
+import nim_rustcrypto/aesgcm
 import nim_rustcrypto/ed25519
 import nim_rustcrypto/pkcs8
 import nim_rustcrypto/hkdf
@@ -54,6 +55,9 @@ export ffi.Ed25519PublicKeyPemMaxLen
 export ffi.ChaCha20Poly1305KeyLen
 export ffi.ChaCha20Poly1305NonceLen
 export ffi.ChaCha20Poly1305TagLen
+export ffi.Aes256GcmKeyLen
+export ffi.Aes256GcmNonceLen
+export ffi.Aes256GcmTagLen
 export ffi.HkdfSha256PrkLen
 export ffi.HkdfSha256MaxOkmLen
 export ffi.ScryptMaxOkmLen
@@ -74,6 +78,8 @@ export ffi.hkdfSha256ExpandRaw
 export ffi.hkdfSha256DeriveRaw
 export ffi.chacha20Poly1305EncryptRaw
 export ffi.chacha20Poly1305DecryptRaw
+export ffi.aes256GcmEncryptRaw
+export ffi.aes256GcmDecryptRaw
 export ffi.sha3_256Raw
 export ffi.keccak256Raw
 export ffi.secp256k1PublicKeyFromSecretKeyRaw
@@ -127,6 +133,16 @@ export chacha20poly1305.chacha20poly1305Decrypt
 export chacha20poly1305.fromHexKey
 export chacha20poly1305.fromHexNonce
 export chacha20poly1305.fromHexTag
+export aesgcm.Aes256GcmKey
+export aesgcm.Aes256GcmNonce
+export aesgcm.Aes256GcmTag
+export aesgcm.Aes256GcmCiphertext
+export aesgcm.Aes256GcmPlaintext
+export aesgcm.aes256gcmEncrypt
+export aesgcm.aes256gcmDecrypt
+export aesgcm.fromHexKey
+export aesgcm.fromHexNonce
+export aesgcm.fromHexTag
 export pkcs8.Ed25519PrivateKey
 export pkcs8.Ed25519PublicKey
 export pkcs8.Ed25519PrivateKeyPkcs8Der

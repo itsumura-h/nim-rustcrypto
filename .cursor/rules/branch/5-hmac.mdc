@@ -83,10 +83,10 @@ alwaysApply: false
 - [x] 21. Argon2idを優先し、Argon2i/Argon2dを公開する必要があるか決める
 - [x] 21. memory cost、time cost、parallelism、salt、出力長、PHC stringの扱いを決める
 - [x] 21. Rust/Nim双方のテストで公式テストベクトルまたはcrateの既知ベクトルを確認する
-- [ ] 22. `aes-gcm`で公開する最小APIを決める
-- [ ] 22. AES-256-GCMを優先し、AES-128-GCMを公開する必要があるか決める
-- [ ] 22. 96ビットnonce、16バイトtag、AAD、暗号化/復号のone-shot APIを実装する
-- [ ] 22. Rust/Nim双方のテストでNIST系の既知ベクトルと認証失敗を確認する
+- [x] 22. `aes-gcm`で公開する最小APIを決める
+- [x] 22. AES-256-GCMを優先し、AES-128-GCMを公開する必要があるか決める
+- [x] 22. 96ビットnonce、16バイトtag、AAD、暗号化/復号のone-shot APIを実装する
+- [x] 22. Rust/Nim双方のテストでNIST系の既知ベクトルと認証失敗を確認する
 - [ ] 23. `aes-gcm-siv`で公開する最小APIを決める
 - [ ] 23. AES-256-GCM-SIVを優先し、nonce再利用耐性が必要な用途として通常AES-GCMと別API名にする
 - [ ] 23. Rust/Nim双方のテストで既知ベクトルと認証失敗を確認する
@@ -162,5 +162,6 @@ alwaysApply: false
 - scryptはN/r/pを明示的に渡すAPIを基本にする。Nim側では `N` を 2 の冪として受け取り、Rust側で `log_n` に変換する。`r` と `p` は正の値のみ受け入れ、出力長は RFC 7914 の上限まで許可する。追加の任意なメモリ上限は設けず、RFC の既知ベクトルと実運用での互換性を優先する。
 - Argon2はArgon2idを優先する。Rust側では `Argon2id` の raw derive と PHC 生成・検証を実装し、`m_cost`、`t_cost`、`p_cost`、`salt`、`hashLen` を明示する。PHC string を扱うAPIでは出力文字列の最大長と実出力長を明確にし、Nim側では生成時にバッファを動的拡張できるようにする。
 - AES-GCMとAES-GCM-SIVは別API名にする。AES-GCM-SIVはnonce再利用耐性を持つ別方式として扱い、AES-GCMの代替実装として暗黙に切り替えない。
+- AES-GCMはAES-256-GCMのみを公開する。鍵長32バイト、nonce 12バイト、tag 16バイトを固定長とし、暗号化は `(ciphertext, tag)` を分離した one-shot API、復号は認証失敗を整数エラーで返す。NIST SP 800-38D の既知ベクトルと改ざん tag で確認した。
 - BLAKE2は既存のSHA-256/SHA3-256/Keccak-256と同じone-shotハッシュAPIの形に揃える。最初にBLAKE2b-512とBLAKE2s-256のどちらを公開するか、READMEの用途に照らして決める。
 - READMEの優先順位 25 以降である `p256`、`p384`、`x509-cert`、`rsa`、`dsa`、楕円曲線暗号化、`ascon`、`ml-kem` はこのブランチの対象外とする。ただしDER/PKCS#8/PEMの設計では、後続でこれらを追加しやすい命名、エラーコード、バッファ設計を維持する。

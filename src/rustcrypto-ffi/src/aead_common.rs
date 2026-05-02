@@ -39,6 +39,12 @@ pub(crate) fn output_buffer<'a>(
     output_len: usize,
     required_len: usize,
 ) -> Result<&'a mut [u8], c_int> {
+    if required_len == 0 {
+        return Ok(unsafe {
+            slice::from_raw_parts_mut(core::ptr::NonNull::dangling().as_ptr(), 0)
+        });
+    }
+
     if output.is_null() {
         Err(RUSTCRYPTO_ERR_NULL_OUTPUT)
     } else if output_len < required_len {
@@ -144,6 +150,13 @@ mod tests {
             output_buffer(output.as_mut_ptr(), output.len(), 4).expect("exact length should pass");
 
         assert_eq!(view.len(), 4);
+    }
+
+    #[test]
+    fn output_buffer_accepts_null_for_empty_output() {
+        let view = output_buffer(core::ptr::null_mut(), 0, 0).expect("empty output should pass");
+
+        assert!(view.is_empty());
     }
 
     #[test]
