@@ -531,6 +531,60 @@ fn secp256k1_public_key_from_secret_key_impl(
     RUSTCRYPTO_OK
 }
 
+fn secp256k1_ecdsa_sign_message_impl<D: Digest>(
+    message: *const u8,
+    message_len: usize,
+    secret_key: *const u8,
+    secret_key_len: usize,
+    output: *mut u8,
+    output_len: usize,
+) -> c_int {
+    let message = match aead_common::optional_input(message, message_len) {
+        Ok(message) => message,
+        Err(err) => return err,
+    };
+
+    let message_digest = D::digest(message);
+    let message_digest: &[u8] = message_digest.as_ref();
+
+    secp256k1_ecdsa_sign_prehash_impl(
+        message_digest.as_ptr(),
+        message_digest.len(),
+        secret_key,
+        secret_key_len,
+        output,
+        output_len,
+    )
+}
+
+fn secp256k1_ecdsa_verify_message_impl<D: Digest>(
+    message: *const u8,
+    message_len: usize,
+    public_key: *const u8,
+    public_key_len: usize,
+    public_key_format: c_int,
+    signature: *const u8,
+    signature_len: usize,
+) -> c_int {
+    let message = match aead_common::optional_input(message, message_len) {
+        Ok(message) => message,
+        Err(err) => return err,
+    };
+
+    let message_digest = D::digest(message);
+    let message_digest: &[u8] = message_digest.as_ref();
+
+    secp256k1_ecdsa_verify_prehash_impl(
+        message_digest.as_ptr(),
+        message_digest.len(),
+        public_key,
+        public_key_len,
+        public_key_format,
+        signature,
+        signature_len,
+    )
+}
+
 fn secp256k1_ecdsa_sign_prehash_impl(
     message_digest: *const u8,
     message_digest_len: usize,
@@ -547,24 +601,26 @@ fn secp256k1_ecdsa_sign_prehash_impl(
         return RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT;
     }
 
-    if message_digest_len != SECP256K1_MESSAGE_DIGEST_LEN {
-        return RUSTCRYPTO_ERR_INVALID_MESSAGE_DIGEST;
-    }
+    let message_digest = match aead_common::fixed_input(
+        message_digest,
+        message_digest_len,
+        SECP256K1_MESSAGE_DIGEST_LEN,
+        RUSTCRYPTO_ERR_INVALID_MESSAGE_DIGEST,
+    ) {
+        Ok(message_digest) => message_digest,
+        Err(err) => return err,
+    };
 
-    if message_digest.is_null() {
-        return RUSTCRYPTO_ERR_NULL_INPUT_WITH_DATA;
-    }
+    let secret_key_bytes = match aead_common::fixed_input(
+        secret_key,
+        secret_key_len,
+        SECP256K1_SECRET_KEY_LEN,
+        RUSTCRYPTO_ERR_INVALID_SECRET_KEY,
+    ) {
+        Ok(secret_key_bytes) => secret_key_bytes,
+        Err(err) => return err,
+    };
 
-    if secret_key_len != SECP256K1_SECRET_KEY_LEN {
-        return RUSTCRYPTO_ERR_INVALID_SECRET_KEY;
-    }
-
-    if secret_key.is_null() {
-        return RUSTCRYPTO_ERR_NULL_INPUT_WITH_DATA;
-    }
-
-    let message_digest = unsafe { slice::from_raw_parts(message_digest, message_digest_len) };
-    let secret_key_bytes = unsafe { slice::from_raw_parts(secret_key, secret_key_len) };
     let signing_key = match SigningKey::from_slice(secret_key_bytes) {
         Ok(signing_key) => signing_key,
         Err(_) => return RUSTCRYPTO_ERR_INVALID_SECRET_KEY,
@@ -590,13 +646,15 @@ fn secp256k1_ecdsa_verify_prehash_impl(
     signature: *const u8,
     signature_len: usize,
 ) -> c_int {
-    if message_digest_len != SECP256K1_MESSAGE_DIGEST_LEN {
-        return RUSTCRYPTO_ERR_INVALID_MESSAGE_DIGEST;
-    }
-
-    if message_digest.is_null() {
-        return RUSTCRYPTO_ERR_NULL_INPUT_WITH_DATA;
-    }
+    let message_digest = match aead_common::fixed_input(
+        message_digest,
+        message_digest_len,
+        SECP256K1_MESSAGE_DIGEST_LEN,
+        RUSTCRYPTO_ERR_INVALID_MESSAGE_DIGEST,
+    ) {
+        Ok(message_digest) => message_digest,
+        Err(err) => return err,
+    };
 
     let public_key_format = match public_key_format {
         0 => SECP256K1_PUBLIC_KEY_UNCOMPRESSED_LEN,
@@ -604,31 +662,32 @@ fn secp256k1_ecdsa_verify_prehash_impl(
         _ => return RUSTCRYPTO_ERR_INVALID_PUBLIC_KEY_FORMAT,
     };
 
-    if public_key_len != public_key_format {
-        return RUSTCRYPTO_ERR_INVALID_PUBLIC_KEY_FORMAT;
-    }
+    let public_key_bytes = match aead_common::fixed_input(
+        public_key,
+        public_key_len,
+        public_key_format,
+        RUSTCRYPTO_ERR_INVALID_PUBLIC_KEY_FORMAT,
+    ) {
+        Ok(public_key_bytes) => public_key_bytes,
+        Err(err) => return err,
+    };
 
-    if public_key.is_null() {
-        return RUSTCRYPTO_ERR_NULL_INPUT_WITH_DATA;
-    }
+    let signature = match aead_common::fixed_input(
+        signature,
+        signature_len,
+        SECP256K1_SIGNATURE_LEN,
+        RUSTCRYPTO_ERR_INVALID_SIGNATURE,
+    ) {
+        Ok(signature) => signature,
+        Err(err) => return err,
+    };
 
-    if signature_len != SECP256K1_SIGNATURE_LEN {
-        return RUSTCRYPTO_ERR_INVALID_SIGNATURE;
-    }
-
-    if signature.is_null() {
-        return RUSTCRYPTO_ERR_NULL_INPUT_WITH_DATA;
-    }
-
-    let message_digest = unsafe { slice::from_raw_parts(message_digest, message_digest_len) };
-    let public_key_bytes = unsafe { slice::from_raw_parts(public_key, public_key_len) };
     let verifying_key = match VerifyingKey::from_sec1_bytes(public_key_bytes) {
         Ok(verifying_key) => verifying_key,
         Err(_) => return RUSTCRYPTO_ERR_INVALID_PUBLIC_KEY_FORMAT,
     };
 
-    let signature_bytes = unsafe { slice::from_raw_parts(signature, signature_len) };
-    let signature = match Signature::from_slice(signature_bytes) {
+    let signature = match Signature::from_slice(signature) {
         Ok(signature) => signature,
         Err(_) => return RUSTCRYPTO_ERR_INVALID_SIGNATURE,
     };
@@ -1075,6 +1134,72 @@ pub extern "C" fn rustcrypto_secp256k1_ecdsa_sign_prehash(
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_secp256k1_ecdsa_sign_sha256(
+    message: *const u8,
+    message_len: usize,
+    secret_key: *const u8,
+    secret_key_len: usize,
+    output: *mut u8,
+    output_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        secp256k1_ecdsa_sign_message_impl::<Sha256>(
+            message,
+            message_len,
+            secret_key,
+            secret_key_len,
+            output,
+            output_len,
+        )
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_secp256k1_ecdsa_sign_sha3_256(
+    message: *const u8,
+    message_len: usize,
+    secret_key: *const u8,
+    secret_key_len: usize,
+    output: *mut u8,
+    output_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        secp256k1_ecdsa_sign_message_impl::<Sha3_256>(
+            message,
+            message_len,
+            secret_key,
+            secret_key_len,
+            output,
+            output_len,
+        )
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_secp256k1_ecdsa_sign_keccak_256(
+    message: *const u8,
+    message_len: usize,
+    secret_key: *const u8,
+    secret_key_len: usize,
+    output: *mut u8,
+    output_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        secp256k1_ecdsa_sign_message_impl::<Keccak256>(
+            message,
+            message_len,
+            secret_key,
+            secret_key_len,
+            output,
+            output_len,
+        )
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn rustcrypto_secp256k1_ecdsa_verify_prehash(
     message_digest: *const u8,
     message_digest_len: usize,
@@ -1088,6 +1213,78 @@ pub extern "C" fn rustcrypto_secp256k1_ecdsa_verify_prehash(
         secp256k1_ecdsa_verify_prehash_impl(
             message_digest,
             message_digest_len,
+            public_key,
+            public_key_len,
+            public_key_format,
+            signature,
+            signature_len,
+        )
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_secp256k1_ecdsa_verify_sha256(
+    message: *const u8,
+    message_len: usize,
+    public_key: *const u8,
+    public_key_len: usize,
+    public_key_format: c_int,
+    signature: *const u8,
+    signature_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        secp256k1_ecdsa_verify_message_impl::<Sha256>(
+            message,
+            message_len,
+            public_key,
+            public_key_len,
+            public_key_format,
+            signature,
+            signature_len,
+        )
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_secp256k1_ecdsa_verify_sha3_256(
+    message: *const u8,
+    message_len: usize,
+    public_key: *const u8,
+    public_key_len: usize,
+    public_key_format: c_int,
+    signature: *const u8,
+    signature_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        secp256k1_ecdsa_verify_message_impl::<Sha3_256>(
+            message,
+            message_len,
+            public_key,
+            public_key_len,
+            public_key_format,
+            signature,
+            signature_len,
+        )
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_secp256k1_ecdsa_verify_keccak_256(
+    message: *const u8,
+    message_len: usize,
+    public_key: *const u8,
+    public_key_len: usize,
+    public_key_format: c_int,
+    signature: *const u8,
+    signature_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        secp256k1_ecdsa_verify_message_impl::<Keccak256>(
+            message,
+            message_len,
             public_key,
             public_key_len,
             public_key_format,
@@ -1494,6 +1691,12 @@ mod tests {
             write!(&mut hex, "{:02x}", byte).expect("write to string");
         }
         hex
+    }
+
+    fn secp256k1_base_secret_key() -> [u8; SECP256K1_SECRET_KEY_LEN] {
+        let mut bytes = [0u8; SECP256K1_SECRET_KEY_LEN];
+        bytes[31] = 1;
+        bytes
     }
 
     #[test]
@@ -2286,11 +2489,7 @@ mod tests {
 
     #[test]
     fn secp256k1_ecdsa_verify_prehash_rejects_tampered_signature() {
-        let secret_key = {
-            let mut bytes = [0u8; SECP256K1_SECRET_KEY_LEN];
-            bytes[31] = 1;
-            bytes
-        };
+        let secret_key = secp256k1_base_secret_key();
         let message_digest = [
             0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea, 0x41, 0x41, 0x40, 0xde, 0x5d, 0xae,
             0x22, 0x23, 0xb0, 0x03, 0x61, 0xa3, 0x96, 0x17, 0x7a, 0x9c, 0xb4, 0x10, 0xff, 0x61,
@@ -2333,5 +2532,303 @@ mod tests {
         );
 
         assert_eq!(verify_status, RUSTCRYPTO_ERR_VERIFICATION_FAILED);
+    }
+
+    #[test]
+    fn secp256k1_ecdsa_sign_sha256_matches_prehash_vector() {
+        let secret_key = secp256k1_base_secret_key();
+        let message = b"abc";
+        let mut message_digest = [0u8; SHA256_DIGEST_LEN];
+        let mut prehash_signature = [0u8; SECP256K1_SIGNATURE_LEN];
+        let mut one_shot_signature = [0u8; SECP256K1_SIGNATURE_LEN];
+
+        let digest_status = rustcrypto_sha256(
+            message.as_ptr(),
+            message.len(),
+            message_digest.as_mut_ptr(),
+            message_digest.len(),
+        );
+        assert_eq!(digest_status, RUSTCRYPTO_OK);
+
+        let prehash_status = rustcrypto_secp256k1_ecdsa_sign_prehash(
+            message_digest.as_ptr(),
+            message_digest.len(),
+            secret_key.as_ptr(),
+            secret_key.len(),
+            prehash_signature.as_mut_ptr(),
+            prehash_signature.len(),
+        );
+        assert_eq!(prehash_status, RUSTCRYPTO_OK);
+
+        let one_shot_status = rustcrypto_secp256k1_ecdsa_sign_sha256(
+            message.as_ptr(),
+            message.len(),
+            secret_key.as_ptr(),
+            secret_key.len(),
+            one_shot_signature.as_mut_ptr(),
+            one_shot_signature.len(),
+        );
+        assert_eq!(one_shot_status, RUSTCRYPTO_OK);
+        assert_eq!(one_shot_signature, prehash_signature);
+    }
+
+    #[test]
+    fn secp256k1_ecdsa_verify_sha256_accepts_valid_signature_and_rejects_tampering() {
+        let secret_key = secp256k1_base_secret_key();
+        let message = b"abc";
+        let mut public_key = [0u8; SECP256K1_PUBLIC_KEY_COMPRESSED_LEN];
+        let mut signature = [0u8; SECP256K1_SIGNATURE_LEN];
+
+        let sign_status = rustcrypto_secp256k1_ecdsa_sign_sha256(
+            message.as_ptr(),
+            message.len(),
+            secret_key.as_ptr(),
+            secret_key.len(),
+            signature.as_mut_ptr(),
+            signature.len(),
+        );
+        assert_eq!(sign_status, RUSTCRYPTO_OK);
+
+        let public_key_status = rustcrypto_secp256k1_public_key_from_secret_key(
+            secret_key.as_ptr(),
+            secret_key.len(),
+            public_key.as_mut_ptr(),
+            public_key.len(),
+            1,
+        );
+        assert_eq!(public_key_status, RUSTCRYPTO_OK);
+
+        let verify_status = rustcrypto_secp256k1_ecdsa_verify_sha256(
+            message.as_ptr(),
+            message.len(),
+            public_key.as_ptr(),
+            public_key.len(),
+            1,
+            signature.as_ptr(),
+            signature.len(),
+        );
+        assert_eq!(verify_status, RUSTCRYPTO_OK);
+
+        let tampered_message = b"abd";
+        let mismatch_status = rustcrypto_secp256k1_ecdsa_verify_sha256(
+            tampered_message.as_ptr(),
+            tampered_message.len(),
+            public_key.as_ptr(),
+            public_key.len(),
+            1,
+            signature.as_ptr(),
+            signature.len(),
+        );
+        assert_eq!(mismatch_status, RUSTCRYPTO_ERR_VERIFICATION_FAILED);
+
+        signature[0] ^= 0x01;
+        let tampered_status = rustcrypto_secp256k1_ecdsa_verify_sha256(
+            message.as_ptr(),
+            message.len(),
+            public_key.as_ptr(),
+            public_key.len(),
+            1,
+            signature.as_ptr(),
+            signature.len(),
+        );
+        assert_eq!(tampered_status, RUSTCRYPTO_ERR_VERIFICATION_FAILED);
+    }
+
+    #[test]
+    fn secp256k1_ecdsa_sign_sha3_256_matches_prehash_vector() {
+        let secret_key = secp256k1_base_secret_key();
+        let message = b"abc";
+        let mut message_digest = [0u8; SHA3_256_DIGEST_LEN];
+        let mut prehash_signature = [0u8; SECP256K1_SIGNATURE_LEN];
+        let mut one_shot_signature = [0u8; SECP256K1_SIGNATURE_LEN];
+
+        let digest_status = rustcrypto_sha3_256(
+            message.as_ptr(),
+            message.len(),
+            message_digest.as_mut_ptr(),
+            message_digest.len(),
+        );
+        assert_eq!(digest_status, RUSTCRYPTO_OK);
+
+        let prehash_status = rustcrypto_secp256k1_ecdsa_sign_prehash(
+            message_digest.as_ptr(),
+            message_digest.len(),
+            secret_key.as_ptr(),
+            secret_key.len(),
+            prehash_signature.as_mut_ptr(),
+            prehash_signature.len(),
+        );
+        assert_eq!(prehash_status, RUSTCRYPTO_OK);
+
+        let one_shot_status = rustcrypto_secp256k1_ecdsa_sign_sha3_256(
+            message.as_ptr(),
+            message.len(),
+            secret_key.as_ptr(),
+            secret_key.len(),
+            one_shot_signature.as_mut_ptr(),
+            one_shot_signature.len(),
+        );
+        assert_eq!(one_shot_status, RUSTCRYPTO_OK);
+        assert_eq!(one_shot_signature, prehash_signature);
+    }
+
+    #[test]
+    fn secp256k1_ecdsa_verify_sha3_256_rejects_keccak_and_tampering() {
+        let secret_key = secp256k1_base_secret_key();
+        let message = b"abc";
+        let mut public_key = [0u8; SECP256K1_PUBLIC_KEY_COMPRESSED_LEN];
+        let mut signature = [0u8; SECP256K1_SIGNATURE_LEN];
+
+        let sign_status = rustcrypto_secp256k1_ecdsa_sign_sha3_256(
+            message.as_ptr(),
+            message.len(),
+            secret_key.as_ptr(),
+            secret_key.len(),
+            signature.as_mut_ptr(),
+            signature.len(),
+        );
+        assert_eq!(sign_status, RUSTCRYPTO_OK);
+
+        let public_key_status = rustcrypto_secp256k1_public_key_from_secret_key(
+            secret_key.as_ptr(),
+            secret_key.len(),
+            public_key.as_mut_ptr(),
+            public_key.len(),
+            1,
+        );
+        assert_eq!(public_key_status, RUSTCRYPTO_OK);
+
+        let verify_status = rustcrypto_secp256k1_ecdsa_verify_sha3_256(
+            message.as_ptr(),
+            message.len(),
+            public_key.as_ptr(),
+            public_key.len(),
+            1,
+            signature.as_ptr(),
+            signature.len(),
+        );
+        assert_eq!(verify_status, RUSTCRYPTO_OK);
+
+        let keccak_status = rustcrypto_secp256k1_ecdsa_verify_keccak_256(
+            message.as_ptr(),
+            message.len(),
+            public_key.as_ptr(),
+            public_key.len(),
+            1,
+            signature.as_ptr(),
+            signature.len(),
+        );
+        assert_eq!(keccak_status, RUSTCRYPTO_ERR_VERIFICATION_FAILED);
+
+        signature[0] ^= 0x01;
+        let tampered_status = rustcrypto_secp256k1_ecdsa_verify_sha3_256(
+            message.as_ptr(),
+            message.len(),
+            public_key.as_ptr(),
+            public_key.len(),
+            1,
+            signature.as_ptr(),
+            signature.len(),
+        );
+        assert_eq!(tampered_status, RUSTCRYPTO_ERR_VERIFICATION_FAILED);
+    }
+
+    #[test]
+    fn secp256k1_ecdsa_sign_keccak_256_matches_prehash_vector() {
+        let secret_key = secp256k1_base_secret_key();
+        let message = b"abc";
+        let mut message_digest = [0u8; KECCAK_256_DIGEST_LEN];
+        let mut prehash_signature = [0u8; SECP256K1_SIGNATURE_LEN];
+        let mut one_shot_signature = [0u8; SECP256K1_SIGNATURE_LEN];
+
+        let digest_status = rustcrypto_keccak_256(
+            message.as_ptr(),
+            message.len(),
+            message_digest.as_mut_ptr(),
+            message_digest.len(),
+        );
+        assert_eq!(digest_status, RUSTCRYPTO_OK);
+
+        let prehash_status = rustcrypto_secp256k1_ecdsa_sign_prehash(
+            message_digest.as_ptr(),
+            message_digest.len(),
+            secret_key.as_ptr(),
+            secret_key.len(),
+            prehash_signature.as_mut_ptr(),
+            prehash_signature.len(),
+        );
+        assert_eq!(prehash_status, RUSTCRYPTO_OK);
+
+        let one_shot_status = rustcrypto_secp256k1_ecdsa_sign_keccak_256(
+            message.as_ptr(),
+            message.len(),
+            secret_key.as_ptr(),
+            secret_key.len(),
+            one_shot_signature.as_mut_ptr(),
+            one_shot_signature.len(),
+        );
+        assert_eq!(one_shot_status, RUSTCRYPTO_OK);
+        assert_eq!(one_shot_signature, prehash_signature);
+    }
+
+    #[test]
+    fn secp256k1_ecdsa_verify_keccak_256_rejects_sha3_and_tampering() {
+        let secret_key = secp256k1_base_secret_key();
+        let message = b"abc";
+        let mut public_key = [0u8; SECP256K1_PUBLIC_KEY_COMPRESSED_LEN];
+        let mut signature = [0u8; SECP256K1_SIGNATURE_LEN];
+
+        let sign_status = rustcrypto_secp256k1_ecdsa_sign_keccak_256(
+            message.as_ptr(),
+            message.len(),
+            secret_key.as_ptr(),
+            secret_key.len(),
+            signature.as_mut_ptr(),
+            signature.len(),
+        );
+        assert_eq!(sign_status, RUSTCRYPTO_OK);
+
+        let public_key_status = rustcrypto_secp256k1_public_key_from_secret_key(
+            secret_key.as_ptr(),
+            secret_key.len(),
+            public_key.as_mut_ptr(),
+            public_key.len(),
+            1,
+        );
+        assert_eq!(public_key_status, RUSTCRYPTO_OK);
+
+        let verify_status = rustcrypto_secp256k1_ecdsa_verify_keccak_256(
+            message.as_ptr(),
+            message.len(),
+            public_key.as_ptr(),
+            public_key.len(),
+            1,
+            signature.as_ptr(),
+            signature.len(),
+        );
+        assert_eq!(verify_status, RUSTCRYPTO_OK);
+
+        let sha3_status = rustcrypto_secp256k1_ecdsa_verify_sha3_256(
+            message.as_ptr(),
+            message.len(),
+            public_key.as_ptr(),
+            public_key.len(),
+            1,
+            signature.as_ptr(),
+            signature.len(),
+        );
+        assert_eq!(sha3_status, RUSTCRYPTO_ERR_VERIFICATION_FAILED);
+
+        signature[0] ^= 0x01;
+        let tampered_status = rustcrypto_secp256k1_ecdsa_verify_keccak_256(
+            message.as_ptr(),
+            message.len(),
+            public_key.as_ptr(),
+            public_key.len(),
+            1,
+            signature.as_ptr(),
+            signature.len(),
+        );
+        assert_eq!(tampered_status, RUSTCRYPTO_ERR_VERIFICATION_FAILED);
     }
 }

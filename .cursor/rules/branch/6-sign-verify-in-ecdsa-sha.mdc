@@ -1,0 +1,80 @@
+---
+description: 6-sign-verify-in-ecdsa-shaブランチでの開発時に読み込む
+alwaysApply: false
+---
+6-sign-verify-in-ecdsa-shaブランチルール
+===
+
+このブランチで実装することは以下の通りです。
+- 既存のsecp256k1 ECDSA prehash署名・検証APIを維持する
+- SHA-2、SHA-3、Keccak系ハッシュと組み合わせたsecp256k1 ECDSAの署名作成sign APIを追加する
+- SHA-2、SHA-3、Keccak系ハッシュと組み合わせたsecp256k1 ECDSAの署名検証verify APIを追加する
+- Nim通常利用者がメッセージ本文を渡すだけで、ハッシュ計算、署名作成、署名検証を使える高水準APIを追加する
+- ハッシュ済み32バイト入力を扱う既存APIと、任意長メッセージ入力を扱う新規APIの責務を明確に分ける
+
+このブランチでは、既存の `rustcrypto_secp256k1_ecdsa_sign_prehash` / `rustcrypto_secp256k1_ecdsa_verify_prehash` を低水準prehash APIとして残し、その上にメッセージ本文を入力するハッシュ込みの署名・検証APIを追加する。
+対象はまずsecp256k1 ECDSAとし、署名形式は既存と同じ64バイト固定長raw `(r, s)` を基本にする。
+DER署名の入出力、回復ID付き署名、公開鍵復元、P-256/P-384/RSA/Ed25519の拡張はこのブランチの対象外とする。
+
+## 進捗
+- [x] 既存のSHA-256、SHA3-256、Keccak-256、secp256k1 ECDSA、DER署名変換のAPIとテストを確認する
+- [x] SHA-2系で最初に公開するECDSAハッシュ込みAPIを決める
+- [x] SHA3-256で公開するECDSAハッシュ込みAPIを決める
+- [x] Ethereum互換Keccak-256で公開するECDSAハッシュ込みAPIを決める
+- [x] `sha2`、`sha3`、`keccak` の名前がNim公開API上で混同されない命名規則を決める
+- [x] Rust側FFI関数名、引数、戻り値、エラーコードの設計を既存prehash APIと揃える
+- [x] Rust側にsecp256k1 ECDSA + SHA-256のsign/verify one-shot FFI関数を実装する
+- [x] Rust側にsecp256k1 ECDSA + SHA3-256のsign/verify one-shot FFI関数を実装する
+- [x] Rust側にsecp256k1 ECDSA + Keccak-256のsign/verify one-shot FFI関数を実装する
+- [x] Rust側でNULLポインタ、不正秘密鍵、不正公開鍵、不正署名、短い出力バッファ、検証失敗を整数エラーコードで返す
+- [x] Rust側のpanicをFFI境界の外へ漏らさない
+- [x] Rust側テストでSHA-256ハッシュ込みECDSA署名・検証・改ざん署名の失敗を確認する
+- [x] Rust側テストでSHA3-256ハッシュ込みECDSA署名・検証・改ざん署名の失敗を確認する
+- [x] Rust側テストでKeccak-256ハッシュ込みECDSA署名・検証・改ざん署名の失敗を確認する
+- [x] Rustでビルドし、`librust_crypto_ffi.a` を出力する
+- [x] Nim側に低水準FFI procを追加する
+- [x] Nim側にSHA-256、SHA3-256、Keccak-256別の高水準sign/verify APIを追加する
+- [x] Nim側の高水準verify APIは検証失敗を例外ではなく `false` として返す設計を維持する
+- [x] Nim側テストでSHA-256ハッシュ込みECDSA署名・検証・改ざん署名の失敗を確認する
+- [x] Nim側テストでSHA3-256ハッシュ込みECDSA署名・検証・改ざん署名の失敗を確認する
+- [x] Nim側テストでKeccak-256ハッシュ込みECDSA署名・検証・改ざん署名の失敗を確認する
+- [x] READMEまたは利用手順を新規APIに合わせて更新する
+
+## 参考資料
+- RustCrypto: https://github.com/RustCrypto
+- RustCrypto `k256`: https://github.com/RustCrypto/elliptic-curves/tree/master/k256
+- RustCrypto `ecdsa`: https://github.com/RustCrypto/signatures/tree/master/ecdsa
+- RustCrypto `signature`: https://github.com/RustCrypto/traits/tree/master/signature
+- RustCrypto `sha2`: https://github.com/RustCrypto/hashes/tree/master/sha2
+- RustCrypto `sha3`: https://github.com/RustCrypto/hashes/tree/master/sha3
+- `k256::ecdsa::hazmat::sign_prehashed`: https://docs.rs/k256/latest/k256/ecdsa/hazmat/fn.sign_prehashed.html
+- `k256::ecdsa::hazmat::verify_prehashed`: https://docs.rs/k256/latest/k256/ecdsa/hazmat/fn.verify_prehashed.html
+- SEC 1: Elliptic Curve Cryptography: https://www.secg.org/sec1-v2.pdf
+- FIPS 186-5 Digital Signature Standard: https://csrc.nist.gov/pubs/fips/186-5/final
+- RFC 6979 Deterministic Usage of DSA and ECDSA: https://www.rfc-editor.org/rfc/rfc6979
+- Ethereum Yellow Paper: https://ethereum.github.io/yellowpaper/paper.pdf
+- Rust Reference Linkage: https://doc.rust-lang.org/reference/linkage.html
+- Nim Manual: https://nim-lang.org/docs/manual.html
+- Nim system module: https://nim-lang.org/docs/system.html
+
+## 調査結果・設計まとめ
+- このブランチの作業は、プロジェクトルール `SYW-DEV-001` に従い、Rust実装、Rustテスト、Rust静的アーカイブ出力、Nim FFIラッパー実装、Nimテストの順に進める。
+- 既存のsecp256k1 ECDSA APIは、32バイトのメッセージダイジェストを入力するprehash APIである。新規APIは任意長メッセージを入力し、Rust側またはNim高水準API側で明示したハッシュ関数を適用してから既存prehash処理に渡す。
+- `sha2` として最初に扱う対象は、既存実装があるSHA-256を優先する。SHA-384やSHA-512をsecp256k1 ECDSAに追加する必要が出た場合は、出力長が32バイトではないことによる切り詰め方やRustCrypto側APIの扱いを確認してから別途設計する。
+- SHA3-256とKeccak-256はどちらも32バイト出力だが、パディングと用途が異なるため、API名を必ず分ける。Ethereum互換用途はKeccak-256 APIを使い、NIST SHA-3用途はSHA3-256 APIを使う。
+- Nim公開API名は、既存の `secp256k1EcdsaSign` / `secp256k1EcdsaVerify` がprehash入力を受け取ることを前提に、新規APIでは `Sha256`、`Sha3_256`、`Keccak256` などのハッシュ名を明示する。
+- Rust側FFI公開APIにはRustのtrait、`Result`、`Vec`、`String`、Rust参照、trait objectを出さない。入力メッセージ、秘密鍵、公開鍵、署名、出力署名はすべてC ABI互換のポインタ、長さ、整数、固定長バッファで表現する。
+- バッファ所有権は呼び出し元であるNim側に置く。Rust側は入力バッファを借用し、署名出力バッファへ64バイトを書き込むだけにする。
+- 空メッセージは入力ポインタ `NULL` と長さ0を許容する。長さが0ではない入力に `NULL` ポインタが渡された場合は、既存APIと同じくNULL入力エラーにする。
+- 署名生成は既存prehash署名と同じく64バイト固定長raw `(r, s)` を出力する。DER署名が必要な場合は既存のDER変換APIを組み合わせる。
+- 検証APIでは、不正入力と暗号学的な検証失敗を分ける。Nim高水準APIでは、検証失敗は `false`、NULL入力や不正公開鍵形式など呼び出し方の誤りは例外として扱う既存方針に揃える。
+- ECDSAでは署名対象のハッシュ関数がプロトコル互換性に直結するため、暗黙のデフォルトハッシュを増やさない。利用者がSHA-256、SHA3-256、Keccak-256のどれを使っているか、関数名から読めるようにする。
+- RustCrypto `k256` のprehash系APIは、入力が暗号学的に安全なダイジェストであることを前提にする。新規ハッシュ込みAPIでは、この前提をライブラリ内部で満たし、任意長メッセージを直接prehash APIへ渡さない。
+- deterministic ECDSAの既知値は既存prehash APIのテスト値と整合させる。SHA-256ハッシュ込みAPIでは、`"abc"` を入力した場合に既存の `sha256("abc")` をprehash APIへ渡した署名と一致することを確認する。
+- SHA3-256とKeccak-256でも、同じ秘密鍵・同じメッセージから生成される署名が、それぞれのハッシュを事前計算して既存prehash APIへ渡した結果と一致することを確認する。
+- 改ざん署名、異なるメッセージ、異なるハッシュ種別での検証失敗をテストに含める。特にSHA3-256署名をKeccak-256 verifyで受け入れないこと、Keccak-256署名をSHA3-256 verifyで受け入れないことを確認する。
+- READMEの公開API一覧には、prehash APIとハッシュ込みAPIの違いが分かるように追記する。利用者向けには、通常はハッシュ込みAPIを使い、プロトコル側ですでにダイジェストが与えられる場合のみprehash APIを使う方針を示す。
+- 追加した one-shot API は Rust 側でメッセージを `Sha256` / `Sha3_256` / `Keccak256` によって内部ハッシュしてから、既存 prehash API と同じ 64 バイト raw `(r, s)` 署名処理へ流す。
+- Nim 側の公開名は `secp256k1EcdsaSignSha256` / `secp256k1EcdsaVerifySha256`、`secp256k1EcdsaSignSha3_256` / `secp256k1EcdsaVerifySha3_256`、`secp256k1EcdsaSignKeccak256` / `secp256k1EcdsaVerifyKeccak256` に統一した。
+- verify の高水準 API は従来どおり、検証失敗だけを `false` で返し、呼び出し方の誤りは例外にする。
+- Rust の release 静的ライブラリ生成と Nim の全テストを実行し、追加した one-shot ECDSA 経路を含めて成功を確認した。

@@ -1,9 +1,14 @@
+import ./ecdsa_common
 import ./ffi
+import ./utils
 
 type
   Secp256k1SecretKey* = array[Secp256k1SecretKeyLen, byte]
   Secp256k1CompressedPublicKey* = array[Secp256k1PublicKeyCompressedLen, byte]
   Secp256k1UncompressedPublicKey* = array[Secp256k1PublicKeyUncompressedLen, byte]
+  Secp256k1MessageDigest* = ecdsa_common.Secp256k1MessageDigest
+  Secp256k1Signature* = ecdsa_common.Secp256k1Signature
+  Secp256k1DerSignature* = ecdsa_common.Secp256k1DerSignature
 
 proc raiseIfError(status: cint) =
   case status
@@ -50,3 +55,42 @@ proc secp256k1PublicKeyUncompressed*(secretKey: Secp256k1SecretKey): Secp256k1Un
   )
   raiseIfError(status)
   output
+
+proc secp256k1EcdsaSign*(
+    messageDigest: Secp256k1MessageDigest,
+    secretKey: Secp256k1SecretKey,
+  ): Secp256k1Signature =
+  secp256k1EcdsaSignMessage(
+    secp256k1EcdsaSignRaw,
+    messageDigest,
+    secretKey,
+    "rustcrypto_secp256k1_ecdsa_sign_prehash",
+  )
+
+proc secp256k1EcdsaVerify*(
+    messageDigest: Secp256k1MessageDigest,
+    publicKey: Secp256k1CompressedPublicKey,
+    signature: Secp256k1Signature,
+  ): bool =
+  secp256k1EcdsaVerifyMessage(
+    secp256k1EcdsaVerifyRaw,
+    messageDigest,
+    publicKey,
+    signature,
+    Secp256k1PublicKeyFormatCompressed,
+    "rustcrypto_secp256k1_ecdsa_verify_prehash",
+  )
+
+proc secp256k1EcdsaVerify*(
+    messageDigest: Secp256k1MessageDigest,
+    publicKey: Secp256k1UncompressedPublicKey,
+    signature: Secp256k1Signature,
+  ): bool =
+  secp256k1EcdsaVerifyMessage(
+    secp256k1EcdsaVerifyRaw,
+    messageDigest,
+    publicKey,
+    signature,
+    Secp256k1PublicKeyFormatUncompressed,
+    "rustcrypto_secp256k1_ecdsa_verify_prehash",
+  )

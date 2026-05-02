@@ -1,7 +1,5 @@
+use crate::{BLAKE2B_512_DIGEST_LEN, BLAKE2S_256_DIGEST_LEN, RUSTCRYPTO_OK, aead_common};
 use ::blake2::{Blake2b512, Blake2s256, Digest as Blake2Digest};
-use crate::{
-    BLAKE2B_512_DIGEST_LEN, BLAKE2S_256_DIGEST_LEN, RUSTCRYPTO_OK, aead_common,
-};
 use core::ffi::c_int;
 
 pub(crate) fn blake2b_512_impl(
