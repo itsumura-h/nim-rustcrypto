@@ -2,7 +2,7 @@
 
 RustCrypto: https://github.com/RustCrypto
 
-Bitcoin、Ethereum、Lightning Network などの暗号資産・ecash開発で使いやすいNim向けFFIライブラリを作る。
+RustCrypto を Nim から安全に呼び出すための FFI ラッパーです。現時点では SHA-256、secp256k1 公開鍵導出、ECDSA 署名・検証、SHA3-256、Keccak-256 を提供しています。
 
 ## 開発優先順位
 
@@ -105,3 +105,40 @@ Bitcoin、Ethereum、Lightning Network などの暗号資産・ecash開発で使
 - [ ] 33. `ml-kem`
   - 用途: 将来の耐量子KEM対応。現時点のBitcoin/Ethereum/Lightning中核では後回し。
   - 依存先: KEM用のFFI設計。必要に応じて`hkdf`や`aead`と組み合わせる。
+
+## 使い方
+
+### Rust
+
+Rust 側は `src/rustcrypto-ffi` でビルドします。
+
+```bash
+cd src/rustcrypto-ffi
+cargo test
+cargo build --release --lib
+```
+
+### Nim
+
+Nim 側は `src/nim-rustcrypto` でビルドします。`nim_rustcrypto` を import すると、低水準 FFI と高水準 API の両方を使えます。
+
+```bash
+cd src/nim-rustcrypto
+nimble test -y
+```
+
+## 提供 API
+
+- `sha256`, `sha256Hex`
+- `secp256k1PublicKeyCompressed`, `secp256k1PublicKeyUncompressed`
+- `secp256k1EcdsaSign`, `secp256k1EcdsaVerify`
+- `sha3_256`, `sha3_256Hex`
+- `keccak256`, `keccak256Hex`
+
+## テストベクトル
+
+- `SHA256("abc")`
+- secp256k1 秘密鍵 `0x...01` からの公開鍵導出
+- secp256k1 `abc` ダイジェストでの ECDSA 署名・検証
+- `SHA3-256("abc")`
+- `Keccak-256("abc")`

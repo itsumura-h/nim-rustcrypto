@@ -1,0 +1,83 @@
+---
+description: 3-ecdsaブランチでの開発時に読み込む
+alwaysApply: false
+---
+3-ecdsaブランチルール
+===
+
+このブランチで実装することは以下の通りです。
+- READMEの開発優先順位 3. `k256` (secp256k1)
+- READMEの開発優先順位 4. `signature` trait
+- READMEの開発優先順位 5. `ecdsa`
+- READMEの開発優先順位 6. `sha3`
+- READMEの開発優先順位 7. `keccak`
+
+このブランチでは、Bitcoin、Ethereum、Lightning Networkで利用しやすいsecp256k1署名基盤を、RustCryptoを使ったRust FFIとNimラッパーとして実装する。
+対象はsecp256k1の鍵・公開鍵・ECDSA署名・検証・Ethereum向けKeccak-256であり、DER/PKCS#8/PEMなどの鍵フォーマット入出力はREADMEの後続優先順位で扱う。
+
+## 進捗
+- [x] 3. 既存のSHA-256実装とFFI構成を確認し、`staticlib`としてビルドされる状態を維持する
+- [x] 3. `k256`で扱う最小APIを決める
+- [x] 3. secp256k1秘密鍵の入力形式、長さ、エラー条件を決める
+- [x] 3. secp256k1公開鍵の圧縮形式33バイトと非圧縮形式65バイトの扱いを決める
+- [x] 3. Rust側に秘密鍵から公開鍵を導出するC ABI互換FFI関数を実装する
+- [x] 3. Rust側で不正な秘密鍵、NULLポインタ、短い出力バッファを整数エラーコードで返す
+- [x] 3. Nim側に低水準FFI procと高水準公開鍵導出APIを実装する
+- [x] 3. Rust/Nim双方のテストで既知のsecp256k1秘密鍵から公開鍵導出を確認する
+- [x] 4. `signature` trait相当のFFI設計を決める
+- [x] 4. 署名生成と署名検証で共通化する戻り値、署名バッファ、入力ハッシュの扱いを決める
+- [x] 4. FFI公開APIにRustのtrait、`Result`、`Vec`、`String`を出さない設計を維持する
+- [x] 5. ECDSAで公開する最小APIを決める
+- [x] 5. secp256k1 ECDSA署名の入力を32バイトメッセージダイジェストに限定するか、ハッシュ込みAPIを分けるか決める
+- [x] 5. 署名形式を64バイト固定長のraw `(r, s)` として扱う
+- [x] 5. 必要に応じてEthereum/Bitcoin向けの回復ID付き署名を別APIとして設計する
+- [x] 5. Rust側にsecp256k1 ECDSA署名生成FFI関数を実装する
+- [x] 5. Rust側にsecp256k1 ECDSA署名検証FFI関数を実装する
+- [x] 5. Nim側に低水準FFI procと高水準署名・検証APIを実装する
+- [x] 5. Rust/Nim双方のテストで署名生成、署名検証、改ざん署名の失敗を確認する
+- [x] 6. `sha3`で公開する最小APIを決める
+- [x] 6. Rust側にSHA3-256またはEthereum連携に必要な範囲のSHA-3系FFI関数を実装する
+- [x] 6. Nim側に低水準FFI procと高水準SHA-3系APIを実装する
+- [x] 6. Rust/Nim双方のテストで標準的なSHA-3テストベクトルを確認する
+- [x] 7. `keccak`を`sha3`と別APIにする境界を明確化する
+- [x] 7. Ethereum互換Keccak-256を32バイト固定長出力のone-shot APIとして実装する
+- [x] 7. Nim側に低水準FFI procと高水準Keccak-256 APIを実装する
+- [x] 7. Rust/Nim双方のテストでEthereumで使われるKeccak-256の既知ベクトルを確認する
+- [x] すべてのRust実装でpanicをFFI境界の外へ漏らさない
+- [x] すべてのNim公開APIで通常利用者に`--passL`やRustライブラリパスを直接書かせない
+- [x] READMEまたは利用手順を必要に応じて更新する
+
+## 参考資料
+- RustCrypto: https://github.com/RustCrypto
+- RustCrypto `k256`: https://github.com/RustCrypto/elliptic-curves/tree/master/k256
+- RustCrypto `signature`: https://github.com/RustCrypto/traits/tree/master/signature
+- RustCrypto `ecdsa`: https://github.com/RustCrypto/signatures/tree/master/ecdsa
+- RustCrypto `sha3`: https://github.com/RustCrypto/hashes/tree/master/sha3
+- RustCrypto `elliptic-curve`: https://github.com/RustCrypto/traits/tree/master/elliptic-curve
+- SEC 1: Elliptic Curve Cryptography: https://www.secg.org/sec1-v2.pdf
+- FIPS 186-5 Digital Signature Standard: https://csrc.nist.gov/pubs/fips/186-5/final
+- Ethereum Yellow Paper: https://ethereum.github.io/yellowpaper/paper.pdf
+- Rust Reference Linkage: https://doc.rust-lang.org/reference/linkage.html
+- Nim Manual: https://nim-lang.org/docs/manual.html
+- Nim system module: https://nim-lang.org/docs/system.html
+
+## 調査結果・設計まとめ
+- このブランチの作業は、プロジェクトルール `SYW-DEV-001` に従い、Rust実装、Rustテスト、Rust静的アーカイブ出力、Nim FFIラッパー実装、Nimテストの順に進める。
+- `k256`はsecp256k1の鍵、公開鍵、曲線演算を扱うための基盤として導入する。READMEの対象用途はBitcoin、Ethereum、Lightningの公開鍵・秘密鍵・曲線演算である。
+- `signature` traitはRust内部の設計上の共通化ポイントとして扱う。FFI公開APIにはRustのtraitを出さず、Nimからは用途別の固定関数を呼び出す。
+- `ecdsa`はsecp256k1署名の土台として導入する。署名生成と署名検証は、まず32バイトのメッセージダイジェストを入力するone-shot APIとして設計する。
+- 2026-05-02 時点では、秘密鍵 32 バイト入力から公開鍵 33 バイト圧縮形式 / 65 バイト非圧縮形式を導出する one-shot FFI を実装した。Rust の公開関数は `rustcrypto_secp256k1_public_key_from_secret_key` で、format 引数は `0 = uncompressed`, `1 = compressed` とした。
+- 同日時点で、32 バイト prehash から raw 64 バイト署名を生成する `rustcrypto_secp256k1_ecdsa_sign_prehash` と、raw 64 バイト署名を検証する `rustcrypto_secp256k1_ecdsa_verify_prehash` を実装した。検証失敗は `RUSTCRYPTO_ERR_VERIFICATION_FAILED`、不正署名は `RUSTCRYPTO_ERR_INVALID_SIGNATURE` として分離した。
+- 2026-05-02 時点で、SHA3-256 と Ethereum 互換 Keccak-256 の one-shot FFI を追加し、Nim 側にも `sha3_256` / `keccak256` の高水準 API を実装した。SHA3 と Keccak は別モジュール・別関数名で公開し、混同しない設計にした。
+- README は、現在の実装内容に合わせて開発優先順位、ビルド手順、公開 API を簡潔に整理した。
+- FFI境界では、秘密鍵、公開鍵、メッセージダイジェスト、署名、Keccak/SHA-3出力を固定長バッファとして扱う。所有権は呼び出し元であるNim側に置き、Rust側は入力を借用して出力バッファへ書き込むだけにする。
+- 公開鍵は圧縮形式33バイトと非圧縮形式65バイトを分ける。通常利用では圧縮形式を基本にし、Ethereumアドレス導出など非圧縮公開鍵が必要な用途には明示的なAPIを用意する。
+- ECDSA署名は最初に64バイト固定長のraw `(r, s)` 形式を扱う。DER署名はREADMEの後続優先順位 `der` の対象なので、このブランチでは原則扱わない。
+- Ethereum互換の署名回復IDや公開鍵復元は、通常のECDSA署名・検証とは別APIとして設計する。必要性が実装中に確定するまでは、最小APIの範囲外として扱う。
+- `sha3`と`keccak`は分けて扱う。SHA3-256は標準SHA-3として、Keccak-256はEthereum互換のハッシュとして別の関数名にする。
+- `sha3` crateを利用する場合でも、Ethereum互換Keccak-256はSHA3-256とパディングが異なるため、Nim側のAPI名でも混同しない。
+- エラーは整数エラーコードで返す。NULLポインタ、不正な長さ、不正な秘密鍵、不正な公開鍵、不正な署名、検証失敗は区別できる設計を目指す。
+- Rust側のpanicはFFI境界の外へ漏らさない。入力検証と必要に応じた`catch_unwind`で、Nim呼び出し元が整数エラーコードとして扱える形にする。
+- Nim側は低水準FFI procと高水準APIを分ける。通常のアプリコードは`string`、`array[N, byte]`、明確なオブジェクト型を扱う高水準APIを使う。
+- Rustライブラリへのリンク指定はNimラッパーモジュールに閉じ込め、アプリ本体へ`--passL`やRust静的ライブラリのパスを直接書かせない。
+- DER、PKCS#8、PEM、X.509、RSA、Ed25519、HMAC/HKDF、AEADはこのブランチの対象外とする。ただし将来追加しやすいよう、命名、エラーコード、バッファ設計は既存SHA-256 APIと整合させる。
