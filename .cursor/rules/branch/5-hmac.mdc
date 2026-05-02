@@ -49,11 +49,11 @@ alwaysApply: false
 - [x] 12. 暗号化と復号をone-shot APIとして実装し、認証失敗を整数エラーコードで返す
 - [x] 12. Nim側に低水準FFI procと高水準ChaCha20-Poly1305 APIを実装する
 - [x] 12. Rust/Nim双方のテストでRFC 8439の既知ベクトルと認証失敗を確認する
-- [ ] 13. `der`で公開する最小APIを決める
-- [ ] 13. DERはまずECDSA raw署名とDER署名の相互変換に限定する
-- [ ] 13. Rust側にsecp256k1 ECDSA署名のraw 64バイトからDERへのエンコードとDERからraw 64バイトへのデコードを実装する
-- [ ] 13. Nim側に低水準FFI procと高水準DER署名変換APIを実装する
-- [ ] 13. Rust/Nim双方のテストで既知DER署名、不正DER、短い出力バッファを確認する
+- [x] 13. `der`で公開する最小APIを決める
+- [x] 13. DERはまずECDSA raw署名とDER署名の相互変換に限定する
+- [x] 13. Rust側にsecp256k1 ECDSA署名のraw 64バイトからDERへのエンコードとDERからraw 64バイトへのデコードを実装する
+- [x] 13. Nim側に低水準FFI procと高水準DER署名変換APIを実装する
+- [x] 13. Rust/Nim双方のテストで既知DER署名、不正DER、短い出力バッファを確認する
 - [ ] 14. `pkcs8`で公開する最小APIを決める
 - [ ] 14. PKCS#8はまずEd25519秘密鍵/公開鍵の標準形式入出力に限定し、secp256k1対応は必要性を確認してから扱う
 - [ ] 14. DERバイト列を入力し、Rust側で検証して固定長鍵バイトへ書き出すAPIを設計する
@@ -145,6 +145,7 @@ alwaysApply: false
 - AEADの共通境界は、`key` / `nonce` / `tag` を固定長の入力バッファ、`aad` / `plaintext` / `ciphertext` を任意長の入力バッファ、出力は呼び出し元所有のバッファに書き込む設計で固めた。Rust側にはバッファ検証の共通ヘルパーと `authentication failed` / `invalid key length` / `invalid nonce length` / `invalid tag length` / `invalid parameter` のエラー分類を追加し、Nim側も同じ分類を受け取れるようにした。この共通設計は `chacha20poly1305` の one-shot encrypt/decrypt 実装で使った。
 - cipher traitはRustCrypto内部の設計境界として扱い、Nimには抽象traitを露出しない。対称暗号は今後も具体アルゴリズム別のone-shot APIだけをFFI公開し、必要な共通化はRust内部に閉じ込める。
 - ChaCha20-Poly1305は、32バイト鍵、12バイトnonce、16バイトtagを固定長とし、暗号化は `(ciphertext, tag)` 分離、復号は `authentication failed` を整数エラーで返す one-shot API として実装した。Rust側FFIは `rustcrypto_chacha20poly1305_encrypt` / `rustcrypto_chacha20poly1305_decrypt`、Nim側高水準APIは `chacha20poly1305Encrypt` / `chacha20poly1305Decrypt`。RFC 8439 の既知ベクトルと改ざん tag で確認した。
+- DERは、まずsecp256k1 ECDSA署名のraw 64バイト `(r, s)` とDER署名の相互変換に限定した。Rust側FFIは `rustcrypto_secp256k1_ecdsa_signature_to_der` / `rustcrypto_secp256k1_ecdsa_signature_from_der`、Nim側高水準APIは `secp256k1EcdsaSignatureToDer` / `secp256k1EcdsaSignatureFromDer`。既知の deterministic 署名をDER化した値と不正DER入力、短い出力バッファで確認した。
 - AEADは、暗号文とtagを分離したAPIを基本にする。暗号化では平文入力、AAD入力、暗号文出力、tag出力を受け取り、復号では暗号文入力、tag入力、AAD入力、平文出力を受け取る。認証失敗時に平文出力バッファの内容を信頼してはならない。
 - ChaCha20-Poly1305は、32バイト鍵、12バイトnonce、16バイトtagを固定長として扱う。XChaCha20-Poly1305はこのブランチの最小範囲外とし、必要性が出た場合のみ別APIとして追加する。
 - DERは、まずsecp256k1 ECDSA署名のraw 64バイト `(r, s)` とDER署名の相互変換に限定する。公開鍵や証明書の一般DER処理はPKCS#8/X.509側の設計に合わせ、過剰に汎用化しない。

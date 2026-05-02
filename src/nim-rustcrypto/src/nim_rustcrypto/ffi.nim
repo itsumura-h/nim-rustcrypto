@@ -11,6 +11,7 @@ const
   Secp256k1PublicKeyCompressedLen* = 33
   Secp256k1PublicKeyUncompressedLen* = 65
   Secp256k1SignatureLen* = 64
+  Secp256k1SignatureDerMaxLen* = 72
   Secp256k1MessageDigestLen* = 32
   ChaCha20Poly1305KeyLen* = 32
   ChaCha20Poly1305NonceLen* = 12
@@ -152,3 +153,18 @@ proc secp256k1EcdsaVerifyRaw*(
     signature: ptr uint8,
     signatureLen: csize_t,
   ): cint {.cdecl, importc: "rustcrypto_secp256k1_ecdsa_verify_prehash".}
+
+proc secp256k1EcdsaSignatureToDerRaw*(
+    signature: ptr uint8,
+    signatureLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    writtenLen: ptr csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_secp256k1_ecdsa_signature_to_der".}
+
+proc secp256k1EcdsaSignatureFromDerRaw*(
+    derSignature: ptr uint8,
+    derSignatureLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_secp256k1_ecdsa_signature_from_der".}

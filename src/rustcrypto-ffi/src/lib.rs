@@ -48,6 +48,7 @@ pub const SECP256K1_SECRET_KEY_LEN: usize = 32;
 pub const SECP256K1_PUBLIC_KEY_COMPRESSED_LEN: usize = 33;
 pub const SECP256K1_PUBLIC_KEY_UNCOMPRESSED_LEN: usize = 65;
 pub const SECP256K1_SIGNATURE_LEN: usize = 64;
+pub const SECP256K1_SIGNATURE_DER_MAX_LEN: usize = 72;
 pub const SECP256K1_MESSAGE_DIGEST_LEN: usize = 32;
 
 fn hash_one_shot<D>(input: &[u8], output: &mut [u8]) -> c_int
@@ -624,6 +625,72 @@ fn secp256k1_ecdsa_verify_prehash_impl(
     }
 }
 
+fn secp256k1_ecdsa_signature_to_der_impl(
+    signature: *const u8,
+    signature_len: usize,
+    output: *mut u8,
+    output_len: usize,
+    written_len: *mut usize,
+) -> c_int {
+    if written_len.is_null() {
+        return RUSTCRYPTO_ERR_INVALID_PARAMETER;
+    }
+
+    let signature = match aead_common::fixed_input(
+        signature,
+        signature_len,
+        SECP256K1_SIGNATURE_LEN,
+        RUSTCRYPTO_ERR_INVALID_SIGNATURE,
+    ) {
+        Ok(signature) => signature,
+        Err(err) => return err,
+    };
+
+    let signature = match Signature::from_slice(signature) {
+        Ok(signature) => signature,
+        Err(_) => return RUSTCRYPTO_ERR_INVALID_SIGNATURE,
+    };
+
+    let der = signature.to_der();
+    let der_bytes = der.as_bytes();
+    let output = match aead_common::output_buffer(output, output_len, der_bytes.len()) {
+        Ok(output) => output,
+        Err(err) => return err,
+    };
+
+    output.copy_from_slice(der_bytes);
+    unsafe {
+        *written_len = der_bytes.len();
+    }
+    RUSTCRYPTO_OK
+}
+
+fn secp256k1_ecdsa_signature_from_der_impl(
+    der_signature: *const u8,
+    der_signature_len: usize,
+    output: *mut u8,
+    output_len: usize,
+) -> c_int {
+    let der_signature = match aead_common::optional_input(der_signature, der_signature_len) {
+        Ok(der_signature) => der_signature,
+        Err(err) => return err,
+    };
+
+    let signature = match Signature::from_der(der_signature) {
+        Ok(signature) => signature,
+        Err(_) => return RUSTCRYPTO_ERR_INVALID_SIGNATURE,
+    };
+
+    let output = match aead_common::output_buffer(output, output_len, SECP256K1_SIGNATURE_LEN) {
+        Ok(output) => output,
+        Err(err) => return err,
+    };
+
+    let raw_bytes = signature.to_bytes();
+    output.copy_from_slice(raw_bytes.as_ref());
+    RUSTCRYPTO_OK
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn rustcrypto_sha256(
     input: *const u8,
@@ -845,6 +912,33 @@ pub extern "C" fn rustcrypto_secp256k1_ecdsa_verify_prehash(
             signature,
             signature_len,
         )
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_secp256k1_ecdsa_signature_to_der(
+    signature: *const u8,
+    signature_len: usize,
+    output: *mut u8,
+    output_len: usize,
+    written_len: *mut usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        secp256k1_ecdsa_signature_to_der_impl(signature, signature_len, output, output_len, written_len)
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_secp256k1_ecdsa_signature_from_der(
+    der_signature: *const u8,
+    der_signature_len: usize,
+    output: *mut u8,
+    output_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        secp256k1_ecdsa_signature_from_der_impl(der_signature, der_signature_len, output, output_len)
     }))
     .unwrap_or(RUSTCRYPTO_ERR_PANIC)
 }

@@ -35,6 +35,7 @@ export ffi.RustCryptoErrPanic
 export ffi.Secp256k1PublicKeyFormatUncompressed
 export ffi.Secp256k1PublicKeyFormatCompressed
 export ffi.Secp256k1SignatureLen
+export ffi.Secp256k1SignatureDerMaxLen
 export ffi.Secp256k1MessageDigestLen
 export ffi.ChaCha20Poly1305KeyLen
 export ffi.ChaCha20Poly1305NonceLen
@@ -53,6 +54,8 @@ export ffi.keccak256Raw
 export ffi.secp256k1PublicKeyFromSecretKeyRaw
 export ffi.secp256k1EcdsaSignRaw
 export ffi.secp256k1EcdsaVerifyRaw
+export ffi.secp256k1EcdsaSignatureToDerRaw
+export ffi.secp256k1EcdsaSignatureFromDerRaw
 export utils.bytesPtr
 export sha256.Sha256Digest
 export sha256.fromHex
@@ -91,5 +94,8 @@ export secp256k1.secp256k1PublicKeyCompressed
 export secp256k1.secp256k1PublicKeyUncompressed
 export ecdsa.Secp256k1MessageDigest
 export ecdsa.Secp256k1Signature
+export ecdsa.Secp256k1DerSignature
 export ecdsa.secp256k1EcdsaSign
 export ecdsa.secp256k1EcdsaVerify
+export ecdsa.secp256k1EcdsaSignatureToDer
+export ecdsa.secp256k1EcdsaSignatureFromDer
