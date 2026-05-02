@@ -1,0 +1,49 @@
+---
+description: 1-rsaブランチでの開発時に読み込む
+alwaysApply: false
+---
+1-rsaブランチルール
+===
+
+このブランチで実装することは以下の通りです。
+- READMEの開発優先順位 1. `digest` trait
+- READMEの開発優先順位 2. `sha2`
+
+このブランチでは、ハッシュ関数を共通FFIで扱うための最小基盤を作り、その上でSHA-2、特にSHA-256をNimからFFI経由で利用できる状態にする。
+ブランチ名に `rsa` が含まれていても、READMEの28, 29にあるRSA署名・RSA暗号化はこのブランチの対象外とする。
+
+## 進捗
+- [x] 1. Rust側の既存構成を確認し、`staticlib`としてビルドされる状態を維持する
+- [x] 1. `digest` trait相当のFFI設計を決める
+- [x] 1. SHA-2で公開する最小APIを決める
+- [x] 1. Rust側にSHA-256のC ABI互換FFI関数を実装する
+- [x] 1. Rust側でpanicをFFI境界の外へ漏らさない形にする
+- [x] 2. Rust側のテストコードでSHA-256の正常系を確認する
+- [x] 2. Rust側のテストコードで空入力、NULL入力ポインタ、NULL出力ポインタの扱いを確認する
+- [x] 3. Rustでビルドし、`librust_crypto_ffi.a` を出力する
+- [x] 4. Nim側に低水準FFI procを実装する
+- [x] 4. Nim側に通常利用向けの高水準SHA-256 APIを実装する
+- [x] 4. Nimアプリ側へリンク指定を漏らさない構成にする
+- [x] 5. Nim側のテストコードで `sha256("abc")` の既知テストベクトルをFFI経由で確認する
+- [x] 5. Nim側のテストコードで空入力、NULL入力ポインタ、NULL出力ポインタの扱いを確認する
+- [x] READMEまたは利用手順を必要に応じて更新する
+
+## 参考資料
+- RustCrypto: https://github.com/RustCrypto
+- RustCrypto `digest`: https://github.com/RustCrypto/traits/tree/master/digest
+- RustCrypto `sha2`: https://github.com/RustCrypto/hashes/tree/master/sha2
+- Rust Reference Linkage: https://doc.rust-lang.org/reference/linkage.html
+- Nim Manual: https://nim-lang.org/docs/manual.html
+- Nim system module: https://nim-lang.org/docs/system.html
+
+## 調査結果・設計まとめ
+- このブランチの作業は、プロジェクトルール `SYW-DEV-001` に従い、Rust実装、Rustテスト、Rust静的アーカイブ出力、Nim FFIラッパー実装、Nimテストの順に完了した。
+- Rust側の共通化ポイントは `digest::Digest` を使う one-shot helper とし、公開FFIは `rustcrypto_sha256` の単一関数で固定した。
+- Rustから公開するFFI関数は `extern "C"` とし、C ABI互換のポインタ、長さ、整数、固定長バッファだけを使う。
+- `catch_unwind` でpanicを捕捉し、NULL入力、NULL出力、短い出力バッファを整数エラーコードで返すようにした。
+- バッファ所有権はNim側に置く。Rust側は入力バッファを借用し、呼び出し元が渡した出力バッファへ書き込むだけにする。
+- 空入力では入力ポインタ `NULL` を許容する。出力ポインタ `NULL` はエラーにする。
+- SHA-256の出力は32バイト固定長バッファとして扱う。
+- Nim側は低水準FFI procと高水準APIを分ける。通常の利用者は `string` を受け取る `sha256` と `sha256Hex` を使える。
+- Rustライブラリへのリンク指定はNimラッパーモジュールに閉じ込め、アプリ本体へ `--passL` などを書かせない方針にした。
+- 最初の検証対象である `sha256("abc") = ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad` はRust/Nim両方で確認済み。

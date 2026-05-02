@@ -1,0 +1,107 @@
+# RustCrypto FFI wrapper
+
+RustCrypto: https://github.com/RustCrypto
+
+Bitcoin、Ethereum、Lightning Network などの暗号資産・ecash開発で使いやすいNim向けFFIライブラリを作る。
+
+## 開発優先順位
+
+- [x] 1. `digest` trait
+  - 用途: ハッシュ関数を共通FFIで包むための基盤。
+  - 依存先: なし。
+- [x] 2. `sha2`
+  - 用途: Bitcoinのtxid/block hash、Lightningの各種ハッシュ、関連する周辺実装。
+  - 依存先: `digest`。
+- [ ] 3. `k256` (secp256k1)
+  - 用途: Bitcoin、Ethereum、Lightningの公開鍵・秘密鍵・曲線演算。
+  - 依存先: 署名APIでは`signature`、プロトコル上は`sha2`やKeccak系ハッシュと組み合わせる。
+- [ ] 4. `signature` trait
+  - 用途: ECDSA、Ed25519、RSA署名を同じFFI設計で扱うための基盤。
+  - 依存先: なし。
+- [ ] 5. `ecdsa`
+  - 用途: Bitcoin/Ethereum/Lightningのsecp256k1署名の土台。
+  - 依存先: `signature`, `k256`, `sha2`またはKeccak系ハッシュ。
+- [ ] 6. `sha3`
+  - 用途: Ethereum互換のKeccak/SHA-3系ハッシュ、アドレス・署名対象データの処理。
+  - 依存先: `digest`。
+- [ ] 7. `keccak`
+  - 用途: EthereumのKeccak-256互換性を低水準で明確に扱う場合。
+  - 依存先: `digest`相当のFFI設計。`sha3`で足りる範囲との切り分けが必要。
+- [ ] 8. `hmac`
+  - 用途: メッセージ認証、鍵導出、プロトコル内検証。
+  - 依存先: `digest`、主に`sha2`。
+- [ ] 9. `hkdf`
+  - 用途: Lightning/BOLT系や暗号化プロトコルでの鍵素材展開。
+  - 依存先: `hmac`, `digest`, 主に`sha2`。
+- [ ] 10. `aead` trait
+  - 用途: 認証付き暗号を共通FFIで包むための基盤。
+  - 依存先: なし。
+- [ ] 11. `cipher` trait
+  - 用途: 対称暗号の低水準共通API設計。
+  - 依存先: なし。
+- [ ] 12. `chacha20poly1305`
+  - 用途: Lightning/BOLT系の通信暗号化、ソフトウェア実装向けAEAD。
+  - 依存先: `aead`, `cipher`。実プロトコルでは`hkdf`で導出した鍵を使う。
+- [ ] 13. `der`
+  - 用途: ECDSA署名、公開鍵、証明書系データのDER入出力。
+  - 依存先: `ecdsa`, `rsa`, `p256`, `p384`, `const-oid`。
+- [ ] 14. `pkcs8`
+  - 用途: 秘密鍵・公開鍵の標準形式での保存と読み込み。
+  - 依存先: `der`, `const-oid`, `k256`, `p256`, `p384`, `rsa`, `ed25519`。
+- [ ] 15. `pem-rfc7468`
+  - 用途: PEM形式の鍵・証明書をCLIや外部ツールと交換する。
+  - 依存先: `der`, `pkcs8`, `x509-cert`。
+- [ ] 16. `const-oid`
+  - 用途: DER/PKCS#8/X.509内のアルゴリズム識別子。
+  - 依存先: なし。`der`, `pkcs8`, `x509-cert`から利用される。
+- [ ] 17. `ed25519`
+  - 用途: Nostrなど暗号資産周辺エコシステム、軽量な署名用途。
+  - 依存先: `signature`。必要に応じて`pkcs8`と`pem-rfc7468`。
+- [ ] 18. `pbkdf2`
+  - 用途: 互換性重視のパスワード由来鍵生成、ウォレットファイル保護。
+  - 依存先: `hmac`, `digest`, `password-hash`。
+- [ ] 19. `password-hash` trait
+  - 用途: `pbkdf2`、`scrypt`、`argon2`の出力形式と検証APIの共通化。
+  - 依存先: なし。
+- [ ] 20. `scrypt`
+  - 用途: ウォレット・ローカル秘密鍵のパスワード保護。
+  - 依存先: `password-hash`。
+- [ ] 21. `argon2`
+  - 用途: 新規アプリでの強いパスワードハッシュ。
+  - 依存先: `password-hash`。
+- [ ] 22. `aes-gcm`
+  - 用途: 一般的なAEAD暗号化、他システムとの互換用途。
+  - 依存先: `aead`, `cipher`。必要に応じて`hkdf`や`pbkdf2`。
+- [ ] 23. `aes-gcm-siv`
+  - 用途: nonce再利用リスクに強いAEAD暗号化。
+  - 依存先: `aead`, `cipher`。
+- [ ] 24. `blake2`
+  - 用途: 高速ハッシュ、暗号資産周辺プロトコルやアプリ内部ID。
+  - 依存先: `digest`。
+- [ ] 25. `p256`
+  - 用途: WebAuthn、証明書、一般Web/PKI連携。
+  - 依存先: `signature`、`ecdsa`、`der`、`pkcs8`。
+- [ ] 26. `p384`
+  - 用途: 高セキュリティ寄りのPKI/証明書連携。
+  - 依存先: `signature`、`ecdsa`、`der`、`pkcs8`。
+- [ ] 27. `x509-cert`
+  - 用途: 証明書の読み書き、TLS/PKI系ツールとの連携。
+  - 依存先: `der`, `const-oid`, `p256`, `p384`, `rsa`。
+- [ ] 28. `rsa` signatures
+  - 用途: 既存PKIや古いシステムとの署名互換。
+  - 依存先: `signature`, `digest`, `rsa`, `der`, `pkcs8`。
+- [ ] 29. `rsa` asymmetric encryption
+  - 用途: 互換用途の公開鍵暗号化。Bitcoin/Ethereum/Lightningの中核ではない。
+  - 依存先: `rsa`, `der`, `pkcs8`, `pem-rfc7468`。
+- [ ] 30. `dsa`
+  - 用途: レガシー署名互換。
+  - 依存先: `signature`, `digest`, `der`。
+- [ ] 31. `elliptic-curves` asymmetric encryption
+  - 用途: ECDH/ECIES風の鍵共有・暗号化設計が必要になった場合。
+  - 依存先: 対象曲線、`hkdf`, `aead`。
+- [ ] 32. `ascon`
+  - 用途: 軽量暗号・軽量スポンジ関数の実験的または組み込み向け用途。
+  - 依存先: `digest`相当のFFI設計。AEADとして扱う場合は`aead`。
+- [ ] 33. `ml-kem`
+  - 用途: 将来の耐量子KEM対応。現時点のBitcoin/Ethereum/Lightning中核では後回し。
+  - 依存先: KEM用のFFI設計。必要に応じて`hkdf`や`aead`と組み合わせる。

@@ -1,4 +1,5 @@
 ---
+description: RustCrypto FFI wrapper project rules
 alwaysApply: true
 ---
 プロジェクトルール
@@ -29,6 +30,76 @@ Lint可能化のため、規範ルールは **Rule ID** を持つ。
 
 | ID | LEVEL | CHECK | 対象 | 要件（要約） |
 |---|---|---|---|---|
+| SYW-FFI-001 | MUST | manual | Rust FFI公開API | C ABI互換型だけを公開する |
+| SYW-FFI-002 | MUST | manual | Rust FFI実装 | FFI境界を越えてpanicを漏らさない |
+| SYW-FFI-003 | MUST | manual | バッファ設計 | 所有権をRust/Nim間でまたがせない |
+| SYW-BUILD-001 | MUST | config | Cargo.toml | C/Nimリンク用に`staticlib`を出力する |
+| SYW-BUILD-002 | MUST | manual | Rustビルド | `/application/src/rustcrypto-ffi` で実行する |
+| SYW-BUILD-003 | MUST | manual | Nimビルド | `/application/src/nim-rustcrypto` で実行する |
+| SYW-BUILD-004 | MUST | manual | 対象環境 | まずUbuntuで動くものを作る |
+| SYW-DEPS-001 | MUST | manual | 外部パッケージ追加 | `cargo`や`nimble`などCLIで追加する |
+| SYW-DEV-001 | MUST | manual | 開発手順 | Rust/Nimともテスト駆動開発で進める |
+| SYW-NIM-001 | SHOULD | manual | Nimラッパー | アプリ側にリンク指定を漏らさない |
+| SYW-TEST-001 | MUST | manual | 検証 | 既知のテストベクトルでFFI経由の結果を確認する |
 
 ## 1. 目的・スコープ
-このプロジェクトでは{プロジェクトの達成目標を書く}
+このプロジェクトでは、RustCryptoをRust側で利用し、C言語FFI向けの静的アーカイブとしてビルドし、NimからFFI経由で安全に呼び出せるラッパーライブラリを作る。
+
+最小対象はSHA-256とし、将来的にAES-GCM、ChaCha20-Poly1305、HMAC、PBKDF2などを追加できる設計にする。ただし暗号プリミティブの追加時も、Nim側にRustの所有権・型・例外モデルを露出させない。
+
+## 2. Rust側FFI設計
+
+[SYW-FFI-001][MUST][manual] Rustから公開する関数は`extern "C"`とし、公開名は固定する。引数と戻り値はC ABI互換のポインタ、長さ、整数、固定長バッファだけにする。`Vec<T>`、`String`、`Result<T, E>`、Rust参照、trait objectをFFI公開APIに出してはならない。
+
+[SYW-FFI-002][MUST][manual] Rust側のpanicをFFI境界の外へ漏らしてはならない。入力検証、エラーコード返却、必要に応じた`catch_unwind`などで、Nim呼び出し元が整数エラーコードとして扱える形にする。
+
+[SYW-FFI-003][MUST][manual] バッファ所有権は呼び出し元であるNim側が持つ。Rust側は入力バッファを借用し、出力バッファへ書き込むだけにする。Rust側で確保したメモリをNim側へ所有させるAPIは、専用の解放関数まで含めた明確な設計がない限り作らない。
+
+ハッシュ関数は、入力ポインタ、入力長、出力ポインタ、戻り値`cint`相当の形を基本にする。空入力では入力ポインタ`NULL`を許容し、出力ポインタ`NULL`はエラーにする。
+
+鍵を扱う暗号APIでは、鍵、nonce、AAD、平文、暗号文、認証タグの各バッファと長さを明示する。認証失敗や長さ不正は必ず整数エラーコードで返す。
+
+## 3. ビルド方針
+
+[SYW-BUILD-001][MUST][config] Rust crateはC/Nimからリンクするため、`Cargo.toml`の`[lib]`で`crate-type = ["staticlib"]`を指定する。動的ライブラリが必要な場合のみ、設計理由を残して`cdylib`を追加してよい。
+
+[SYW-BUILD-002][MUST][manual] Rustをビルドする時は、作業ディレクトリを `/application/src/rustcrypto-ffi` に移動してから `cargo` コマンドを実行する。
+
+[SYW-BUILD-003][MUST][manual] Nimをビルドする時は、作業ディレクトリを `/application/src/nim-rustcrypto` に移動してから `nimble` または `nim` コマンドを実行する。
+
+[SYW-BUILD-004][MUST][manual] 現時点ではWindowsは対象外とし、まずUbuntuでビルド・実行・検証できるものを作る。Windowsやその他OSへの対応は、Ubuntuでの最小実装が安定してから別途扱う。
+
+[SYW-DEPS-001][MUST][manual] 外部パッケージの追加は `cargo`、`nimble` などのCLIを使って行う。依存関係を `Cargo.toml` や `.nimble` ファイルへ手で追記してからインストールコマンドを実行してはならない。
+
+Ubuntuでは静的ライブラリの出力名として `librust_crypto_ffi.a` を想定する。他OSの出力名やリンク差分は、対象環境を広げる段階で整理する。
+
+システムライブラリなどの追加リンクが必要な場合は、`cargo rustc --release --lib -- --print native-static-libs`で確認し、Nim側またはビルドスクリプト側に明示する。
+
+## 4. 開発手順
+
+[SYW-DEV-001][MUST][manual] Rust側もNim側もテスト駆動開発で進める。実装順は以下を守る。
+
+1. Rust側で実装する。
+2. Rust側のテストコードで動作確認する。
+3. Rustでビルドして静的アーカイブを出力する。
+4. Nimで静的アーカイブを呼ぶFFIラッパーライブラリを実装する。
+5. Nimでラッパーライブラリを読み、テストコードで動作確認する。
+
+## 5. Nim側ラッパー設計
+
+[SYW-NIM-001][SHOULD][manual] Nimアプリ本体に`--passL`やRustライブラリのパスを直接書かせない。Rust FFI専用のNimモジュールを作り、`{.link.}`、`importc`、`cdecl`、必要なパス解決をそのモジュールへ閉じ込める。
+
+Nim公開APIは、`ptr uint8`や`csize_t`を直接使う低水準procと、`string`や`array[32, byte]`を扱う高水準procを分ける。通常のアプリコードは高水準procを使う。
+
+## 6. 検証
+
+[SYW-TEST-001][MUST][manual] SHA-256実装は、少なくとも`SHA256("abc") = ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad`をNimからFFI経由で呼び出して確認する。
+
+空入力、NULL入力ポインタ、NULL出力ポインタ、異常な長さの扱いをテスト対象に含める。暗号化・認証付き暗号を追加する場合は、公式または標準的なテストベクトルで成功・失敗の両方を確認する。
+
+## 7. 参考資料
+
+- RustCrypto: https://github.com/RustCrypto
+- Rust Reference Linkage: https://doc.rust-lang.org/reference/linkage.html
+- Nim Manual: https://nim-lang.org/docs/manual.html
+- Nim system module: https://nim-lang.org/docs/system.html
