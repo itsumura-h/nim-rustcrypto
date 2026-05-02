@@ -2,15 +2,25 @@ import unittest
 
 import nim_rustcrypto
 
+proc hexOf(bytes: openArray[byte]): string =
+  const hexDigits = "0123456789abcdef"
+  result = newString(bytes.len * 2)
+  for i, value in bytes:
+    let byteValue = int(value)
+    result[2 * i] = hexDigits[byteValue shr 4]
+    result[2 * i + 1] = hexDigits[byteValue and 0x0F]
+
 
 suite "sha256":
   test "sha256 high-level abc matches the known vector":
     let expected = Sha256Digest.fromHex(
       "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
     )
+    let actual = sha256Hex("abc")
 
     check sha256("abc") == expected
-    check sha256Hex("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    echo "sha256(\"abc\") = ", actual
+    check actual == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
 
   test "sha256 high-level empty string matches the known vector":
     let expected = Sha256Digest.fromHex(
@@ -29,6 +39,7 @@ suite "sha256":
     )
 
     check status == RustCryptoOk
+    echo "sha256(\"\") = ", hexOf(output)
     check output == Sha256Digest.fromHex(
       "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     )
