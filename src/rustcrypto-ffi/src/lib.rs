@@ -20,6 +20,7 @@ mod ed25519_ops;
 mod ed25519_pkcs8;
 mod ed25519_pem;
 mod pbkdf2;
+mod password_hash;
 mod oid;
 
 pub const RUSTCRYPTO_OK: c_int = 0;
@@ -38,6 +39,7 @@ pub const RUSTCRYPTO_ERR_INVALID_KEY_LENGTH: c_int = 12;
 pub const RUSTCRYPTO_ERR_INVALID_NONCE_LENGTH: c_int = 13;
 pub const RUSTCRYPTO_ERR_INVALID_TAG_LENGTH: c_int = 14;
 pub const RUSTCRYPTO_ERR_INVALID_PARAMETER: c_int = 15;
+pub const RUSTCRYPTO_ERR_INVALID_PASSWORD_HASH_FORMAT: c_int = 16;
 pub const RUSTCRYPTO_ERR_PANIC: c_int = -1;
 
 pub const SHA256_DIGEST_LEN: usize = 32;
@@ -1171,6 +1173,26 @@ pub extern "C" fn rustcrypto_pbkdf2_hmac_sha256(
             output_len,
             derived_len,
         )
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_password_hash_validate(input: *const u8, input_len: usize) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| password_hash::validate_impl(input, input_len)))
+        .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_password_hash_canonicalize(
+    input: *const u8,
+    input_len: usize,
+    output: *mut u8,
+    output_len: usize,
+    written_len: *mut usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        password_hash::canonicalize_impl(input, input_len, output, output_len, written_len)
     }))
     .unwrap_or(RUSTCRYPTO_ERR_PANIC)
 }

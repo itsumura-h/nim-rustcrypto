@@ -73,9 +73,9 @@ alwaysApply: false
 - [x] 18. PBKDF2-HMAC-SHA256のpassword、salt、iteration count、出力長の扱いを決める
 - [x] 18. iteration countが0の場合や出力バッファが短い場合のエラー条件を決める
 - [x] 18. Rust/Nim双方のテストでRFC 6070相当またはRustCrypto互換の既知ベクトルを確認する
-- [ ] 19. `password-hash` trait相当のFFI設計を決める
-- [ ] 19. PHC stringの生成と検証を、Nim側では`string`、Rust FFIでは入力/出力バッファとして扱う設計にする
-- [ ] 19. アルゴリズム固有パラメータを整数で渡す範囲と、PHC stringに閉じ込める範囲を決める
+- [x] 19. `password-hash` trait相当のFFI設計を決める
+- [x] 19. PHC stringの生成と検証を、Nim側では`string`、Rust FFIでは入力/出力バッファとして扱う設計にする
+- [x] 19. アルゴリズム固有パラメータを整数で渡す範囲と、PHC stringに閉じ込める範囲を決める
 - [ ] 20. `scrypt`で公開する最小APIを決める
 - [ ] 20. scryptのN/r/p、salt、出力長、メモリコスト上限の扱いを決める
 - [ ] 20. Rust/Nim双方のテストでRFC 7914の既知ベクトルを確認する
@@ -153,6 +153,7 @@ alwaysApply: false
 - Ed25519は、秘密鍵32バイト、公開鍵32バイト、署名64バイト、任意長メッセージのone-shot署名・検証を最初に実装する。Ed25519phやEd25519ctxは最小範囲外とし、通常のEd25519と混同しない別API名にする。
 - Ed25519は、Rust側で `ed25519-dalek` を provider として使い、公開鍵導出、署名、検証の one-shot API を `rustcrypto_ed25519_public_key_from_secret_key` / `rustcrypto_ed25519_sign` / `rustcrypto_ed25519_verify` で公開した。Nim側は `ed25519PublicKeyFromSecretKey` / `ed25519Sign` / `ed25519Verify` を高水準APIとして用意し、RFC 8032 の test vector 1 と改ざん署名の失敗を確認した。
 - PBKDF2は、HMAC-SHA256を用いた one-shot derive API として実装した。Rust側FFIは `rustcrypto_pbkdf2_hmac_sha256`、Nim側高水準APIは `pbkdf2HmacSha256`。出力長は呼び出し元指定とし、raw API では要求長とバッファ容量を分けて短い出力バッファを `output too short` として扱う。iteration count 0 は `invalid parameter` として拒否し、`password=""` / `salt=""` の空入力も受け入れる。
+- `password-hash` trait相当の共通境界は、PHC string の検証と正規化だけを先に公開した。Rust側FFIは `rustcrypto_password_hash_validate` / `rustcrypto_password_hash_canonicalize`、Nim側高水準APIは `passwordHashValidate` / `passwordHashCanonicalize`。アルゴリズム固有のパラメータ処理は scrypt / argon2 実装へ閉じ込め、共通層は文字列の構文検査と round-trip に留めた。
 - PKCS#8は、Ed25519秘密鍵32バイトをPKCS#8 DERへ、Ed25519公開鍵32バイトをSPKI DERへ相互変換する最小APIとして実装した。Rust側FFIは `rustcrypto_ed25519_private_key_to_pkcs8_der` / `rustcrypto_ed25519_private_key_from_pkcs8_der` / `rustcrypto_ed25519_public_key_to_spki_der` / `rustcrypto_ed25519_public_key_from_spki_der`、Nim側高水準APIは `ed25519PrivateKeyToPkcs8Der` / `ed25519PrivateKeyFromPkcs8Der` / `ed25519PublicKeyToSpkiDer` / `ed25519PublicKeyFromSpkiDer`。RFC 8410 の既知 PKCS#8/SPKI ベクトル、短い出力バッファ、不正DERで確認した。
 - PEM は Ed25519 の PKCS#8 DER / SPKI DER を RFC 7468 の strict 形式で包む最小APIとして実装した。Rust側FFIは `rustcrypto_ed25519_private_key_to_pkcs8_pem` / `rustcrypto_ed25519_private_key_from_pkcs8_pem` / `rustcrypto_ed25519_public_key_to_spki_pem` / `rustcrypto_ed25519_public_key_from_spki_pem`、Nim側高水準APIは `ed25519PrivateKeyToPkcs8Pem` / `ed25519PrivateKeyFromPkcs8Pem` / `ed25519PublicKeyToSpkiPem` / `ed25519PublicKeyFromSpkiPem`。出力は終端改行つきの ASCII armor とし、ラベル不一致、不正base64、短い出力バッファを確認した。
 - `const-oid` は Rust 内部定数としてのみ使い、Ed25519、secp256k1、HMAC-SHA256、AES-GCM の OID を `oid` モジュールに整理した。Nim 公開APIには raw OID は露出せず、将来もアルゴリズム名ベースの関数名や整数定数を優先する。

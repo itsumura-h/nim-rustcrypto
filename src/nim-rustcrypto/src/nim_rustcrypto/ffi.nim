@@ -39,6 +39,7 @@ const
   RustCryptoErrInvalidNonceLength* = 13.cint
   RustCryptoErrInvalidTagLength* = 14.cint
   RustCryptoErrInvalidParameter* = 15.cint
+  RustCryptoErrInvalidPasswordHashFormat* = 16.cint
   RustCryptoErrPanic* = -1.cint
   Secp256k1PublicKeyFormatUncompressed* = 0.cint
   Secp256k1PublicKeyFormatCompressed* = 1.cint
@@ -71,6 +72,19 @@ proc pbkdf2HmacSha256Raw*(
     outputLen: csize_t,
     derivedLen: csize_t,
   ): cint {.cdecl, importc: "rustcrypto_pbkdf2_hmac_sha256".}
+
+proc passwordHashValidateRaw*(
+    input: ptr uint8,
+    inputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_password_hash_validate".}
+
+proc passwordHashCanonicalizeRaw*(
+    input: ptr uint8,
+    inputLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    writtenLen: ptr csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_password_hash_canonicalize".}
 
 proc hkdfSha256ExtractRaw*(
     salt: ptr uint8,
