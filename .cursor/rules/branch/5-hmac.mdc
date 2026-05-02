@@ -42,13 +42,13 @@ alwaysApply: false
 - [x] 10. `aead` trait相当のFFI設計を決める
 - [x] 10. AEAD共通の鍵、nonce、AAD、平文、暗号文、tag、戻り値の扱いを決める
 - [x] 10. FFI公開APIにRustのtrait、`Result`、`Vec`、`String`を出さない設計を維持する
-- [ ] 11. `cipher` trait相当のFFI設計を決める
-- [ ] 11. 対称暗号の低水準traitはRust内部の設計境界として扱い、Nimへは具体アルゴリズム別APIだけを公開する
-- [ ] 12. `chacha20poly1305`で公開する最小APIを決める
-- [ ] 12. ChaCha20-Poly1305の96ビットnonce、32バイト鍵、16バイトtagの扱いを決める
-- [ ] 12. 暗号化と復号をone-shot APIとして実装し、認証失敗を整数エラーコードで返す
-- [ ] 12. Nim側に低水準FFI procと高水準ChaCha20-Poly1305 APIを実装する
-- [ ] 12. Rust/Nim双方のテストでRFC 8439の既知ベクトルと認証失敗を確認する
+- [x] 11. `cipher` trait相当のFFI設計を決める
+- [x] 11. 対称暗号の低水準traitはRust内部の設計境界として扱い、Nimへは具体アルゴリズム別APIだけを公開する
+- [x] 12. `chacha20poly1305`で公開する最小APIを決める
+- [x] 12. ChaCha20-Poly1305の96ビットnonce、32バイト鍵、16バイトtagの扱いを決める
+- [x] 12. 暗号化と復号をone-shot APIとして実装し、認証失敗を整数エラーコードで返す
+- [x] 12. Nim側に低水準FFI procと高水準ChaCha20-Poly1305 APIを実装する
+- [x] 12. Rust/Nim双方のテストでRFC 8439の既知ベクトルと認証失敗を確認する
 - [ ] 13. `der`で公開する最小APIを決める
 - [ ] 13. DERはまずECDSA raw署名とDER署名の相互変換に限定する
 - [ ] 13. Rust側にsecp256k1 ECDSA署名のraw 64バイトからDERへのエンコードとDERからraw 64バイトへのデコードを実装する
@@ -142,7 +142,9 @@ alwaysApply: false
 - HMAC-SHA256は、任意長keyと任意長messageから32バイトMACを出力するone-shot APIを最初に実装する。検証APIは定数時間比較をRust側で提供するか、Nim側で安全に扱える比較関数を用意するかを実装前に決める。
 - HMAC-SHA256は、任意長keyと任意長messageから32バイトMACを出力するone-shot APIとして実装した。Rust側FFIは `rustcrypto_hmac_sha256`、Nim側高水準APIは `hmacSha256` / `hmacSha256Hex`。空key・空messageは `NULL` ポインタ + 長さ0 で受け入れ、RFC 4231 case 1/2 と空入力の既知ベクトルで確認した。
 - HKDF-SHA256は、`extract`と`expand`を分けた低水準APIと、通常利用向けの`derive`高水準APIとして実装した。Rust側FFIは `rustcrypto_hkdf_sha256_extract` / `rustcrypto_hkdf_sha256_expand` / `rustcrypto_hkdf_sha256_derive`、Nim側高水準APIは `hkdfSha256Extract` / `hkdfSha256Expand` / `hkdfSha256Derive`。空saltはRFC 5869の default salt として扱い、空infoは空スライスとして扱う。RFC 5869 case 1 と case 3 で確認した。
-- AEADの共通境界は、`key` / `nonce` / `tag` を固定長の入力バッファ、`aad` / `plaintext` / `ciphertext` を任意長の入力バッファ、出力は呼び出し元所有のバッファに書き込む設計で固めた。Rust側にはバッファ検証の共通ヘルパーと `authentication failed` / `invalid key length` / `invalid nonce length` / `invalid tag length` / `invalid parameter` のエラー分類を追加し、Nim側も同じ分類を受け取れるようにした。具体的な `chacha20poly1305` 実装は次の段階でこれを使う。
+- AEADの共通境界は、`key` / `nonce` / `tag` を固定長の入力バッファ、`aad` / `plaintext` / `ciphertext` を任意長の入力バッファ、出力は呼び出し元所有のバッファに書き込む設計で固めた。Rust側にはバッファ検証の共通ヘルパーと `authentication failed` / `invalid key length` / `invalid nonce length` / `invalid tag length` / `invalid parameter` のエラー分類を追加し、Nim側も同じ分類を受け取れるようにした。この共通設計は `chacha20poly1305` の one-shot encrypt/decrypt 実装で使った。
+- cipher traitはRustCrypto内部の設計境界として扱い、Nimには抽象traitを露出しない。対称暗号は今後も具体アルゴリズム別のone-shot APIだけをFFI公開し、必要な共通化はRust内部に閉じ込める。
+- ChaCha20-Poly1305は、32バイト鍵、12バイトnonce、16バイトtagを固定長とし、暗号化は `(ciphertext, tag)` 分離、復号は `authentication failed` を整数エラーで返す one-shot API として実装した。Rust側FFIは `rustcrypto_chacha20poly1305_encrypt` / `rustcrypto_chacha20poly1305_decrypt`、Nim側高水準APIは `chacha20poly1305Encrypt` / `chacha20poly1305Decrypt`。RFC 8439 の既知ベクトルと改ざん tag で確認した。
 - AEADは、暗号文とtagを分離したAPIを基本にする。暗号化では平文入力、AAD入力、暗号文出力、tag出力を受け取り、復号では暗号文入力、tag入力、AAD入力、平文出力を受け取る。認証失敗時に平文出力バッファの内容を信頼してはならない。
 - ChaCha20-Poly1305は、32バイト鍵、12バイトnonce、16バイトtagを固定長として扱う。XChaCha20-Poly1305はこのブランチの最小範囲外とし、必要性が出た場合のみ別APIとして追加する。
 - DERは、まずsecp256k1 ECDSA署名のraw 64バイト `(r, s)` とDER署名の相互変換に限定する。公開鍵や証明書の一般DER処理はPKCS#8/X.509側の設計に合わせ、過剰に汎用化しない。

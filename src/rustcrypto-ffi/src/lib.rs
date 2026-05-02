@@ -1,6 +1,10 @@
 use core::ffi::c_int;
 use digest::Digest;
-use hmac::{Hmac, KeyInit, Mac};
+use chacha20poly1305::{
+    aead::{AeadInPlace, KeyInit as AeadKeyInit},
+    ChaCha20Poly1305, Key, Nonce, Tag,
+};
+use hmac::{Hmac, KeyInit as HmacKeyInit, Mac};
 use hkdf::Hkdf;
 use k256::ecdsa::signature::hazmat::{PrehashSigner, PrehashVerifier};
 use k256::ecdsa::{Signature, SigningKey, VerifyingKey};
@@ -35,6 +39,9 @@ pub const SHA256_DIGEST_LEN: usize = 32;
 pub const HMAC_SHA256_MAC_LEN: usize = 32;
 pub const HKDF_SHA256_PRK_LEN: usize = SHA256_DIGEST_LEN;
 pub const HKDF_SHA256_MAX_OKM_LEN: usize = SHA256_DIGEST_LEN * 255;
+pub const CHACHA20POLY1305_KEY_LEN: usize = 32;
+pub const CHACHA20POLY1305_NONCE_LEN: usize = 12;
+pub const CHACHA20POLY1305_TAG_LEN: usize = 16;
 pub const SHA3_256_DIGEST_LEN: usize = 32;
 pub const KECCAK_256_DIGEST_LEN: usize = 32;
 pub const SECP256K1_SECRET_KEY_LEN: usize = 32;
@@ -283,6 +290,157 @@ fn hkdf_derive_impl(
     match hkdf.expand(info, output) {
         Ok(()) => RUSTCRYPTO_OK,
         Err(_) => RUSTCRYPTO_ERR_INVALID_LENGTH,
+    }
+}
+
+fn chacha20poly1305_key(bytes: &[u8]) -> Key {
+    bytes.iter().copied().collect()
+}
+
+fn chacha20poly1305_nonce(bytes: &[u8]) -> Nonce {
+    bytes.iter().copied().collect()
+}
+
+fn chacha20poly1305_tag(bytes: &[u8]) -> Tag {
+    bytes.iter().copied().collect()
+}
+
+fn chacha20poly1305_encrypt_impl(
+    key: *const u8,
+    key_len: usize,
+    nonce: *const u8,
+    nonce_len: usize,
+    aad: *const u8,
+    aad_len: usize,
+    plaintext: *const u8,
+    plaintext_len: usize,
+    ciphertext: *mut u8,
+    ciphertext_len: usize,
+    tag: *mut u8,
+    tag_len: usize,
+) -> c_int {
+    let key = match aead_common::fixed_input(
+        key,
+        key_len,
+        CHACHA20POLY1305_KEY_LEN,
+        RUSTCRYPTO_ERR_INVALID_KEY_LENGTH,
+    ) {
+        Ok(key) => key.to_vec(),
+        Err(err) => return err,
+    };
+
+    let nonce = match aead_common::fixed_input(
+        nonce,
+        nonce_len,
+        CHACHA20POLY1305_NONCE_LEN,
+        RUSTCRYPTO_ERR_INVALID_NONCE_LENGTH,
+    ) {
+        Ok(nonce) => nonce.to_vec(),
+        Err(err) => return err,
+    };
+
+    let aad = match aead_common::optional_input(aad, aad_len) {
+        Ok(aad) => aad.to_vec(),
+        Err(err) => return err,
+    };
+
+    let plaintext = match aead_common::optional_input(plaintext, plaintext_len) {
+        Ok(plaintext) => plaintext.to_vec(),
+        Err(err) => return err,
+    };
+
+    let ciphertext = match aead_common::output_buffer(ciphertext, ciphertext_len, plaintext_len) {
+        Ok(ciphertext) => ciphertext,
+        Err(err) => return err,
+    };
+
+    let tag = match aead_common::output_buffer(tag, tag_len, CHACHA20POLY1305_TAG_LEN) {
+        Ok(tag) => tag,
+        Err(err) => return err,
+    };
+
+    let key = chacha20poly1305_key(&key);
+    let nonce = chacha20poly1305_nonce(&nonce);
+    let cipher = ChaCha20Poly1305::new(&key);
+    ciphertext.copy_from_slice(&plaintext);
+
+    let tag_bytes = match cipher.encrypt_in_place_detached(&nonce, &aad, ciphertext) {
+        Ok(tag_bytes) => tag_bytes,
+        Err(_) => return RUSTCRYPTO_ERR_INVALID_PARAMETER,
+    };
+
+    tag.copy_from_slice(&tag_bytes);
+    RUSTCRYPTO_OK
+}
+
+fn chacha20poly1305_decrypt_impl(
+    key: *const u8,
+    key_len: usize,
+    nonce: *const u8,
+    nonce_len: usize,
+    aad: *const u8,
+    aad_len: usize,
+    ciphertext: *const u8,
+    ciphertext_len: usize,
+    tag: *const u8,
+    tag_len: usize,
+    plaintext: *mut u8,
+    plaintext_len: usize,
+) -> c_int {
+    let key = match aead_common::fixed_input(
+        key,
+        key_len,
+        CHACHA20POLY1305_KEY_LEN,
+        RUSTCRYPTO_ERR_INVALID_KEY_LENGTH,
+    ) {
+        Ok(key) => key.to_vec(),
+        Err(err) => return err,
+    };
+
+    let nonce = match aead_common::fixed_input(
+        nonce,
+        nonce_len,
+        CHACHA20POLY1305_NONCE_LEN,
+        RUSTCRYPTO_ERR_INVALID_NONCE_LENGTH,
+    ) {
+        Ok(nonce) => nonce.to_vec(),
+        Err(err) => return err,
+    };
+
+    let aad = match aead_common::optional_input(aad, aad_len) {
+        Ok(aad) => aad.to_vec(),
+        Err(err) => return err,
+    };
+
+    let ciphertext = match aead_common::optional_input(ciphertext, ciphertext_len) {
+        Ok(ciphertext) => ciphertext.to_vec(),
+        Err(err) => return err,
+    };
+
+    let tag = match aead_common::fixed_input(
+        tag,
+        tag_len,
+        CHACHA20POLY1305_TAG_LEN,
+        RUSTCRYPTO_ERR_INVALID_TAG_LENGTH,
+    ) {
+        Ok(tag) => tag.to_vec(),
+        Err(err) => return err,
+    };
+
+    let plaintext = match aead_common::output_buffer(plaintext, plaintext_len, ciphertext_len) {
+        Ok(plaintext) => plaintext,
+        Err(err) => return err,
+    };
+
+    let key = chacha20poly1305_key(&key);
+    let nonce = chacha20poly1305_nonce(&nonce);
+    let cipher = ChaCha20Poly1305::new(&key);
+    plaintext.copy_from_slice(&ciphertext);
+
+    let tag = chacha20poly1305_tag(&tag);
+    match cipher.decrypt_in_place_detached(&nonce, &aad, plaintext, &tag) {
+        Ok(()) => RUSTCRYPTO_OK,
+        Err(_) => RUSTCRYPTO_ERR_AUTHENTICATION_FAILED,
     }
 }
 
@@ -536,6 +694,74 @@ pub extern "C" fn rustcrypto_hkdf_sha256_derive(
     catch_unwind(AssertUnwindSafe(|| {
         hkdf_derive_impl(
             salt, salt_len, ikm, ikm_len, info, info_len, output, output_len,
+        )
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_chacha20poly1305_encrypt(
+    key: *const u8,
+    key_len: usize,
+    nonce: *const u8,
+    nonce_len: usize,
+    aad: *const u8,
+    aad_len: usize,
+    plaintext: *const u8,
+    plaintext_len: usize,
+    ciphertext: *mut u8,
+    ciphertext_len: usize,
+    tag: *mut u8,
+    tag_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        chacha20poly1305_encrypt_impl(
+            key,
+            key_len,
+            nonce,
+            nonce_len,
+            aad,
+            aad_len,
+            plaintext,
+            plaintext_len,
+            ciphertext,
+            ciphertext_len,
+            tag,
+            tag_len,
+        )
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_chacha20poly1305_decrypt(
+    key: *const u8,
+    key_len: usize,
+    nonce: *const u8,
+    nonce_len: usize,
+    aad: *const u8,
+    aad_len: usize,
+    ciphertext: *const u8,
+    ciphertext_len: usize,
+    tag: *const u8,
+    tag_len: usize,
+    plaintext: *mut u8,
+    plaintext_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        chacha20poly1305_decrypt_impl(
+            key,
+            key_len,
+            nonce,
+            nonce_len,
+            aad,
+            aad_len,
+            ciphertext,
+            ciphertext_len,
+            tag,
+            tag_len,
+            plaintext,
+            plaintext_len,
         )
     }))
     .unwrap_or(RUSTCRYPTO_ERR_PANIC)
@@ -992,6 +1218,157 @@ mod tests {
         );
 
         assert_eq!(status, RUSTCRYPTO_ERR_NULL_INPUT_WITH_DATA);
+    }
+
+    fn hex_bytes(hex: &str) -> Vec<u8> {
+        fn nibble(byte: u8) -> u8 {
+            match byte {
+                b'0'..=b'9' => byte - b'0',
+                b'a'..=b'f' => byte - b'a' + 10,
+                b'A'..=b'F' => byte - b'A' + 10,
+                _ => panic!("invalid hex digit"),
+            }
+        }
+
+        assert_eq!(hex.len() % 2, 0);
+        let bytes = hex.as_bytes();
+        let mut output = Vec::with_capacity(bytes.len() / 2);
+        let mut index = 0;
+        while index < bytes.len() {
+            output.push((nibble(bytes[index]) << 4) | nibble(bytes[index + 1]));
+            index += 2;
+        }
+        output
+    }
+
+    #[test]
+    fn chacha20poly1305_encrypt_matches_rfc_8439_vector() {
+        let key = hex_bytes(
+            "808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f",
+        );
+        let nonce = hex_bytes("070000004041424344454647");
+        let aad = hex_bytes("50515253c0c1c2c3c4c5c6c7");
+        let plaintext = b"Ladies and Gentlemen of the class of '99: If I could offer you only one tip for the future, sunscreen would be it.";
+        let mut ciphertext = vec![0u8; plaintext.len()];
+        let mut tag = [0u8; CHACHA20POLY1305_TAG_LEN];
+
+        let status = rustcrypto_chacha20poly1305_encrypt(
+            key.as_ptr(),
+            key.len(),
+            nonce.as_ptr(),
+            nonce.len(),
+            aad.as_ptr(),
+            aad.len(),
+            plaintext.as_ptr(),
+            plaintext.len(),
+            ciphertext.as_mut_ptr(),
+            ciphertext.len(),
+            tag.as_mut_ptr(),
+            tag.len(),
+        );
+
+        assert_eq!(status, RUSTCRYPTO_OK);
+        assert_eq!(
+            digest_hex(&ciphertext),
+            "d31a8d34648e60db7b86afbc53ef7ec2a4aded51296e08fea9e2b5a736ee62d63dbea45e8ca9671282fafb69da92728b1a71de0a9e060b2905d6a5b67ecd3b3692ddbd7f2d778b8c9803aee328091b58fab324e4fad675945585808b4831d7bc3ff4def08e4b7a9de576d26586cec64b6116"
+        );
+        assert_eq!(digest_hex(&tag), "1ae10b594f09e26a7e902ecbd0600691");
+    }
+
+    #[test]
+    fn chacha20poly1305_decrypt_matches_rfc_8439_vector() {
+        let key = hex_bytes(
+            "808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f",
+        );
+        let nonce = hex_bytes("070000004041424344454647");
+        let aad = hex_bytes("50515253c0c1c2c3c4c5c6c7");
+        let ciphertext = hex_bytes(
+            "d31a8d34648e60db7b86afbc53ef7ec2a4aded51296e08fea9e2b5a736ee62d63dbea45e8ca9671282fafb69da92728b1a71de0a9e060b2905d6a5b67ecd3b3692ddbd7f2d778b8c9803aee328091b58fab324e4fad675945585808b4831d7bc3ff4def08e4b7a9de576d26586cec64b6116",
+        );
+        let tag = hex_bytes("1ae10b594f09e26a7e902ecbd0600691");
+        let mut plaintext = vec![0u8; ciphertext.len()];
+
+        let status = rustcrypto_chacha20poly1305_decrypt(
+            key.as_ptr(),
+            key.len(),
+            nonce.as_ptr(),
+            nonce.len(),
+            aad.as_ptr(),
+            aad.len(),
+            ciphertext.as_ptr(),
+            ciphertext.len(),
+            tag.as_ptr(),
+            tag.len(),
+            plaintext.as_mut_ptr(),
+            plaintext.len(),
+        );
+
+        assert_eq!(status, RUSTCRYPTO_OK);
+        assert_eq!(
+            plaintext,
+            b"Ladies and Gentlemen of the class of '99: If I could offer you only one tip for the future, sunscreen would be it."
+        );
+    }
+
+    #[test]
+    fn chacha20poly1305_decrypt_rejects_tampered_tag() {
+        let key = hex_bytes(
+            "808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f",
+        );
+        let nonce = hex_bytes("070000004041424344454647");
+        let aad = hex_bytes("50515253c0c1c2c3c4c5c6c7");
+        let ciphertext = hex_bytes(
+            "d31a8d34648e60db7b86afbc53ef7ec2a4aded51296e08fea9e2b5a736ee62d63dbea45e8ca9671282fafb69da92728b1a71de0a9e060b2905d6a5b67ecd3b3692ddbd7f2d778b8c9803aee328091b58fab324e4fad675945585808b4831d7bc3ff4def08e4b7a9de576d26586cec64b6116",
+        );
+        let mut tag = hex_bytes("1ae10b594f09e26a7e902ecbd0600691");
+        let mut plaintext = vec![0u8; ciphertext.len()];
+        tag[0] ^= 0x01;
+
+        let status = rustcrypto_chacha20poly1305_decrypt(
+            key.as_ptr(),
+            key.len(),
+            nonce.as_ptr(),
+            nonce.len(),
+            aad.as_ptr(),
+            aad.len(),
+            ciphertext.as_ptr(),
+            ciphertext.len(),
+            tag.as_ptr(),
+            tag.len(),
+            plaintext.as_mut_ptr(),
+            plaintext.len(),
+        );
+
+        assert_eq!(status, RUSTCRYPTO_ERR_AUTHENTICATION_FAILED);
+    }
+
+    #[test]
+    fn chacha20poly1305_encrypt_rejects_short_output_buffer() {
+        let key = hex_bytes(
+            "808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f",
+        );
+        let nonce = hex_bytes("070000004041424344454647");
+        let aad = hex_bytes("50515253c0c1c2c3c4c5c6c7");
+        let plaintext = b"Ladies and Gentlemen of the class of '99: If I could offer you only one tip for the future, sunscreen would be it.";
+        let mut ciphertext = vec![0u8; plaintext.len() - 1];
+        let mut tag = [0u8; CHACHA20POLY1305_TAG_LEN];
+
+        let status = rustcrypto_chacha20poly1305_encrypt(
+            key.as_ptr(),
+            key.len(),
+            nonce.as_ptr(),
+            nonce.len(),
+            aad.as_ptr(),
+            aad.len(),
+            plaintext.as_ptr(),
+            plaintext.len(),
+            ciphertext.as_mut_ptr(),
+            ciphertext.len(),
+            tag.as_mut_ptr(),
+            tag.len(),
+        );
+
+        assert_eq!(status, RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT);
     }
 
     #[test]

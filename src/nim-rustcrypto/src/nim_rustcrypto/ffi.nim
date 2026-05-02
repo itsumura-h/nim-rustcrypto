@@ -12,6 +12,9 @@ const
   Secp256k1PublicKeyUncompressedLen* = 65
   Secp256k1SignatureLen* = 64
   Secp256k1MessageDigestLen* = 32
+  ChaCha20Poly1305KeyLen* = 32
+  ChaCha20Poly1305NonceLen* = 12
+  ChaCha20Poly1305TagLen* = 16
   RustCryptoOk* = 0.cint
   RustCryptoErrNullOutput* = 1.cint
   RustCryptoErrOutputTooShort* = 2.cint
@@ -78,6 +81,36 @@ proc hkdfSha256DeriveRaw*(
     output: ptr uint8,
     outputLen: csize_t,
   ): cint {.cdecl, importc: "rustcrypto_hkdf_sha256_derive".}
+
+proc chacha20Poly1305EncryptRaw*(
+    key: ptr uint8,
+    keyLen: csize_t,
+    nonce: ptr uint8,
+    nonceLen: csize_t,
+    aad: ptr uint8,
+    aadLen: csize_t,
+    plaintext: ptr uint8,
+    plaintextLen: csize_t,
+    ciphertext: ptr uint8,
+    ciphertextLen: csize_t,
+    tag: ptr uint8,
+    tagLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_chacha20poly1305_encrypt".}
+
+proc chacha20Poly1305DecryptRaw*(
+    key: ptr uint8,
+    keyLen: csize_t,
+    nonce: ptr uint8,
+    nonceLen: csize_t,
+    aad: ptr uint8,
+    aadLen: csize_t,
+    ciphertext: ptr uint8,
+    ciphertextLen: csize_t,
+    tag: ptr uint8,
+    tagLen: csize_t,
+    plaintext: ptr uint8,
+    plaintextLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_chacha20poly1305_decrypt".}
 
 proc sha3_256Raw*(
     input: ptr uint8,
