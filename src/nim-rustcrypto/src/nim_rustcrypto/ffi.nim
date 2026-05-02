@@ -61,6 +61,17 @@ proc hmacSha256Raw*(
     outputLen: csize_t,
   ): cint {.cdecl, importc: "rustcrypto_hmac_sha256".}
 
+proc pbkdf2HmacSha256Raw*(
+    password: ptr uint8,
+    passwordLen: csize_t,
+    salt: ptr uint8,
+    saltLen: csize_t,
+    iterations: cuint,
+    output: ptr uint8,
+    outputLen: csize_t,
+    derivedLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_pbkdf2_hmac_sha256".}
+
 proc hkdfSha256ExtractRaw*(
     salt: ptr uint8,
     saltLen: csize_t,

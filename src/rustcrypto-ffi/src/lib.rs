@@ -19,6 +19,7 @@ mod aead_common;
 mod ed25519_ops;
 mod ed25519_pkcs8;
 mod ed25519_pem;
+mod pbkdf2;
 mod oid;
 
 pub const RUSTCRYPTO_OK: c_int = 0;
@@ -1144,6 +1145,32 @@ pub extern "C" fn rustcrypto_ed25519_public_key_from_spki_pem(
 ) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         ed25519_pem::public_key_from_spki_pem_impl(pem, pem_len, output, output_len)
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_pbkdf2_hmac_sha256(
+    password: *const u8,
+    password_len: usize,
+    salt: *const u8,
+    salt_len: usize,
+    iterations: u32,
+    output: *mut u8,
+    output_len: usize,
+    derived_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        pbkdf2::pbkdf2_hmac_sha256_impl(
+            password,
+            password_len,
+            salt,
+            salt_len,
+            iterations,
+            output,
+            output_len,
+            derived_len,
+        )
     }))
     .unwrap_or(RUSTCRYPTO_ERR_PANIC)
 }

@@ -5,6 +5,7 @@ import nim_rustcrypto/ed25519
 import nim_rustcrypto/pkcs8
 import nim_rustcrypto/hkdf
 import nim_rustcrypto/hmac
+import nim_rustcrypto/pbkdf2
 import nim_rustcrypto/sha256
 import nim_rustcrypto/sha3
 import nim_rustcrypto/pem
@@ -54,6 +55,7 @@ export ffi.HkdfSha256PrkLen
 export ffi.HkdfSha256MaxOkmLen
 export ffi.sha256Raw
 export ffi.hmacSha256Raw
+export ffi.pbkdf2HmacSha256Raw
 export ffi.hkdfSha256ExtractRaw
 export ffi.hkdfSha256ExpandRaw
 export ffi.hkdfSha256DeriveRaw
@@ -85,6 +87,8 @@ export sha256.sha256Hex
 export hmac.HmacSha256Mac
 export hmac.hmacSha256
 export hmac.hmacSha256Hex
+export pbkdf2.Pbkdf2HmacSha256Okm
+export pbkdf2.pbkdf2HmacSha256
 export hkdf.HkdfSha256Prk
 export hkdf.HkdfSha256Okm
 export hkdf.hkdfSha256Extract
