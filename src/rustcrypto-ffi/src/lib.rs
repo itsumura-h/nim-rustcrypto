@@ -16,6 +16,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::slice;
 
 mod aead_common;
+mod ed25519_pkcs8;
 
 pub const RUSTCRYPTO_OK: c_int = 0;
 pub const RUSTCRYPTO_ERR_NULL_OUTPUT: c_int = 1;
@@ -50,6 +51,10 @@ pub const SECP256K1_PUBLIC_KEY_UNCOMPRESSED_LEN: usize = 65;
 pub const SECP256K1_SIGNATURE_LEN: usize = 64;
 pub const SECP256K1_SIGNATURE_DER_MAX_LEN: usize = 72;
 pub const SECP256K1_MESSAGE_DIGEST_LEN: usize = 32;
+pub const ED25519_PRIVATE_KEY_LEN: usize = 32;
+pub const ED25519_PUBLIC_KEY_LEN: usize = 32;
+pub const ED25519_PRIVATE_KEY_DER_MAX_LEN: usize = 48;
+pub const ED25519_PUBLIC_KEY_DER_MAX_LEN: usize = 44;
 
 fn hash_one_shot<D>(input: &[u8], output: &mut [u8]) -> c_int
 where
@@ -939,6 +944,72 @@ pub extern "C" fn rustcrypto_secp256k1_ecdsa_signature_from_der(
 ) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         secp256k1_ecdsa_signature_from_der_impl(der_signature, der_signature_len, output, output_len)
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_ed25519_private_key_to_pkcs8_der(
+    private_key: *const u8,
+    private_key_len: usize,
+    output: *mut u8,
+    output_len: usize,
+    written_len: *mut usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        ed25519_pkcs8::private_key_to_pkcs8_der_impl(
+            private_key,
+            private_key_len,
+            output,
+            output_len,
+            written_len,
+        )
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_ed25519_private_key_from_pkcs8_der(
+    der: *const u8,
+    der_len: usize,
+    output: *mut u8,
+    output_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        ed25519_pkcs8::private_key_from_pkcs8_der_impl(der, der_len, output, output_len)
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_ed25519_public_key_to_spki_der(
+    public_key: *const u8,
+    public_key_len: usize,
+    output: *mut u8,
+    output_len: usize,
+    written_len: *mut usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        ed25519_pkcs8::public_key_to_spki_der_impl(
+            public_key,
+            public_key_len,
+            output,
+            output_len,
+            written_len,
+        )
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_ed25519_public_key_from_spki_der(
+    der: *const u8,
+    der_len: usize,
+    output: *mut u8,
+    output_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        ed25519_pkcs8::public_key_from_spki_der_impl(der, der_len, output, output_len)
     }))
     .unwrap_or(RUSTCRYPTO_ERR_PANIC)
 }

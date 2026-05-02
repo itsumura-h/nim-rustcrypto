@@ -1,6 +1,7 @@
 import nim_rustcrypto/ffi
 import nim_rustcrypto/ecdsa
 import nim_rustcrypto/chacha20poly1305
+import nim_rustcrypto/pkcs8
 import nim_rustcrypto/hkdf
 import nim_rustcrypto/hmac
 import nim_rustcrypto/sha256
@@ -37,6 +38,10 @@ export ffi.Secp256k1PublicKeyFormatCompressed
 export ffi.Secp256k1SignatureLen
 export ffi.Secp256k1SignatureDerMaxLen
 export ffi.Secp256k1MessageDigestLen
+export ffi.Ed25519PrivateKeyLen
+export ffi.Ed25519PublicKeyLen
+export ffi.Ed25519PrivateKeyDerMaxLen
+export ffi.Ed25519PublicKeyDerMaxLen
 export ffi.ChaCha20Poly1305KeyLen
 export ffi.ChaCha20Poly1305NonceLen
 export ffi.ChaCha20Poly1305TagLen
@@ -56,6 +61,10 @@ export ffi.secp256k1EcdsaSignRaw
 export ffi.secp256k1EcdsaVerifyRaw
 export ffi.secp256k1EcdsaSignatureToDerRaw
 export ffi.secp256k1EcdsaSignatureFromDerRaw
+export ffi.ed25519PrivateKeyToPkcs8DerRaw
+export ffi.ed25519PrivateKeyFromPkcs8DerRaw
+export ffi.ed25519PublicKeyToSpkiDerRaw
+export ffi.ed25519PublicKeyFromSpkiDerRaw
 export utils.bytesPtr
 export sha256.Sha256Digest
 export sha256.fromHex
@@ -79,6 +88,16 @@ export chacha20poly1305.chacha20poly1305Decrypt
 export chacha20poly1305.fromHexKey
 export chacha20poly1305.fromHexNonce
 export chacha20poly1305.fromHexTag
+export pkcs8.Ed25519PrivateKey
+export pkcs8.Ed25519PublicKey
+export pkcs8.Ed25519PrivateKeyPkcs8Der
+export pkcs8.Ed25519PublicKeySpkiDer
+export pkcs8.fromHexPrivateKey
+export pkcs8.fromHexPublicKey
+export pkcs8.ed25519PrivateKeyToPkcs8Der
+export pkcs8.ed25519PrivateKeyFromPkcs8Der
+export pkcs8.ed25519PublicKeyToSpkiDer
+export pkcs8.ed25519PublicKeyFromSpkiDer
 export sha3.Sha3_256Digest
 export sha3.Keccak256Digest
 export sha3.fromHexSha3_256

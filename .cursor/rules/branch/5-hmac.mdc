@@ -54,10 +54,10 @@ alwaysApply: false
 - [x] 13. Rust側にsecp256k1 ECDSA署名のraw 64バイトからDERへのエンコードとDERからraw 64バイトへのデコードを実装する
 - [x] 13. Nim側に低水準FFI procと高水準DER署名変換APIを実装する
 - [x] 13. Rust/Nim双方のテストで既知DER署名、不正DER、短い出力バッファを確認する
-- [ ] 14. `pkcs8`で公開する最小APIを決める
-- [ ] 14. PKCS#8はまずEd25519秘密鍵/公開鍵の標準形式入出力に限定し、secp256k1対応は必要性を確認してから扱う
-- [ ] 14. DERバイト列を入力し、Rust側で検証して固定長鍵バイトへ書き出すAPIを設計する
-- [ ] 14. 固定長鍵バイトからPKCS#8 DERへエンコードするAPIを設計する
+- [x] 14. `pkcs8`で公開する最小APIを決める
+- [x] 14. PKCS#8はまずEd25519秘密鍵/公開鍵の標準形式入出力に限定し、secp256k1対応は必要性を確認してから扱う
+- [x] 14. DERバイト列を入力し、Rust側で検証して固定長鍵バイトへ書き出すAPIを設計する
+- [x] 14. 固定長鍵バイトからPKCS#8 DERへエンコードするAPIを設計する
 - [ ] 15. `pem-rfc7468`で公開する最小APIを決める
 - [ ] 15. PEMはPKCS#8 DERのASCII armor変換として扱い、秘密鍵の暗号化PEMはこのブランチでは対象外にする
 - [ ] 15. PEMラベル、改行、出力バッファ長、不正base64のエラー条件を決める
@@ -151,7 +151,7 @@ alwaysApply: false
 - DERは、まずsecp256k1 ECDSA署名のraw 64バイト `(r, s)` とDER署名の相互変換に限定する。公開鍵や証明書の一般DER処理はPKCS#8/X.509側の設計に合わせ、過剰に汎用化しない。
 - `const-oid`は、Rust内部でDER/PKCS#8のアルゴリズム識別子を安全に扱うために使う。Nim公開APIではOID文字列よりもアルゴリズム種別の明示的な関数名または整数定数を優先する。
 - Ed25519は、秘密鍵32バイト、公開鍵32バイト、署名64バイト、任意長メッセージのone-shot署名・検証を最初に実装する。Ed25519phやEd25519ctxは最小範囲外とし、通常のEd25519と混同しない別API名にする。
-- PKCS#8とPEMは、まずEd25519鍵の保存・読み込みに必要な範囲から扱う。暗号化PKCS#8、暗号化PEM、証明書、秘密鍵のパスフレーズ保護はこのブランチでは扱わない。
+- PKCS#8は、Ed25519秘密鍵32バイトをPKCS#8 DERへ、Ed25519公開鍵32バイトをSPKI DERへ相互変換する最小APIとして実装した。Rust側FFIは `rustcrypto_ed25519_private_key_to_pkcs8_der` / `rustcrypto_ed25519_private_key_from_pkcs8_der` / `rustcrypto_ed25519_public_key_to_spki_der` / `rustcrypto_ed25519_public_key_from_spki_der`、Nim側高水準APIは `ed25519PrivateKeyToPkcs8Der` / `ed25519PrivateKeyFromPkcs8Der` / `ed25519PublicKeyToSpkiDer` / `ed25519PublicKeyFromSpkiDer`。RFC 8410 の既知 PKCS#8/SPKI ベクトル、短い出力バッファ、不正DERで確認した。
 - PBKDF2はHMAC-SHA256を基本にし、passwordとsaltは任意長バイト列、iteration countは1以上、出力長は呼び出し元指定とする。互換性用途のKDFとして扱い、新規パスワード保存用途ではArgon2idを優先する。
 - `password-hash`はPHC stringの生成・検証の共通設計として扱う。scryptとArgon2は個別の低水準derive APIに加え、必要ならPHC stringベースのhash/verify APIを公開する。
 - scryptはN/r/pを明示的に渡すAPIを基本にする。極端なメモリ使用を避けるため、Rust側でパラメータ妥当性を確認し、不正または過大な値は整数エラーコードで返す。

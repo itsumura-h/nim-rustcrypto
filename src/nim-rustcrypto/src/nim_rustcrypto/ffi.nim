@@ -13,6 +13,10 @@ const
   Secp256k1SignatureLen* = 64
   Secp256k1SignatureDerMaxLen* = 72
   Secp256k1MessageDigestLen* = 32
+  Ed25519PrivateKeyLen* = 32
+  Ed25519PublicKeyLen* = 32
+  Ed25519PrivateKeyDerMaxLen* = 48
+  Ed25519PublicKeyDerMaxLen* = 44
   ChaCha20Poly1305KeyLen* = 32
   ChaCha20Poly1305NonceLen* = 12
   ChaCha20Poly1305TagLen* = 16
@@ -168,3 +172,33 @@ proc secp256k1EcdsaSignatureFromDerRaw*(
     output: ptr uint8,
     outputLen: csize_t,
   ): cint {.cdecl, importc: "rustcrypto_secp256k1_ecdsa_signature_from_der".}
+
+proc ed25519PrivateKeyToPkcs8DerRaw*(
+    privateKey: ptr uint8,
+    privateKeyLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    writtenLen: ptr csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_ed25519_private_key_to_pkcs8_der".}
+
+proc ed25519PrivateKeyFromPkcs8DerRaw*(
+    der: ptr uint8,
+    derLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_ed25519_private_key_from_pkcs8_der".}
+
+proc ed25519PublicKeyToSpkiDerRaw*(
+    publicKey: ptr uint8,
+    publicKeyLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    writtenLen: ptr csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_ed25519_public_key_to_spki_der".}
+
+proc ed25519PublicKeyFromSpkiDerRaw*(
+    der: ptr uint8,
+    derLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_ed25519_public_key_from_spki_der".}
