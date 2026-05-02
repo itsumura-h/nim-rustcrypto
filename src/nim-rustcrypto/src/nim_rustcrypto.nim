@@ -1,5 +1,5 @@
 import nim_rustcrypto/ffi
-import nim_rustcrypto/ecdsa
+import nim_rustcrypto/secp256k1_ecdsa_der
 import nim_rustcrypto/chacha20poly1305
 import nim_rustcrypto/aesgcm
 import nim_rustcrypto/aesgcmsiv
@@ -217,11 +217,11 @@ export secp256k1.Secp256k1Signature
 export secp256k1.Secp256k1DerSignature
 export secp256k1.secp256k1PublicKeyCompressed
 export secp256k1.secp256k1PublicKeyUncompressed
-export ecdsa.Secp256k1DerSignature
+export secp256k1_ecdsa_der.Secp256k1DerSignature
 export secp256k1.secp256k1EcdsaSign
 export secp256k1.secp256k1EcdsaVerify
-export ecdsa.secp256k1EcdsaSignatureToDer
-export ecdsa.secp256k1EcdsaSignatureFromDer
+export secp256k1_ecdsa_der.secp256k1EcdsaSignatureToDer
+export secp256k1_ecdsa_der.secp256k1EcdsaSignatureFromDer
 export sha256.secp256k1EcdsaSignSha256
 export sha256.secp256k1EcdsaVerifySha256
 export sha3.secp256k1EcdsaSignSha3_256
