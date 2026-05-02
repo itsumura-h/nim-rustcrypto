@@ -28,11 +28,11 @@ alwaysApply: false
 対象はone-shot APIを基本とし、ストリーミング処理、Rust側で確保した状態オブジェクトの所有権移譲、証明書チェーン検証、RSA/P-256/P-384/X.509本体はREADMEの後続優先順位で扱う。
 
 ## 進捗
-- [ ] 8. `hmac`で公開する最小APIを決める
-- [ ] 8. HMAC-SHA256の入力、鍵、出力32バイト、エラー条件を決める
-- [ ] 8. Rust側にHMAC-SHA256 one-shot FFI関数を実装する
-- [ ] 8. Nim側に低水準FFI procと高水準HMAC-SHA256 APIを実装する
-- [ ] 8. Rust/Nim双方のテストでRFC 4231などの既知ベクトルを確認する
+- [x] 8. `hmac`で公開する最小APIを決める
+- [x] 8. HMAC-SHA256の入力、鍵、出力32バイト、エラー条件を決める
+- [x] 8. Rust側にHMAC-SHA256 one-shot FFI関数を実装する
+- [x] 8. Nim側に低水準FFI procと高水準HMAC-SHA256 APIを実装する
+- [x] 8. Rust/Nim双方のテストでRFC 4231などの既知ベクトルを確認する
 - [ ] 9. `hkdf`で公開する最小APIを決める
 - [ ] 9. HKDF-SHA256のextract、expand、extract+expandをどの粒度で公開するか決める
 - [ ] 9. salt、IKM、info、OKM長、空salt/空infoの扱いを決める
@@ -140,6 +140,7 @@ alwaysApply: false
 - Rust側のpanicはFFI境界の外へ漏らさない。すべての公開関数は既存APIと同様に入力検証を先に行い、必要に応じて`catch_unwind`でpanicを整数エラーコードへ変換する。
 - Nim側は低水準FFI procと高水準APIを分ける。低水準APIは`ptr uint8`、`csize_t`、`cint`を扱い、高水準APIは`string`、`seq[byte]`、`array[N, byte]`、明確なオブジェクト型を扱う。
 - HMAC-SHA256は、任意長keyと任意長messageから32バイトMACを出力するone-shot APIを最初に実装する。検証APIは定数時間比較をRust側で提供するか、Nim側で安全に扱える比較関数を用意するかを実装前に決める。
+- HMAC-SHA256は、任意長keyと任意長messageから32バイトMACを出力するone-shot APIとして実装した。Rust側FFIは `rustcrypto_hmac_sha256`、Nim側高水準APIは `hmacSha256` / `hmacSha256Hex`。空key・空messageは `NULL` ポインタ + 長さ0 で受け入れ、RFC 4231 case 1/2 と空入力の既知ベクトルで確認した。
 - HKDF-SHA256は、`extract`と`expand`を分けた低水準APIと、通常利用向けの`derive`高水準APIを候補にする。Lightning/BOLT系で使いやすいよう、空saltと空infoを許容する。
 - AEADは、暗号文とtagを分離したAPIを基本にする。暗号化では平文入力、AAD入力、暗号文出力、tag出力を受け取り、復号では暗号文入力、tag入力、AAD入力、平文出力を受け取る。認証失敗時に平文出力バッファの内容を信頼してはならない。
 - ChaCha20-Poly1305は、32バイト鍵、12バイトnonce、16バイトtagを固定長として扱う。XChaCha20-Poly1305はこのブランチの最小範囲外とし、必要性が出た場合のみ別APIとして追加する。

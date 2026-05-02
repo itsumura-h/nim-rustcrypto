@@ -4,6 +4,7 @@ const rustCryptoStaticLib* = "../rustcrypto-ffi/target/release/librust_crypto_ff
 
 const
   SHA256DigestLen* = 32
+  HmacSha256MacLen* = 32
   Sha3_256DigestLen* = 32
   Keccak256DigestLen* = 32
   Secp256k1SecretKeyLen* = 32
@@ -30,6 +31,15 @@ proc sha256Raw*(
     output: ptr uint8,
     outputLen: csize_t,
   ): cint {.cdecl, importc: "rustcrypto_sha256".}
+
+proc hmacSha256Raw*(
+    key: ptr uint8,
+    keyLen: csize_t,
+    message: ptr uint8,
+    messageLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_hmac_sha256".}
 
 proc sha3_256Raw*(
     input: ptr uint8,

@@ -1,10 +1,12 @@
 import nim_rustcrypto/ffi
 import nim_rustcrypto/ecdsa
+import nim_rustcrypto/hmac
 import nim_rustcrypto/sha256
 import nim_rustcrypto/sha3
 import nim_rustcrypto/secp256k1
 
 export ffi.SHA256DigestLen
+export ffi.HmacSha256MacLen
 export ffi.Sha3_256DigestLen
 export ffi.Keccak256DigestLen
 export ffi.Secp256k1SecretKeyLen
@@ -25,6 +27,7 @@ export ffi.Secp256k1PublicKeyFormatCompressed
 export ffi.Secp256k1SignatureLen
 export ffi.Secp256k1MessageDigestLen
 export ffi.sha256Raw
+export ffi.hmacSha256Raw
 export ffi.sha3_256Raw
 export ffi.keccak256Raw
 export ffi.secp256k1PublicKeyFromSecretKeyRaw
@@ -34,6 +37,9 @@ export sha256.Sha256Digest
 export sha256.fromHex
 export sha256.sha256
 export sha256.sha256Hex
+export hmac.HmacSha256Mac
+export hmac.hmacSha256
+export hmac.hmacSha256Hex
 export sha3.Sha3_256Digest
 export sha3.Keccak256Digest
 export sha3.fromHexSha3_256
