@@ -23,6 +23,11 @@ const
   RustCryptoErrVerificationFailed* = 8.cint
   RustCryptoErrInvalidLength* = 9.cint
   RustCryptoErrInvalidPrkLength* = 10.cint
+  RustCryptoErrAuthenticationFailed* = 11.cint
+  RustCryptoErrInvalidKeyLength* = 12.cint
+  RustCryptoErrInvalidNonceLength* = 13.cint
+  RustCryptoErrInvalidTagLength* = 14.cint
+  RustCryptoErrInvalidParameter* = 15.cint
   RustCryptoErrPanic* = -1.cint
   Secp256k1PublicKeyFormatUncompressed* = 0.cint
   Secp256k1PublicKeyFormatCompressed* = 1.cint

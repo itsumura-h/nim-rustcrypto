@@ -25,6 +25,11 @@ export ffi.RustCryptoErrInvalidSignature
 export ffi.RustCryptoErrVerificationFailed
 export ffi.RustCryptoErrInvalidLength
 export ffi.RustCryptoErrInvalidPrkLength
+export ffi.RustCryptoErrAuthenticationFailed
+export ffi.RustCryptoErrInvalidKeyLength
+export ffi.RustCryptoErrInvalidNonceLength
+export ffi.RustCryptoErrInvalidTagLength
+export ffi.RustCryptoErrInvalidParameter
 export ffi.RustCryptoErrPanic
 export ffi.Secp256k1PublicKeyFormatUncompressed
 export ffi.Secp256k1PublicKeyFormatCompressed

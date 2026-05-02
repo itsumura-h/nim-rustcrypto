@@ -11,6 +11,8 @@ use sha3::{Keccak256, Sha3_256};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::slice;
 
+mod aead_common;
+
 pub const RUSTCRYPTO_OK: c_int = 0;
 pub const RUSTCRYPTO_ERR_NULL_OUTPUT: c_int = 1;
 pub const RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT: c_int = 2;
@@ -22,6 +24,11 @@ pub const RUSTCRYPTO_ERR_INVALID_SIGNATURE: c_int = 7;
 pub const RUSTCRYPTO_ERR_VERIFICATION_FAILED: c_int = 8;
 pub const RUSTCRYPTO_ERR_INVALID_LENGTH: c_int = 9;
 pub const RUSTCRYPTO_ERR_INVALID_PRK_LENGTH: c_int = 10;
+pub const RUSTCRYPTO_ERR_AUTHENTICATION_FAILED: c_int = 11;
+pub const RUSTCRYPTO_ERR_INVALID_KEY_LENGTH: c_int = 12;
+pub const RUSTCRYPTO_ERR_INVALID_NONCE_LENGTH: c_int = 13;
+pub const RUSTCRYPTO_ERR_INVALID_TAG_LENGTH: c_int = 14;
+pub const RUSTCRYPTO_ERR_INVALID_PARAMETER: c_int = 15;
 pub const RUSTCRYPTO_ERR_PANIC: c_int = -1;
 
 pub const SHA256_DIGEST_LEN: usize = 32;

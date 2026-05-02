@@ -5,6 +5,25 @@ type
   HkdfSha256Prk* = array[HkdfSha256PrkLen, byte]
   HkdfSha256Okm* = seq[byte]
 
+proc raiseIfError(status: cint; operation: string) =
+  case status
+  of RustCryptoOk:
+    discard
+  of RustCryptoErrNullOutput:
+    raise newException(ValueError, operation & " failed: null output")
+  of RustCryptoErrOutputTooShort:
+    raise newException(ValueError, operation & " failed: output too short")
+  of RustCryptoErrNullInputWithData:
+    raise newException(ValueError, operation & " failed: null input with data")
+  of RustCryptoErrInvalidLength:
+    raise newException(ValueError, operation & " failed: invalid length")
+  of RustCryptoErrInvalidPrkLength:
+    raise newException(ValueError, operation & " failed: invalid PRK length")
+  of RustCryptoErrPanic:
+    raise newException(ValueError, operation & " failed: panic")
+  else:
+    raise newException(ValueError, operation & " failed: unexpected status " & $status)
+
 proc hkdfSha256Extract*(salt, ikm: string): HkdfSha256Prk =
   var output: HkdfSha256Prk
   let status = hkdfSha256ExtractRaw(
@@ -15,14 +34,7 @@ proc hkdfSha256Extract*(salt, ikm: string): HkdfSha256Prk =
     cast[ptr uint8](addr output[0]),
     csize_t(output.len),
   )
-  raiseIfError(
-    status,
-    "rustcrypto_hkdf_sha256_extract",
-    nullOutputMessage = "rustcrypto_hkdf_sha256_extract failed: null output",
-    outputTooShortMessage = "rustcrypto_hkdf_sha256_extract failed: output too short",
-    nullInputWithDataMessage = "rustcrypto_hkdf_sha256_extract failed: null input with data",
-    panicMessage = "rustcrypto_hkdf_sha256_extract failed: panic",
-  )
+  raiseIfError(status, "rustcrypto_hkdf_sha256_extract")
   output
 
 proc hkdfSha256Expand*(prk: HkdfSha256Prk, info: string, okmLen: int): HkdfSha256Okm =
@@ -43,15 +55,7 @@ proc hkdfSha256Expand*(prk: HkdfSha256Prk, info: string, okmLen: int): HkdfSha25
     bytesPtr(result),
     csize_t(result.len),
   )
-  raiseIfError(
-    status,
-    "rustcrypto_hkdf_sha256_expand",
-    nullOutputMessage = "rustcrypto_hkdf_sha256_expand failed: null output",
-    nullInputWithDataMessage = "rustcrypto_hkdf_sha256_expand failed: null input with data",
-    invalidPrkLengthMessage = "rustcrypto_hkdf_sha256_expand failed: invalid PRK length",
-    invalidLengthMessage = "rustcrypto_hkdf_sha256_expand failed: invalid length",
-    panicMessage = "rustcrypto_hkdf_sha256_expand failed: panic",
-  )
+  raiseIfError(status, "rustcrypto_hkdf_sha256_expand")
 
 proc hkdfSha256Derive*(salt, ikm, info: string, okmLen: int): HkdfSha256Okm =
   if okmLen < 0:
@@ -73,11 +77,4 @@ proc hkdfSha256Derive*(salt, ikm, info: string, okmLen: int): HkdfSha256Okm =
     bytesPtr(result),
     csize_t(result.len),
   )
-  raiseIfError(
-    status,
-    "rustcrypto_hkdf_sha256_derive",
-    nullOutputMessage = "rustcrypto_hkdf_sha256_derive failed: null output",
-    nullInputWithDataMessage = "rustcrypto_hkdf_sha256_derive failed: null input with data",
-    invalidLengthMessage = "rustcrypto_hkdf_sha256_derive failed: invalid length",
-    panicMessage = "rustcrypto_hkdf_sha256_derive failed: panic",
-  )
+  raiseIfError(status, "rustcrypto_hkdf_sha256_derive")

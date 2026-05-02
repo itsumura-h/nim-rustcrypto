@@ -1,10 +1,31 @@
 import ./ffi
-import ./utils
 
 type
   Secp256k1SecretKey* = array[Secp256k1SecretKeyLen, byte]
   Secp256k1CompressedPublicKey* = array[Secp256k1PublicKeyCompressedLen, byte]
   Secp256k1UncompressedPublicKey* = array[Secp256k1PublicKeyUncompressedLen, byte]
+
+proc raiseIfError(status: cint) =
+  case status
+  of RustCryptoOk:
+    discard
+  of RustCryptoErrNullOutput:
+    raise newException(ValueError, "rustcrypto_secp256k1_public_key_from_secret_key failed: null output")
+  of RustCryptoErrOutputTooShort:
+    raise newException(ValueError, "rustcrypto_secp256k1_public_key_from_secret_key failed: output too short")
+  of RustCryptoErrNullInputWithData:
+    raise newException(ValueError, "rustcrypto_secp256k1_public_key_from_secret_key failed: null input with data")
+  of RustCryptoErrInvalidSecretKey:
+    raise newException(ValueError, "rustcrypto_secp256k1_public_key_from_secret_key failed: invalid secret key")
+  of RustCryptoErrInvalidPublicKeyFormat:
+    raise newException(ValueError, "rustcrypto_secp256k1_public_key_from_secret_key failed: invalid public key format")
+  of RustCryptoErrPanic:
+    raise newException(ValueError, "rustcrypto_secp256k1_public_key_from_secret_key failed: panic")
+  else:
+    raise newException(
+      ValueError,
+      "rustcrypto_secp256k1_public_key_from_secret_key failed: unexpected status " & $status,
+    )
 
 proc secp256k1PublicKeyCompressed*(secretKey: Secp256k1SecretKey): Secp256k1CompressedPublicKey =
   var output: Secp256k1CompressedPublicKey
@@ -15,7 +36,7 @@ proc secp256k1PublicKeyCompressed*(secretKey: Secp256k1SecretKey): Secp256k1Comp
     csize_t(output.len),
     Secp256k1PublicKeyFormatCompressed,
   )
-  raiseIfError(status, "rustcrypto_secp256k1_public_key_from_secret_key")
+  raiseIfError(status)
   output
 
 proc secp256k1PublicKeyUncompressed*(secretKey: Secp256k1SecretKey): Secp256k1UncompressedPublicKey =
@@ -27,5 +48,5 @@ proc secp256k1PublicKeyUncompressed*(secretKey: Secp256k1SecretKey): Secp256k1Un
     csize_t(output.len),
     Secp256k1PublicKeyFormatUncompressed,
   )
-  raiseIfError(status, "rustcrypto_secp256k1_public_key_from_secret_key")
+  raiseIfError(status)
   output

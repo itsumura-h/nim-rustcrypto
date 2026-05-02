@@ -11,6 +11,10 @@ proc fromHexSha3_256*(_: type Sha3_256Digest, hex: string): Sha3_256Digest =
 proc fromHexKeccak256*(_: type Keccak256Digest, hex: string): Keccak256Digest =
   fromHexDigest[Keccak256Digest](hex, Keccak256DigestLen)
 
+proc raiseIfError(status: cint; operation: string) =
+  if status != RustCryptoOk:
+    raise newException(ValueError, operation & " failed with status " & $status)
+
 proc sha3_256*(message: string): Sha3_256Digest =
   var output: Sha3_256Digest
   let status = sha3_256Raw(
