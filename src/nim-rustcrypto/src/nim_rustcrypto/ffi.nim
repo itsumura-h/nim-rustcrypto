@@ -26,6 +26,9 @@ const
   Aes256GcmKeyLen* = 32
   Aes256GcmNonceLen* = 12
   Aes256GcmTagLen* = 16
+  Aes256GcmSivKeyLen* = 32
+  Aes256GcmSivNonceLen* = 12
+  Aes256GcmSivTagLen* = 16
   RustCryptoOk* = 0.cint
   RustCryptoErrNullOutput* = 1.cint
   RustCryptoErrOutputTooShort* = 2.cint
@@ -227,6 +230,36 @@ proc aes256GcmDecryptRaw*(
     plaintext: ptr uint8,
     plaintextLen: csize_t,
   ): cint {.cdecl, importc: "rustcrypto_aes256gcm_decrypt".}
+
+proc aes256GcmSivEncryptRaw*(
+    key: ptr uint8,
+    keyLen: csize_t,
+    nonce: ptr uint8,
+    nonceLen: csize_t,
+    aad: ptr uint8,
+    aadLen: csize_t,
+    plaintext: ptr uint8,
+    plaintextLen: csize_t,
+    ciphertext: ptr uint8,
+    ciphertextLen: csize_t,
+    tag: ptr uint8,
+    tagLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_aes256gcmsiv_encrypt".}
+
+proc aes256GcmSivDecryptRaw*(
+    key: ptr uint8,
+    keyLen: csize_t,
+    nonce: ptr uint8,
+    nonceLen: csize_t,
+    aad: ptr uint8,
+    aadLen: csize_t,
+    ciphertext: ptr uint8,
+    ciphertextLen: csize_t,
+    tag: ptr uint8,
+    tagLen: csize_t,
+    plaintext: ptr uint8,
+    plaintextLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_aes256gcmsiv_decrypt".}
 
 proc sha3_256Raw*(
     input: ptr uint8,
