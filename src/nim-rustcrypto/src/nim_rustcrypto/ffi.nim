@@ -21,9 +21,13 @@ const
   RustCryptoErrInvalidMessageDigest* = 6.cint
   RustCryptoErrInvalidSignature* = 7.cint
   RustCryptoErrVerificationFailed* = 8.cint
+  RustCryptoErrInvalidLength* = 9.cint
+  RustCryptoErrInvalidPrkLength* = 10.cint
   RustCryptoErrPanic* = -1.cint
   Secp256k1PublicKeyFormatUncompressed* = 0.cint
   Secp256k1PublicKeyFormatCompressed* = 1.cint
+  HkdfSha256PrkLen* = 32
+  HkdfSha256MaxOkmLen* = 32 * 255
 
 proc sha256Raw*(
     input: ptr uint8,
@@ -40,6 +44,35 @@ proc hmacSha256Raw*(
     output: ptr uint8,
     outputLen: csize_t,
   ): cint {.cdecl, importc: "rustcrypto_hmac_sha256".}
+
+proc hkdfSha256ExtractRaw*(
+    salt: ptr uint8,
+    saltLen: csize_t,
+    ikm: ptr uint8,
+    ikmLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_hkdf_sha256_extract".}
+
+proc hkdfSha256ExpandRaw*(
+    prk: ptr uint8,
+    prkLen: csize_t,
+    info: ptr uint8,
+    infoLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_hkdf_sha256_expand".}
+
+proc hkdfSha256DeriveRaw*(
+    salt: ptr uint8,
+    saltLen: csize_t,
+    ikm: ptr uint8,
+    ikmLen: csize_t,
+    info: ptr uint8,
+    infoLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_hkdf_sha256_derive".}
 
 proc sha3_256Raw*(
     input: ptr uint8,

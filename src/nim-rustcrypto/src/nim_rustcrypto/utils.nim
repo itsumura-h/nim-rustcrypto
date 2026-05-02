@@ -7,6 +7,13 @@ proc bytesPtr*(data: string): ptr uint8 =
   else:
     cast[ptr uint8](unsafeAddr data[0])
 
+proc bytesPtr*(data: openArray[byte]): ptr uint8 =
+  ## Convert a byte slice to a byte pointer. Returns `nil` for an empty slice.
+  if data.len == 0:
+    nil
+  else:
+    cast[ptr uint8](unsafeAddr data[0])
+
 proc digestToHex*[T](_: typedesc[T], digest: openArray[byte]): string =
   ## Convert a byte slice to a hexadecimal string.
   const hexDigits = "0123456789abcdef"
@@ -49,6 +56,8 @@ proc raiseIfError*(
     nullInputWithDataMessage: string = "",
     invalidSecretKeyMessage: string = "",
     invalidPublicKeyFormatMessage: string = "",
+    invalidLengthMessage: string = "",
+    invalidPrkLengthMessage: string = "",
     panicMessage: string = "",
 ) =
   case status
@@ -89,6 +98,20 @@ proc raiseIfError*(
       raise newException(ValueError, operation & " failed: invalid public key format")
     else:
       raise newException(ValueError, "invalid public key format")
+  of RustCryptoErrInvalidLength:
+    if invalidLengthMessage.len > 0:
+      raise newException(ValueError, invalidLengthMessage)
+    elif operation.len > 0:
+      raise newException(ValueError, operation & " failed: invalid length")
+    else:
+      raise newException(ValueError, "invalid length")
+  of RustCryptoErrInvalidPrkLength:
+    if invalidPrkLengthMessage.len > 0:
+      raise newException(ValueError, invalidPrkLengthMessage)
+    elif operation.len > 0:
+      raise newException(ValueError, operation & " failed: invalid PRK length")
+    else:
+      raise newException(ValueError, "invalid PRK length")
   of RustCryptoErrPanic:
     if panicMessage.len > 0:
       raise newException(ValueError, panicMessage)

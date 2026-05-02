@@ -2,7 +2,7 @@
 
 RustCrypto: https://github.com/RustCrypto
 
-RustCrypto を Nim から安全に呼び出すための FFI ラッパーです。現時点では SHA-256、HMAC-SHA256、secp256k1 公開鍵導出、ECDSA 署名・検証、SHA3-256、Keccak-256 を提供しています。
+RustCrypto を Nim から安全に呼び出すための FFI ラッパーです。現時点では SHA-256、HMAC-SHA256、HKDF-SHA256、secp256k1 公開鍵導出、ECDSA 署名・検証、SHA3-256、Keccak-256 を提供しています。
 
 ## 開発優先順位
 
@@ -131,6 +131,7 @@ nimble test -y
 
 - `sha256`, `sha256Hex`
 - `hmacSha256`, `hmacSha256Hex`
+- `hkdfSha256Extract`, `hkdfSha256Expand`, `hkdfSha256Derive`
 - `secp256k1PublicKeyCompressed`, `secp256k1PublicKeyUncompressed`
 - `secp256k1EcdsaSign`, `secp256k1EcdsaVerify`
 - `sha3_256`, `sha3_256Hex`
@@ -140,6 +141,7 @@ nimble test -y
 
 - `SHA256("abc")`
 - `HMAC-SHA256` RFC 4231 test case 1/2
+- `HKDF-SHA256` RFC 5869 test case 1/3
 - secp256k1 秘密鍵 `0x...01` からの公開鍵導出
 - secp256k1 `abc` ダイジェストでの ECDSA 署名・検証
 - `SHA3-256("abc")`

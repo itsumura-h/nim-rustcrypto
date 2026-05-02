@@ -33,12 +33,12 @@ alwaysApply: false
 - [x] 8. Rust側にHMAC-SHA256 one-shot FFI関数を実装する
 - [x] 8. Nim側に低水準FFI procと高水準HMAC-SHA256 APIを実装する
 - [x] 8. Rust/Nim双方のテストでRFC 4231などの既知ベクトルを確認する
-- [ ] 9. `hkdf`で公開する最小APIを決める
-- [ ] 9. HKDF-SHA256のextract、expand、extract+expandをどの粒度で公開するか決める
-- [ ] 9. salt、IKM、info、OKM長、空salt/空infoの扱いを決める
-- [ ] 9. Rust側にHKDF-SHA256 FFI関数を実装する
-- [ ] 9. Nim側に低水準FFI procと高水準HKDF-SHA256 APIを実装する
-- [ ] 9. Rust/Nim双方のテストでRFC 5869の既知ベクトルを確認する
+- [x] 9. `hkdf`で公開する最小APIを決める
+- [x] 9. HKDF-SHA256のextract、expand、extract+expandをどの粒度で公開するか決める
+- [x] 9. salt、IKM、info、OKM長、空salt/空infoの扱いを決める
+- [x] 9. Rust側にHKDF-SHA256 FFI関数を実装する
+- [x] 9. Nim側に低水準FFI procと高水準HKDF-SHA256 APIを実装する
+- [x] 9. Rust/Nim双方のテストでRFC 5869の既知ベクトルを確認する
 - [ ] 10. `aead` trait相当のFFI設計を決める
 - [ ] 10. AEAD共通の鍵、nonce、AAD、平文、暗号文、tag、戻り値の扱いを決める
 - [ ] 10. FFI公開APIにRustのtrait、`Result`、`Vec`、`String`を出さない設計を維持する
@@ -141,7 +141,7 @@ alwaysApply: false
 - Nim側は低水準FFI procと高水準APIを分ける。低水準APIは`ptr uint8`、`csize_t`、`cint`を扱い、高水準APIは`string`、`seq[byte]`、`array[N, byte]`、明確なオブジェクト型を扱う。
 - HMAC-SHA256は、任意長keyと任意長messageから32バイトMACを出力するone-shot APIを最初に実装する。検証APIは定数時間比較をRust側で提供するか、Nim側で安全に扱える比較関数を用意するかを実装前に決める。
 - HMAC-SHA256は、任意長keyと任意長messageから32バイトMACを出力するone-shot APIとして実装した。Rust側FFIは `rustcrypto_hmac_sha256`、Nim側高水準APIは `hmacSha256` / `hmacSha256Hex`。空key・空messageは `NULL` ポインタ + 長さ0 で受け入れ、RFC 4231 case 1/2 と空入力の既知ベクトルで確認した。
-- HKDF-SHA256は、`extract`と`expand`を分けた低水準APIと、通常利用向けの`derive`高水準APIを候補にする。Lightning/BOLT系で使いやすいよう、空saltと空infoを許容する。
+- HKDF-SHA256は、`extract`と`expand`を分けた低水準APIと、通常利用向けの`derive`高水準APIとして実装した。Rust側FFIは `rustcrypto_hkdf_sha256_extract` / `rustcrypto_hkdf_sha256_expand` / `rustcrypto_hkdf_sha256_derive`、Nim側高水準APIは `hkdfSha256Extract` / `hkdfSha256Expand` / `hkdfSha256Derive`。空saltはRFC 5869の default salt として扱い、空infoは空スライスとして扱う。RFC 5869 case 1 と case 3 で確認した。
 - AEADは、暗号文とtagを分離したAPIを基本にする。暗号化では平文入力、AAD入力、暗号文出力、tag出力を受け取り、復号では暗号文入力、tag入力、AAD入力、平文出力を受け取る。認証失敗時に平文出力バッファの内容を信頼してはならない。
 - ChaCha20-Poly1305は、32バイト鍵、12バイトnonce、16バイトtagを固定長として扱う。XChaCha20-Poly1305はこのブランチの最小範囲外とし、必要性が出た場合のみ別APIとして追加する。
 - DERは、まずsecp256k1 ECDSA署名のraw 64バイト `(r, s)` とDER署名の相互変換に限定する。公開鍵や証明書の一般DER処理はPKCS#8/X.509側の設計に合わせ、過剰に汎用化しない。
