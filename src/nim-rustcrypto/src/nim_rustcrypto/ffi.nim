@@ -29,6 +29,8 @@ const
   Aes256GcmSivKeyLen* = 32
   Aes256GcmSivNonceLen* = 12
   Aes256GcmSivTagLen* = 16
+  Blake2b512DigestLen* = 64
+  Blake2s256DigestLen* = 32
   RustCryptoOk* = 0.cint
   RustCryptoErrNullOutput* = 1.cint
   RustCryptoErrOutputTooShort* = 2.cint
@@ -61,6 +63,20 @@ proc sha256Raw*(
     output: ptr uint8,
     outputLen: csize_t,
   ): cint {.cdecl, importc: "rustcrypto_sha256".}
+
+proc blake2b512Raw*(
+    input: ptr uint8,
+    inputLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_blake2b_512".}
+
+proc blake2s256Raw*(
+    input: ptr uint8,
+    inputLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_blake2s_256".}
 
 proc hmacSha256Raw*(
     key: ptr uint8,

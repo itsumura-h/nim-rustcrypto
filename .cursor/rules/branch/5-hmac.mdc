@@ -90,10 +90,10 @@ alwaysApply: false
 - [x] 23. `aes-gcm-siv`で公開する最小APIを決める
 - [x] 23. AES-256-GCM-SIVを優先し、nonce再利用耐性が必要な用途として通常AES-GCMと別API名にする
 - [x] 23. Rust/Nim双方のテストで既知ベクトルと認証失敗を確認する
-- [ ] 24. `blake2`で公開する最小APIを決める
-- [ ] 24. BLAKE2b-512、BLAKE2s-256のどちらを先に公開するか決める
-- [ ] 24. BLAKE2のone-shotハッシュAPIを既存SHA系APIと同じ形で実装する
-- [ ] 24. Rust/Nim双方のテストで公式既知ベクトルを確認する
+- [x] 24. `blake2`で公開する最小APIを決める
+- [x] 24. BLAKE2b-512、BLAKE2s-256のどちらを先に公開するか決める
+- [x] 24. BLAKE2のone-shotハッシュAPIを既存SHA系APIと同じ形で実装する
+- [x] 24. Rust/Nim双方のテストで公式既知ベクトルを確認する
 - [ ] すべてのRust実装でpanicをFFI境界の外へ漏らさない
 - [ ] すべてのFFI公開APIでC ABI互換型だけを使い、Rustの所有権・型・例外モデルをNimへ露出しない
 - [ ] すべてのNim公開APIで通常利用者に`--passL`やRustライブラリパスを直接書かせない
@@ -164,5 +164,5 @@ alwaysApply: false
 - AES-GCMとAES-GCM-SIVは別API名にする。AES-GCM-SIVはnonce再利用耐性を持つ別方式として扱い、AES-GCMの代替実装として暗黙に切り替えない。
 - AES-GCMはAES-256-GCMのみを公開する。鍵長32バイト、nonce 12バイト、tag 16バイトを固定長とし、暗号化は `(ciphertext, tag)` を分離した one-shot API、復号は認証失敗を整数エラーで返す。NIST SP 800-38D の既知ベクトルと改ざん tag で確認した。
 - AES-GCM-SIVはAES-256-GCM-SIVのみを公開する。鍵長32バイト、nonce 12バイト、tag 16バイトを固定長とし、暗号化は `(ciphertext, tag)` を分離した one-shot API、復号は認証失敗を整数エラーで返す。RFC 8452 の既知ベクトルと改ざん tag で確認した。
-- BLAKE2は既存のSHA-256/SHA3-256/Keccak-256と同じone-shotハッシュAPIの形に揃える。最初にBLAKE2b-512とBLAKE2s-256のどちらを公開するか、READMEの用途に照らして決める。
+- BLAKE2は既存のSHA-256/SHA3-256/Keccak-256と同じone-shotハッシュAPIの形に揃える。BLAKE2b-512 と BLAKE2s-256 の両方を公開し、RFC 7693 の既知ベクトルで確認した。
 - READMEの優先順位 25 以降である `p256`、`p384`、`x509-cert`、`rsa`、`dsa`、楕円曲線暗号化、`ascon`、`ml-kem` はこのブランチの対象外とする。ただしDER/PKCS#8/PEMの設計では、後続でこれらを追加しやすい命名、エラーコード、バッファ設計を維持する。

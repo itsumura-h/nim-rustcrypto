@@ -3,6 +3,7 @@ import nim_rustcrypto/ecdsa
 import nim_rustcrypto/chacha20poly1305
 import nim_rustcrypto/aesgcm
 import nim_rustcrypto/aesgcmsiv
+import nim_rustcrypto/blake2
 import nim_rustcrypto/ed25519
 import nim_rustcrypto/pkcs8
 import nim_rustcrypto/hkdf
@@ -62,6 +63,8 @@ export ffi.Aes256GcmTagLen
 export ffi.Aes256GcmSivKeyLen
 export ffi.Aes256GcmSivNonceLen
 export ffi.Aes256GcmSivTagLen
+export ffi.Blake2b512DigestLen
+export ffi.Blake2s256DigestLen
 export ffi.HkdfSha256PrkLen
 export ffi.HkdfSha256MaxOkmLen
 export ffi.ScryptMaxOkmLen
@@ -86,6 +89,8 @@ export ffi.aes256GcmEncryptRaw
 export ffi.aes256GcmDecryptRaw
 export ffi.aes256GcmSivEncryptRaw
 export ffi.aes256GcmSivDecryptRaw
+export ffi.blake2b512Raw
+export ffi.blake2s256Raw
 export ffi.sha3_256Raw
 export ffi.keccak256Raw
 export ffi.secp256k1PublicKeyFromSecretKeyRaw
@@ -159,6 +164,14 @@ export aesgcmsiv.aes256gcmsivDecrypt
 export aesgcmsiv.fromHexKey
 export aesgcmsiv.fromHexNonce
 export aesgcmsiv.fromHexTag
+export blake2.Blake2b512Digest
+export blake2.Blake2s256Digest
+export blake2.blake2b512
+export blake2.blake2b512Hex
+export blake2.blake2s256
+export blake2.blake2s256Hex
+export blake2.fromHexBlake2b512
+export blake2.fromHexBlake2s256
 export pkcs8.Ed25519PrivateKey
 export pkcs8.Ed25519PublicKey
 export pkcs8.Ed25519PrivateKeyPkcs8Der

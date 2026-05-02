@@ -19,6 +19,7 @@ mod aead_common;
 mod aes_gcm;
 mod aes_gcm_siv;
 mod argon2;
+mod blake2;
 mod ed25519;
 mod oid;
 mod password_hash;
@@ -57,6 +58,8 @@ pub const AES256GCM_TAG_LEN: usize = 16;
 pub const AES256GCMSIV_KEY_LEN: usize = 32;
 pub const AES256GCMSIV_NONCE_LEN: usize = 12;
 pub const AES256GCMSIV_TAG_LEN: usize = 16;
+pub const BLAKE2B_512_DIGEST_LEN: usize = 64;
+pub const BLAKE2S_256_DIGEST_LEN: usize = 32;
 pub const SHA3_256_DIGEST_LEN: usize = 32;
 pub const KECCAK_256_DIGEST_LEN: usize = 32;
 pub const SECP256K1_SECRET_KEY_LEN: usize = 32;
@@ -711,6 +714,32 @@ pub extern "C" fn rustcrypto_sha256(
 ) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         sha256_impl(input, input_len, output, output_len)
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_blake2b_512(
+    input: *const u8,
+    input_len: usize,
+    output: *mut u8,
+    output_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        blake2::blake2b_512_impl(input, input_len, output, output_len)
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_blake2s_256(
+    input: *const u8,
+    input_len: usize,
+    output: *mut u8,
+    output_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        blake2::blake2s_256_impl(input, input_len, output, output_len)
     }))
     .unwrap_or(RUSTCRYPTO_ERR_PANIC)
 }
