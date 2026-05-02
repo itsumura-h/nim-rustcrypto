@@ -6,6 +6,7 @@ import nim_rustcrypto/hkdf
 import nim_rustcrypto/hmac
 import nim_rustcrypto/sha256
 import nim_rustcrypto/sha3
+import nim_rustcrypto/pem
 import nim_rustcrypto/secp256k1
 import nim_rustcrypto/utils
 
@@ -42,6 +43,8 @@ export ffi.Ed25519PrivateKeyLen
 export ffi.Ed25519PublicKeyLen
 export ffi.Ed25519PrivateKeyDerMaxLen
 export ffi.Ed25519PublicKeyDerMaxLen
+export ffi.Ed25519PrivateKeyPemMaxLen
+export ffi.Ed25519PublicKeyPemMaxLen
 export ffi.ChaCha20Poly1305KeyLen
 export ffi.ChaCha20Poly1305NonceLen
 export ffi.ChaCha20Poly1305TagLen
@@ -65,6 +68,10 @@ export ffi.ed25519PrivateKeyToPkcs8DerRaw
 export ffi.ed25519PrivateKeyFromPkcs8DerRaw
 export ffi.ed25519PublicKeyToSpkiDerRaw
 export ffi.ed25519PublicKeyFromSpkiDerRaw
+export ffi.ed25519PrivateKeyToPkcs8PemRaw
+export ffi.ed25519PrivateKeyFromPkcs8PemRaw
+export ffi.ed25519PublicKeyToSpkiPemRaw
+export ffi.ed25519PublicKeyFromSpkiPemRaw
 export utils.bytesPtr
 export sha256.Sha256Digest
 export sha256.fromHex
@@ -92,12 +99,18 @@ export pkcs8.Ed25519PrivateKey
 export pkcs8.Ed25519PublicKey
 export pkcs8.Ed25519PrivateKeyPkcs8Der
 export pkcs8.Ed25519PublicKeySpkiDer
+export pem.Ed25519PrivateKeyPem
+export pem.Ed25519PublicKeyPem
 export pkcs8.fromHexPrivateKey
 export pkcs8.fromHexPublicKey
 export pkcs8.ed25519PrivateKeyToPkcs8Der
 export pkcs8.ed25519PrivateKeyFromPkcs8Der
 export pkcs8.ed25519PublicKeyToSpkiDer
 export pkcs8.ed25519PublicKeyFromSpkiDer
+export pem.ed25519PrivateKeyToPkcs8Pem
+export pem.ed25519PrivateKeyFromPkcs8Pem
+export pem.ed25519PublicKeyToSpkiPem
+export pem.ed25519PublicKeyFromSpkiPem
 export sha3.Sha3_256Digest
 export sha3.Keccak256Digest
 export sha3.fromHexSha3_256

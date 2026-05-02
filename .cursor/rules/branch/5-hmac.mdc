@@ -58,9 +58,9 @@ alwaysApply: false
 - [x] 14. PKCS#8はまずEd25519秘密鍵/公開鍵の標準形式入出力に限定し、secp256k1対応は必要性を確認してから扱う
 - [x] 14. DERバイト列を入力し、Rust側で検証して固定長鍵バイトへ書き出すAPIを設計する
 - [x] 14. 固定長鍵バイトからPKCS#8 DERへエンコードするAPIを設計する
-- [ ] 15. `pem-rfc7468`で公開する最小APIを決める
-- [ ] 15. PEMはPKCS#8 DERのASCII armor変換として扱い、秘密鍵の暗号化PEMはこのブランチでは対象外にする
-- [ ] 15. PEMラベル、改行、出力バッファ長、不正base64のエラー条件を決める
+- [x] 15. `pem-rfc7468`で公開する最小APIを決める
+- [x] 15. PEMはPKCS#8 DERのASCII armor変換として扱い、秘密鍵の暗号化PEMはこのブランチでは対象外にする
+- [x] 15. PEMラベル、改行、出力バッファ長、不正base64のエラー条件を決める
 - [ ] 16. `const-oid`で扱うOID一覧を決める
 - [ ] 16. DER/PKCS#8/PEMで必要になるEd25519、secp256k1、HMAC-SHA256、AES系のOIDをRust内部定数として整理する
 - [ ] 16. OID値そのものをNim公開APIに露出するか、アルゴリズム種別の整数だけを露出するか決める
@@ -152,6 +152,7 @@ alwaysApply: false
 - `const-oid`は、Rust内部でDER/PKCS#8のアルゴリズム識別子を安全に扱うために使う。Nim公開APIではOID文字列よりもアルゴリズム種別の明示的な関数名または整数定数を優先する。
 - Ed25519は、秘密鍵32バイト、公開鍵32バイト、署名64バイト、任意長メッセージのone-shot署名・検証を最初に実装する。Ed25519phやEd25519ctxは最小範囲外とし、通常のEd25519と混同しない別API名にする。
 - PKCS#8は、Ed25519秘密鍵32バイトをPKCS#8 DERへ、Ed25519公開鍵32バイトをSPKI DERへ相互変換する最小APIとして実装した。Rust側FFIは `rustcrypto_ed25519_private_key_to_pkcs8_der` / `rustcrypto_ed25519_private_key_from_pkcs8_der` / `rustcrypto_ed25519_public_key_to_spki_der` / `rustcrypto_ed25519_public_key_from_spki_der`、Nim側高水準APIは `ed25519PrivateKeyToPkcs8Der` / `ed25519PrivateKeyFromPkcs8Der` / `ed25519PublicKeyToSpkiDer` / `ed25519PublicKeyFromSpkiDer`。RFC 8410 の既知 PKCS#8/SPKI ベクトル、短い出力バッファ、不正DERで確認した。
+- PEM は Ed25519 の PKCS#8 DER / SPKI DER を RFC 7468 の strict 形式で包む最小APIとして実装した。Rust側FFIは `rustcrypto_ed25519_private_key_to_pkcs8_pem` / `rustcrypto_ed25519_private_key_from_pkcs8_pem` / `rustcrypto_ed25519_public_key_to_spki_pem` / `rustcrypto_ed25519_public_key_from_spki_pem`、Nim側高水準APIは `ed25519PrivateKeyToPkcs8Pem` / `ed25519PrivateKeyFromPkcs8Pem` / `ed25519PublicKeyToSpkiPem` / `ed25519PublicKeyFromSpkiPem`。出力は終端改行つきの ASCII armor とし、ラベル不一致、不正base64、短い出力バッファを確認した。
 - PBKDF2はHMAC-SHA256を基本にし、passwordとsaltは任意長バイト列、iteration countは1以上、出力長は呼び出し元指定とする。互換性用途のKDFとして扱い、新規パスワード保存用途ではArgon2idを優先する。
 - `password-hash`はPHC stringの生成・検証の共通設計として扱う。scryptとArgon2は個別の低水準derive APIに加え、必要ならPHC stringベースのhash/verify APIを公開する。
 - scryptはN/r/pを明示的に渡すAPIを基本にする。極端なメモリ使用を避けるため、Rust側でパラメータ妥当性を確認し、不正または過大な値は整数エラーコードで返す。

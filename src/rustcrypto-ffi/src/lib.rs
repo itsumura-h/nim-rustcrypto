@@ -17,6 +17,7 @@ use std::slice;
 
 mod aead_common;
 mod ed25519_pkcs8;
+mod ed25519_pem;
 
 pub const RUSTCRYPTO_OK: c_int = 0;
 pub const RUSTCRYPTO_ERR_NULL_OUTPUT: c_int = 1;
@@ -55,6 +56,8 @@ pub const ED25519_PRIVATE_KEY_LEN: usize = 32;
 pub const ED25519_PUBLIC_KEY_LEN: usize = 32;
 pub const ED25519_PRIVATE_KEY_DER_MAX_LEN: usize = 48;
 pub const ED25519_PUBLIC_KEY_DER_MAX_LEN: usize = 44;
+pub const ED25519_PRIVATE_KEY_PEM_MAX_LEN: usize = 119;
+pub const ED25519_PUBLIC_KEY_PEM_MAX_LEN: usize = 113;
 
 fn hash_one_shot<D>(input: &[u8], output: &mut [u8]) -> c_int
 where
@@ -1010,6 +1013,72 @@ pub extern "C" fn rustcrypto_ed25519_public_key_from_spki_der(
 ) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         ed25519_pkcs8::public_key_from_spki_der_impl(der, der_len, output, output_len)
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_ed25519_private_key_to_pkcs8_pem(
+    private_key: *const u8,
+    private_key_len: usize,
+    output: *mut u8,
+    output_len: usize,
+    written_len: *mut usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        ed25519_pem::private_key_to_pkcs8_pem_impl(
+            private_key,
+            private_key_len,
+            output,
+            output_len,
+            written_len,
+        )
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_ed25519_private_key_from_pkcs8_pem(
+    pem: *const u8,
+    pem_len: usize,
+    output: *mut u8,
+    output_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        ed25519_pem::private_key_from_pkcs8_pem_impl(pem, pem_len, output, output_len)
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_ed25519_public_key_to_spki_pem(
+    public_key: *const u8,
+    public_key_len: usize,
+    output: *mut u8,
+    output_len: usize,
+    written_len: *mut usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        ed25519_pem::public_key_to_spki_pem_impl(
+            public_key,
+            public_key_len,
+            output,
+            output_len,
+            written_len,
+        )
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_ed25519_public_key_from_spki_pem(
+    pem: *const u8,
+    pem_len: usize,
+    output: *mut u8,
+    output_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        ed25519_pem::public_key_from_spki_pem_impl(pem, pem_len, output, output_len)
     }))
     .unwrap_or(RUSTCRYPTO_ERR_PANIC)
 }

@@ -10,6 +10,7 @@ ed25519 = { version = "2.2.3", features = ["alloc", "pkcs8"] }
 hkdf = "0.13.0"
 hmac = "0.13.0"
 k256 = "0.13.4"
+pem-rfc7468 = "1.0.0"
 sha2 = "0.11.0"
 sha3 = "0.11.0"
 

@@ -17,6 +17,8 @@ const
   Ed25519PublicKeyLen* = 32
   Ed25519PrivateKeyDerMaxLen* = 48
   Ed25519PublicKeyDerMaxLen* = 44
+  Ed25519PrivateKeyPemMaxLen* = 119
+  Ed25519PublicKeyPemMaxLen* = 113
   ChaCha20Poly1305KeyLen* = 32
   ChaCha20Poly1305NonceLen* = 12
   ChaCha20Poly1305TagLen* = 16
@@ -202,3 +204,33 @@ proc ed25519PublicKeyFromSpkiDerRaw*(
     output: ptr uint8,
     outputLen: csize_t,
   ): cint {.cdecl, importc: "rustcrypto_ed25519_public_key_from_spki_der".}
+
+proc ed25519PrivateKeyToPkcs8PemRaw*(
+    privateKey: ptr uint8,
+    privateKeyLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    writtenLen: ptr csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_ed25519_private_key_to_pkcs8_pem".}
+
+proc ed25519PrivateKeyFromPkcs8PemRaw*(
+    pem: ptr uint8,
+    pemLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_ed25519_private_key_from_pkcs8_pem".}
+
+proc ed25519PublicKeyToSpkiPemRaw*(
+    publicKey: ptr uint8,
+    publicKeyLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    writtenLen: ptr csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_ed25519_public_key_to_spki_pem".}
+
+proc ed25519PublicKeyFromSpkiPemRaw*(
+    pem: ptr uint8,
+    pemLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_ed25519_public_key_from_spki_pem".}
