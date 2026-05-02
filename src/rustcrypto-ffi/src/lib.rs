@@ -16,8 +16,10 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::slice;
 
 mod aead_common;
+mod ed25519_ops;
 mod ed25519_pkcs8;
 mod ed25519_pem;
+mod oid;
 
 pub const RUSTCRYPTO_OK: c_int = 0;
 pub const RUSTCRYPTO_ERR_NULL_OUTPUT: c_int = 1;
@@ -54,6 +56,7 @@ pub const SECP256K1_SIGNATURE_DER_MAX_LEN: usize = 72;
 pub const SECP256K1_MESSAGE_DIGEST_LEN: usize = 32;
 pub const ED25519_PRIVATE_KEY_LEN: usize = 32;
 pub const ED25519_PUBLIC_KEY_LEN: usize = 32;
+pub const ED25519_SIGNATURE_LEN: usize = 64;
 pub const ED25519_PRIVATE_KEY_DER_MAX_LEN: usize = 48;
 pub const ED25519_PUBLIC_KEY_DER_MAX_LEN: usize = 44;
 pub const ED25519_PRIVATE_KEY_PEM_MAX_LEN: usize = 119;
@@ -1013,6 +1016,68 @@ pub extern "C" fn rustcrypto_ed25519_public_key_from_spki_der(
 ) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         ed25519_pkcs8::public_key_from_spki_der_impl(der, der_len, output, output_len)
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_ed25519_public_key_from_secret_key(
+    secret_key: *const u8,
+    secret_key_len: usize,
+    output: *mut u8,
+    output_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        ed25519_ops::public_key_from_secret_key_impl(
+            secret_key,
+            secret_key_len,
+            output,
+            output_len,
+        )
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_ed25519_sign(
+    message: *const u8,
+    message_len: usize,
+    secret_key: *const u8,
+    secret_key_len: usize,
+    output: *mut u8,
+    output_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        ed25519_ops::sign_impl(
+            message,
+            message_len,
+            secret_key,
+            secret_key_len,
+            output,
+            output_len,
+        )
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_ed25519_verify(
+    message: *const u8,
+    message_len: usize,
+    public_key: *const u8,
+    public_key_len: usize,
+    signature: *const u8,
+    signature_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        ed25519_ops::verify_impl(
+            message,
+            message_len,
+            public_key,
+            public_key_len,
+            signature,
+            signature_len,
+        )
     }))
     .unwrap_or(RUSTCRYPTO_ERR_PANIC)
 }

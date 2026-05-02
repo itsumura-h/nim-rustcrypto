@@ -15,6 +15,7 @@ const
   Secp256k1MessageDigestLen* = 32
   Ed25519PrivateKeyLen* = 32
   Ed25519PublicKeyLen* = 32
+  Ed25519SignatureLen* = 64
   Ed25519PrivateKeyDerMaxLen* = 48
   Ed25519PublicKeyDerMaxLen* = 44
   Ed25519PrivateKeyPemMaxLen* = 119
@@ -204,6 +205,31 @@ proc ed25519PublicKeyFromSpkiDerRaw*(
     output: ptr uint8,
     outputLen: csize_t,
   ): cint {.cdecl, importc: "rustcrypto_ed25519_public_key_from_spki_der".}
+
+proc ed25519PublicKeyFromSecretKeyRaw*(
+    secretKey: ptr uint8,
+    secretKeyLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_ed25519_public_key_from_secret_key".}
+
+proc ed25519SignRaw*(
+    message: ptr uint8,
+    messageLen: csize_t,
+    secretKey: ptr uint8,
+    secretKeyLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_ed25519_sign".}
+
+proc ed25519VerifyRaw*(
+    message: ptr uint8,
+    messageLen: csize_t,
+    publicKey: ptr uint8,
+    publicKeyLen: csize_t,
+    signature: ptr uint8,
+    signatureLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_ed25519_verify".}
 
 proc ed25519PrivateKeyToPkcs8PemRaw*(
     privateKey: ptr uint8,
