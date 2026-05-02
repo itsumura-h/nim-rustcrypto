@@ -1,6 +1,6 @@
 use crate::{
-    aead_common, ED25519_PRIVATE_KEY_LEN, ED25519_PUBLIC_KEY_LEN, RUSTCRYPTO_ERR_INVALID_LENGTH,
-    RUSTCRYPTO_ERR_INVALID_PARAMETER, RUSTCRYPTO_OK,
+    ED25519_PRIVATE_KEY_LEN, ED25519_PUBLIC_KEY_LEN, RUSTCRYPTO_ERR_INVALID_LENGTH,
+    RUSTCRYPTO_ERR_INVALID_PARAMETER, RUSTCRYPTO_OK, aead_common,
 };
 use core::ffi::c_int;
 use ed25519::pkcs8::{
@@ -177,9 +177,8 @@ mod tests {
 
     #[test]
     fn private_key_to_pkcs8_der_matches_rfc_8410_example() {
-        let private_key = hex_bytes(
-            "d4ee72dbf913584ad5b6d8f1f769f8ad3afe7c28cbf1d4fbe097a88f44755842",
-        );
+        let private_key =
+            hex_bytes("d4ee72dbf913584ad5b6d8f1f769f8ad3afe7c28cbf1d4fbe097a88f44755842");
         let mut output = [0u8; crate::ED25519_PRIVATE_KEY_DER_MAX_LEN];
         let mut written_len = 0usize;
 
@@ -195,7 +194,9 @@ mod tests {
         assert_eq!(written_len, 48);
         assert_eq!(
             &output[..written_len],
-            hex_bytes("302e020100300506032b657004220420d4ee72dbf913584ad5b6d8f1f769f8ad3afe7c28cbf1d4fbe097a88f44755842")
+            hex_bytes(
+                "302e020100300506032b657004220420d4ee72dbf913584ad5b6d8f1f769f8ad3afe7c28cbf1d4fbe097a88f44755842"
+            )
         );
     }
 
@@ -216,15 +217,15 @@ mod tests {
         assert_eq!(status, RUSTCRYPTO_OK);
         assert_eq!(
             &output,
-            hex_bytes("d4ee72dbf913584ad5b6d8f1f769f8ad3afe7c28cbf1d4fbe097a88f44755842").as_slice()
+            hex_bytes("d4ee72dbf913584ad5b6d8f1f769f8ad3afe7c28cbf1d4fbe097a88f44755842")
+                .as_slice()
         );
     }
 
     #[test]
     fn public_key_to_spki_der_matches_rfc_8410_example() {
-        let public_key = hex_bytes(
-            "19bf44096984cdfe8541bac167dc3b96c85086aa30b6b6cb0c5c38ad703166e1",
-        );
+        let public_key =
+            hex_bytes("19bf44096984cdfe8541bac167dc3b96c85086aa30b6b6cb0c5c38ad703166e1");
         let mut output = [0u8; crate::ED25519_PUBLIC_KEY_DER_MAX_LEN];
         let mut written_len = 0usize;
 
@@ -240,13 +241,17 @@ mod tests {
         assert_eq!(written_len, 44);
         assert_eq!(
             &output[..written_len],
-            hex_bytes("302a300506032b657003210019bf44096984cdfe8541bac167dc3b96c85086aa30b6b6cb0c5c38ad703166e1")
+            hex_bytes(
+                "302a300506032b657003210019bf44096984cdfe8541bac167dc3b96c85086aa30b6b6cb0c5c38ad703166e1"
+            )
         );
     }
 
     #[test]
     fn public_key_from_spki_der_matches_rfc_8410_example() {
-        let der = hex_bytes("302a300506032b657003210019bf44096984cdfe8541bac167dc3b96c85086aa30b6b6cb0c5c38ad703166e1");
+        let der = hex_bytes(
+            "302a300506032b657003210019bf44096984cdfe8541bac167dc3b96c85086aa30b6b6cb0c5c38ad703166e1",
+        );
         let mut output = [0u8; ED25519_PUBLIC_KEY_LEN];
 
         let status = public_key_from_spki_der_impl(
@@ -259,15 +264,15 @@ mod tests {
         assert_eq!(status, RUSTCRYPTO_OK);
         assert_eq!(
             &output,
-            hex_bytes("19bf44096984cdfe8541bac167dc3b96c85086aa30b6b6cb0c5c38ad703166e1").as_slice()
+            hex_bytes("19bf44096984cdfe8541bac167dc3b96c85086aa30b6b6cb0c5c38ad703166e1")
+                .as_slice()
         );
     }
 
     #[test]
     fn private_key_to_pkcs8_der_rejects_short_output_buffer() {
-        let private_key = hex_bytes(
-            "d4ee72dbf913584ad5b6d8f1f769f8ad3afe7c28cbf1d4fbe097a88f44755842",
-        );
+        let private_key =
+            hex_bytes("d4ee72dbf913584ad5b6d8f1f769f8ad3afe7c28cbf1d4fbe097a88f44755842");
         let mut output = [0u8; crate::ED25519_PRIVATE_KEY_DER_MAX_LEN - 1];
         let mut written_len = 0usize;
 
@@ -284,9 +289,8 @@ mod tests {
 
     #[test]
     fn public_key_to_spki_der_rejects_short_output_buffer() {
-        let public_key = hex_bytes(
-            "19bf44096984cdfe8541bac167dc3b96c85086aa30b6b6cb0c5c38ad703166e1",
-        );
+        let public_key =
+            hex_bytes("19bf44096984cdfe8541bac167dc3b96c85086aa30b6b6cb0c5c38ad703166e1");
         let mut output = [0u8; crate::ED25519_PUBLIC_KEY_DER_MAX_LEN - 1];
         let mut written_len = 0usize;
 

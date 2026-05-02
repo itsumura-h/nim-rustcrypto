@@ -1,9 +1,9 @@
 use crate::{
-    aead_common, ed25519_pkcs8, ED25519_PRIVATE_KEY_DER_MAX_LEN, ED25519_PUBLIC_KEY_DER_MAX_LEN,
-    RUSTCRYPTO_ERR_INVALID_LENGTH, RUSTCRYPTO_ERR_INVALID_PARAMETER, RUSTCRYPTO_OK,
+    ED25519_PRIVATE_KEY_DER_MAX_LEN, ED25519_PUBLIC_KEY_DER_MAX_LEN, RUSTCRYPTO_ERR_INVALID_LENGTH,
+    RUSTCRYPTO_ERR_INVALID_PARAMETER, RUSTCRYPTO_OK, aead_common,
 };
 use core::ffi::c_int;
-use pem_rfc7468::{decode, encode, encoded_len, Error, LineEnding};
+use pem_rfc7468::{Error, LineEnding, decode, encode, encoded_len};
 
 const PRIVATE_KEY_LABEL: &str = "PRIVATE KEY";
 const PUBLIC_KEY_LABEL: &str = "PUBLIC KEY";
@@ -76,7 +76,7 @@ pub(crate) fn private_key_to_pkcs8_pem_impl(
 ) -> c_int {
     let mut der = [0u8; ED25519_PRIVATE_KEY_DER_MAX_LEN];
     let mut der_len = 0usize;
-    let status = ed25519_pkcs8::private_key_to_pkcs8_der_impl(
+    let status = super::pkcs8::private_key_to_pkcs8_der_impl(
         private_key,
         private_key_len,
         der.as_mut_ptr(),
@@ -113,7 +113,7 @@ pub(crate) fn private_key_from_pkcs8_pem_impl(
         return RUSTCRYPTO_ERR_INVALID_LENGTH;
     }
 
-    ed25519_pkcs8::private_key_from_pkcs8_der_impl(der.as_ptr(), der.len(), output, output_len)
+    super::pkcs8::private_key_from_pkcs8_der_impl(der.as_ptr(), der.len(), output, output_len)
 }
 
 pub(crate) fn public_key_to_spki_pem_impl(
@@ -125,7 +125,7 @@ pub(crate) fn public_key_to_spki_pem_impl(
 ) -> c_int {
     let mut der = [0u8; ED25519_PUBLIC_KEY_DER_MAX_LEN];
     let mut der_len = 0usize;
-    let status = ed25519_pkcs8::public_key_to_spki_der_impl(
+    let status = super::pkcs8::public_key_to_spki_der_impl(
         public_key,
         public_key_len,
         der.as_mut_ptr(),
@@ -162,7 +162,7 @@ pub(crate) fn public_key_from_spki_pem_impl(
         return RUSTCRYPTO_ERR_INVALID_LENGTH;
     }
 
-    ed25519_pkcs8::public_key_from_spki_der_impl(der.as_ptr(), der.len(), output, output_len)
+    super::pkcs8::public_key_from_spki_der_impl(der.as_ptr(), der.len(), output, output_len)
 }
 
 #[cfg(test)]
@@ -197,9 +197,8 @@ mod tests {
 
     #[test]
     fn private_key_to_pkcs8_pem_matches_rfc_7468_example() {
-        let private_key = hex_bytes(
-            "17ed9c73e9db649ec189a612831c5fc570238207c1aa9dfbd2c53e3ff5e5ea85",
-        );
+        let private_key =
+            hex_bytes("17ed9c73e9db649ec189a612831c5fc570238207c1aa9dfbd2c53e3ff5e5ea85");
         let mut output = [0u8; ED25519_PRIVATE_KEY_PEM_MAX_LEN];
         let mut written_len = 0usize;
 
@@ -245,9 +244,8 @@ MC4CAQAwBQYDK2VwBCIEIBftnHPp22SewYmmEoMcX8VwI4IHwaqd+9LFPj/15eqF\n\
 
     #[test]
     fn public_key_to_spki_pem_matches_rfc_7468_example() {
-        let public_key = hex_bytes(
-            "19bf44096984cdfe8541bac167dc3b96c85086aa30b6b6cb0c5c38ad703166e1",
-        );
+        let public_key =
+            hex_bytes("19bf44096984cdfe8541bac167dc3b96c85086aa30b6b6cb0c5c38ad703166e1");
         let mut output = [0u8; ED25519_PUBLIC_KEY_PEM_MAX_LEN];
         let mut written_len = 0usize;
 
@@ -293,9 +291,8 @@ MCowBQYDK2VwAyEAGb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE=\n\
 
     #[test]
     fn private_key_to_pkcs8_pem_rejects_short_output_buffer() {
-        let private_key = hex_bytes(
-            "d4ee72dbf913584ad5b6d8f1f769f8ad3afe7c28cbf1d4fbe097a88f44755842",
-        );
+        let private_key =
+            hex_bytes("d4ee72dbf913584ad5b6d8f1f769f8ad3afe7c28cbf1d4fbe097a88f44755842");
         let mut output = [0u8; ED25519_PRIVATE_KEY_PEM_MAX_LEN - 1];
         let mut written_len = 0usize;
 
@@ -312,9 +309,8 @@ MCowBQYDK2VwAyEAGb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE=\n\
 
     #[test]
     fn public_key_to_spki_pem_rejects_short_output_buffer() {
-        let public_key = hex_bytes(
-            "19bf44096984cdfe8541bac167dc3b96c85086aa30b6b6cb0c5c38ad703166e1",
-        );
+        let public_key =
+            hex_bytes("19bf44096984cdfe8541bac167dc3b96c85086aa30b6b6cb0c5c38ad703166e1");
         let mut output = [0u8; ED25519_PUBLIC_KEY_PEM_MAX_LEN - 1];
         let mut written_len = 0usize;
 

@@ -1,27 +1,27 @@
+use chacha20poly1305::{
+    ChaCha20Poly1305, Key, Nonce, Tag,
+    aead::{AeadInPlace, KeyInit as AeadKeyInit},
+};
 use core::ffi::c_int;
 use digest::Digest;
-use chacha20poly1305::{
-    aead::{AeadInPlace, KeyInit as AeadKeyInit},
-    ChaCha20Poly1305, Key, Nonce, Tag,
-};
-use hmac::{Hmac, KeyInit as HmacKeyInit, Mac};
 use hkdf::Hkdf;
+use hmac::{Hmac, KeyInit as HmacKeyInit, Mac};
+use k256::SecretKey;
 use k256::ecdsa::signature::hazmat::{PrehashSigner, PrehashVerifier};
 use k256::ecdsa::{Signature, SigningKey, VerifyingKey};
 use k256::elliptic_curve::sec1::ToEncodedPoint;
-use k256::SecretKey;
 use sha2::Sha256;
 use sha3::{Keccak256, Sha3_256};
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::slice;
 
 mod aead_common;
-mod ed25519_ops;
-mod ed25519_pkcs8;
-mod ed25519_pem;
-mod pbkdf2;
-mod password_hash;
+mod argon2;
+mod ed25519;
 mod oid;
+mod password_hash;
+mod pbkdf2;
+mod scrypt;
 
 pub const RUSTCRYPTO_OK: c_int = 0;
 pub const RUSTCRYPTO_ERR_NULL_OUTPUT: c_int = 1;
@@ -64,6 +64,8 @@ pub const ED25519_PRIVATE_KEY_DER_MAX_LEN: usize = 48;
 pub const ED25519_PUBLIC_KEY_DER_MAX_LEN: usize = 44;
 pub const ED25519_PRIVATE_KEY_PEM_MAX_LEN: usize = 119;
 pub const ED25519_PUBLIC_KEY_PEM_MAX_LEN: usize = 113;
+pub const ARGON2ID_MIN_HASH_LEN: usize = 4;
+pub const ARGON2ID_MAX_HASH_LEN: usize = u32::MAX as usize;
 
 fn hash_one_shot<D>(input: &[u8], output: &mut [u8]) -> c_int
 where
@@ -109,12 +111,7 @@ where
     hash_one_shot::<D>(input, output)
 }
 
-fn sha256_impl(
-    input: *const u8,
-    input_len: usize,
-    output: *mut u8,
-    output_len: usize,
-) -> c_int {
+fn sha256_impl(input: *const u8, input_len: usize, output: *mut u8, output_len: usize) -> c_int {
     hash_impl::<Sha256>(input, input_len, output, output_len, SHA256_DIGEST_LEN)
 }
 
@@ -166,10 +163,7 @@ fn hmac_sha256_impl(
     RUSTCRYPTO_OK
 }
 
-fn hkdf_optional_slice<'a>(
-    input: *const u8,
-    input_len: usize,
-) -> Result<Option<&'a [u8]>, c_int> {
+fn hkdf_optional_slice<'a>(input: *const u8, input_len: usize) -> Result<Option<&'a [u8]>, c_int> {
     if input_len == 0 {
         Ok(None)
     } else if input.is_null() {
@@ -459,12 +453,7 @@ fn chacha20poly1305_decrypt_impl(
     }
 }
 
-fn sha3_256_impl(
-    input: *const u8,
-    input_len: usize,
-    output: *mut u8,
-    output_len: usize,
-) -> c_int {
+fn sha3_256_impl(input: *const u8, input_len: usize, output: *mut u8, output_len: usize) -> c_int {
     hash_impl::<Sha3_256>(input, input_len, output, output_len, SHA3_256_DIGEST_LEN)
 }
 
@@ -712,8 +701,10 @@ pub extern "C" fn rustcrypto_sha256(
     output: *mut u8,
     output_len: usize,
 ) -> c_int {
-    catch_unwind(AssertUnwindSafe(|| sha256_impl(input, input_len, output, output_len)))
-        .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+    catch_unwind(AssertUnwindSafe(|| {
+        sha256_impl(input, input_len, output, output_len)
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
 }
 
 #[unsafe(no_mangle)]
@@ -855,8 +846,10 @@ pub extern "C" fn rustcrypto_sha3_256(
     output: *mut u8,
     output_len: usize,
 ) -> c_int {
-    catch_unwind(AssertUnwindSafe(|| sha3_256_impl(input, input_len, output, output_len)))
-        .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+    catch_unwind(AssertUnwindSafe(|| {
+        sha3_256_impl(input, input_len, output, output_len)
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
 }
 
 #[unsafe(no_mangle)]
@@ -866,8 +859,10 @@ pub extern "C" fn rustcrypto_keccak_256(
     output: *mut u8,
     output_len: usize,
 ) -> c_int {
-    catch_unwind(AssertUnwindSafe(|| keccak_256_impl(input, input_len, output, output_len)))
-        .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+    catch_unwind(AssertUnwindSafe(|| {
+        keccak_256_impl(input, input_len, output, output_len)
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
 }
 
 #[unsafe(no_mangle)]
@@ -939,7 +934,13 @@ pub extern "C" fn rustcrypto_secp256k1_ecdsa_signature_to_der(
     written_len: *mut usize,
 ) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
-        secp256k1_ecdsa_signature_to_der_impl(signature, signature_len, output, output_len, written_len)
+        secp256k1_ecdsa_signature_to_der_impl(
+            signature,
+            signature_len,
+            output,
+            output_len,
+            written_len,
+        )
     }))
     .unwrap_or(RUSTCRYPTO_ERR_PANIC)
 }
@@ -952,7 +953,12 @@ pub extern "C" fn rustcrypto_secp256k1_ecdsa_signature_from_der(
     output_len: usize,
 ) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
-        secp256k1_ecdsa_signature_from_der_impl(der_signature, der_signature_len, output, output_len)
+        secp256k1_ecdsa_signature_from_der_impl(
+            der_signature,
+            der_signature_len,
+            output,
+            output_len,
+        )
     }))
     .unwrap_or(RUSTCRYPTO_ERR_PANIC)
 }
@@ -966,7 +972,7 @@ pub extern "C" fn rustcrypto_ed25519_private_key_to_pkcs8_der(
     written_len: *mut usize,
 ) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
-        ed25519_pkcs8::private_key_to_pkcs8_der_impl(
+        ed25519::pkcs8::private_key_to_pkcs8_der_impl(
             private_key,
             private_key_len,
             output,
@@ -985,7 +991,7 @@ pub extern "C" fn rustcrypto_ed25519_private_key_from_pkcs8_der(
     output_len: usize,
 ) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
-        ed25519_pkcs8::private_key_from_pkcs8_der_impl(der, der_len, output, output_len)
+        ed25519::pkcs8::private_key_from_pkcs8_der_impl(der, der_len, output, output_len)
     }))
     .unwrap_or(RUSTCRYPTO_ERR_PANIC)
 }
@@ -999,7 +1005,7 @@ pub extern "C" fn rustcrypto_ed25519_public_key_to_spki_der(
     written_len: *mut usize,
 ) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
-        ed25519_pkcs8::public_key_to_spki_der_impl(
+        ed25519::pkcs8::public_key_to_spki_der_impl(
             public_key,
             public_key_len,
             output,
@@ -1018,7 +1024,7 @@ pub extern "C" fn rustcrypto_ed25519_public_key_from_spki_der(
     output_len: usize,
 ) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
-        ed25519_pkcs8::public_key_from_spki_der_impl(der, der_len, output, output_len)
+        ed25519::pkcs8::public_key_from_spki_der_impl(der, der_len, output, output_len)
     }))
     .unwrap_or(RUSTCRYPTO_ERR_PANIC)
 }
@@ -1031,7 +1037,7 @@ pub extern "C" fn rustcrypto_ed25519_public_key_from_secret_key(
     output_len: usize,
 ) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
-        ed25519_ops::public_key_from_secret_key_impl(
+        ed25519::ops::public_key_from_secret_key_impl(
             secret_key,
             secret_key_len,
             output,
@@ -1051,7 +1057,7 @@ pub extern "C" fn rustcrypto_ed25519_sign(
     output_len: usize,
 ) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
-        ed25519_ops::sign_impl(
+        ed25519::ops::sign_impl(
             message,
             message_len,
             secret_key,
@@ -1073,7 +1079,7 @@ pub extern "C" fn rustcrypto_ed25519_verify(
     signature_len: usize,
 ) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
-        ed25519_ops::verify_impl(
+        ed25519::ops::verify_impl(
             message,
             message_len,
             public_key,
@@ -1094,7 +1100,7 @@ pub extern "C" fn rustcrypto_ed25519_private_key_to_pkcs8_pem(
     written_len: *mut usize,
 ) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
-        ed25519_pem::private_key_to_pkcs8_pem_impl(
+        ed25519::pem::private_key_to_pkcs8_pem_impl(
             private_key,
             private_key_len,
             output,
@@ -1113,7 +1119,7 @@ pub extern "C" fn rustcrypto_ed25519_private_key_from_pkcs8_pem(
     output_len: usize,
 ) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
-        ed25519_pem::private_key_from_pkcs8_pem_impl(pem, pem_len, output, output_len)
+        ed25519::pem::private_key_from_pkcs8_pem_impl(pem, pem_len, output, output_len)
     }))
     .unwrap_or(RUSTCRYPTO_ERR_PANIC)
 }
@@ -1127,7 +1133,7 @@ pub extern "C" fn rustcrypto_ed25519_public_key_to_spki_pem(
     written_len: *mut usize,
 ) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
-        ed25519_pem::public_key_to_spki_pem_impl(
+        ed25519::pem::public_key_to_spki_pem_impl(
             public_key,
             public_key_len,
             output,
@@ -1146,7 +1152,7 @@ pub extern "C" fn rustcrypto_ed25519_public_key_from_spki_pem(
     output_len: usize,
 ) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
-        ed25519_pem::public_key_from_spki_pem_impl(pem, pem_len, output, output_len)
+        ed25519::pem::public_key_from_spki_pem_impl(pem, pem_len, output, output_len)
     }))
     .unwrap_or(RUSTCRYPTO_ERR_PANIC)
 }
@@ -1178,9 +1184,116 @@ pub extern "C" fn rustcrypto_pbkdf2_hmac_sha256(
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_scrypt(
+    password: *const u8,
+    password_len: usize,
+    salt: *const u8,
+    salt_len: usize,
+    n: usize,
+    r: usize,
+    p: usize,
+    output: *mut u8,
+    output_len: usize,
+    derived_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        scrypt::scrypt_impl(
+            password,
+            password_len,
+            salt,
+            salt_len,
+            n,
+            r,
+            p,
+            output,
+            output_len,
+            derived_len,
+        )
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_argon2id_derive(
+    password: *const u8,
+    password_len: usize,
+    salt: *const u8,
+    salt_len: usize,
+    m_cost: u32,
+    t_cost: u32,
+    p_cost: u32,
+    output: *mut u8,
+    output_len: usize,
+    derived_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        argon2::derive::derive_impl(
+            password,
+            password_len,
+            salt,
+            salt_len,
+            m_cost,
+            t_cost,
+            p_cost,
+            output,
+            output_len,
+            derived_len,
+        )
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_argon2id_hash_password(
+    password: *const u8,
+    password_len: usize,
+    salt: *const u8,
+    salt_len: usize,
+    m_cost: u32,
+    t_cost: u32,
+    p_cost: u32,
+    hash_len: usize,
+    output: *mut u8,
+    output_len: usize,
+    written_len: *mut usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        argon2::phc::hash_password_impl(
+            password,
+            password_len,
+            salt,
+            salt_len,
+            m_cost,
+            t_cost,
+            p_cost,
+            hash_len,
+            output,
+            output_len,
+            written_len,
+        )
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_argon2id_verify_password(
+    password: *const u8,
+    password_len: usize,
+    phc: *const u8,
+    phc_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        argon2::phc::verify_password_impl(password, password_len, phc, phc_len)
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn rustcrypto_password_hash_validate(input: *const u8, input_len: usize) -> c_int {
-    catch_unwind(AssertUnwindSafe(|| password_hash::validate_impl(input, input_len)))
-        .unwrap_or(RUSTCRYPTO_ERR_PANIC)
+    catch_unwind(AssertUnwindSafe(|| {
+        password_hash::validate_impl(input, input_len)
+    }))
+    .unwrap_or(RUSTCRYPTO_ERR_PANIC)
 }
 
 #[unsafe(no_mangle)]
@@ -1233,12 +1346,7 @@ mod tests {
     fn sha256_empty_matches_known_vector() {
         let mut output = [0u8; SHA256_DIGEST_LEN];
 
-        let status = rustcrypto_sha256(
-            core::ptr::null(),
-            0,
-            output.as_mut_ptr(),
-            output.len(),
-        );
+        let status = rustcrypto_sha256(core::ptr::null(), 0, output.as_mut_ptr(), output.len());
 
         assert_eq!(status, RUSTCRYPTO_OK);
         assert_eq!(
@@ -1275,12 +1383,7 @@ mod tests {
     fn sha256_rejects_null_input_with_data() {
         let mut output = [0u8; SHA256_DIGEST_LEN];
 
-        let status = rustcrypto_sha256(
-            core::ptr::null(),
-            1,
-            output.as_mut_ptr(),
-            output.len(),
-        );
+        let status = rustcrypto_sha256(core::ptr::null(), 1, output.as_mut_ptr(), output.len());
 
         assert_eq!(status, RUSTCRYPTO_ERR_NULL_INPUT_WITH_DATA);
     }
@@ -1449,9 +1552,7 @@ mod tests {
             0xba, 0x63, 0x90, 0xb6, 0xc7, 0x3b, 0xb5, 0x0f, 0x9c, 0x31, 0x22, 0xec, 0x84, 0x4a,
             0xd7, 0xc2, 0xb3, 0xe5,
         ];
-        let info = [
-            0xf0, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9,
-        ];
+        let info = [0xf0, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9];
         let mut output = [0u8; 42];
 
         let status = rustcrypto_hkdf_sha256_expand(
@@ -1591,9 +1692,7 @@ mod tests {
 
     #[test]
     fn chacha20poly1305_encrypt_matches_rfc_8439_vector() {
-        let key = hex_bytes(
-            "808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f",
-        );
+        let key = hex_bytes("808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f");
         let nonce = hex_bytes("070000004041424344454647");
         let aad = hex_bytes("50515253c0c1c2c3c4c5c6c7");
         let plaintext = b"Ladies and Gentlemen of the class of '99: If I could offer you only one tip for the future, sunscreen would be it.";
@@ -1625,9 +1724,7 @@ mod tests {
 
     #[test]
     fn chacha20poly1305_decrypt_matches_rfc_8439_vector() {
-        let key = hex_bytes(
-            "808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f",
-        );
+        let key = hex_bytes("808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f");
         let nonce = hex_bytes("070000004041424344454647");
         let aad = hex_bytes("50515253c0c1c2c3c4c5c6c7");
         let ciphertext = hex_bytes(
@@ -1660,9 +1757,7 @@ mod tests {
 
     #[test]
     fn chacha20poly1305_decrypt_rejects_tampered_tag() {
-        let key = hex_bytes(
-            "808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f",
-        );
+        let key = hex_bytes("808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f");
         let nonce = hex_bytes("070000004041424344454647");
         let aad = hex_bytes("50515253c0c1c2c3c4c5c6c7");
         let ciphertext = hex_bytes(
@@ -1692,9 +1787,7 @@ mod tests {
 
     #[test]
     fn chacha20poly1305_encrypt_rejects_short_output_buffer() {
-        let key = hex_bytes(
-            "808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f",
-        );
+        let key = hex_bytes("808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f");
         let nonce = hex_bytes("070000004041424344454647");
         let aad = hex_bytes("50515253c0c1c2c3c4c5c6c7");
         let plaintext = b"Ladies and Gentlemen of the class of '99: If I could offer you only one tip for the future, sunscreen would be it.";
@@ -1742,12 +1835,7 @@ mod tests {
     fn sha3_256_empty_matches_known_vector() {
         let mut output = [0u8; SHA3_256_DIGEST_LEN];
 
-        let status = rustcrypto_sha3_256(
-            core::ptr::null(),
-            0,
-            output.as_mut_ptr(),
-            output.len(),
-        );
+        let status = rustcrypto_sha3_256(core::ptr::null(), 0, output.as_mut_ptr(), output.len());
 
         assert_eq!(status, RUSTCRYPTO_OK);
         assert_eq!(
@@ -1769,12 +1857,7 @@ mod tests {
     fn sha3_256_rejects_null_input_with_data() {
         let mut output = [0u8; SHA3_256_DIGEST_LEN];
 
-        let status = rustcrypto_sha3_256(
-            core::ptr::null(),
-            1,
-            output.as_mut_ptr(),
-            output.len(),
-        );
+        let status = rustcrypto_sha3_256(core::ptr::null(), 1, output.as_mut_ptr(), output.len());
 
         assert_eq!(status, RUSTCRYPTO_ERR_NULL_INPUT_WITH_DATA);
     }
@@ -1802,12 +1885,7 @@ mod tests {
     fn keccak_256_empty_matches_known_vector() {
         let mut output = [0u8; KECCAK_256_DIGEST_LEN];
 
-        let status = rustcrypto_keccak_256(
-            core::ptr::null(),
-            0,
-            output.as_mut_ptr(),
-            output.len(),
-        );
+        let status = rustcrypto_keccak_256(core::ptr::null(), 0, output.as_mut_ptr(), output.len());
 
         assert_eq!(status, RUSTCRYPTO_OK);
         assert_eq!(

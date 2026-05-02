@@ -76,13 +76,13 @@ alwaysApply: false
 - [x] 19. `password-hash` trait相当のFFI設計を決める
 - [x] 19. PHC stringの生成と検証を、Nim側では`string`、Rust FFIでは入力/出力バッファとして扱う設計にする
 - [x] 19. アルゴリズム固有パラメータを整数で渡す範囲と、PHC stringに閉じ込める範囲を決める
-- [ ] 20. `scrypt`で公開する最小APIを決める
-- [ ] 20. scryptのN/r/p、salt、出力長、メモリコスト上限の扱いを決める
-- [ ] 20. Rust/Nim双方のテストでRFC 7914の既知ベクトルを確認する
-- [ ] 21. `argon2`で公開する最小APIを決める
-- [ ] 21. Argon2idを優先し、Argon2i/Argon2dを公開する必要があるか決める
-- [ ] 21. memory cost、time cost、parallelism、salt、出力長、PHC stringの扱いを決める
-- [ ] 21. Rust/Nim双方のテストで公式テストベクトルまたはcrateの既知ベクトルを確認する
+- [x] 20. `scrypt`で公開する最小APIを決める
+- [x] 20. scryptのN/r/p、salt、出力長、メモリコスト上限の扱いを決める
+- [x] 20. Rust/Nim双方のテストでRFC 7914の既知ベクトルを確認する
+- [x] 21. `argon2`で公開する最小APIを決める
+- [x] 21. Argon2idを優先し、Argon2i/Argon2dを公開する必要があるか決める
+- [x] 21. memory cost、time cost、parallelism、salt、出力長、PHC stringの扱いを決める
+- [x] 21. Rust/Nim双方のテストで公式テストベクトルまたはcrateの既知ベクトルを確認する
 - [ ] 22. `aes-gcm`で公開する最小APIを決める
 - [ ] 22. AES-256-GCMを優先し、AES-128-GCMを公開する必要があるか決める
 - [ ] 22. 96ビットnonce、16バイトtag、AAD、暗号化/復号のone-shot APIを実装する
@@ -159,8 +159,8 @@ alwaysApply: false
 - `const-oid` は Rust 内部定数としてのみ使い、Ed25519、secp256k1、HMAC-SHA256、AES-GCM の OID を `oid` モジュールに整理した。Nim 公開APIには raw OID は露出せず、将来もアルゴリズム名ベースの関数名や整数定数を優先する。
 - PBKDF2はHMAC-SHA256を基本にし、passwordとsaltは任意長バイト列、iteration countは1以上、出力長は呼び出し元指定とする。互換性用途のKDFとして扱い、新規パスワード保存用途ではArgon2idを優先する。
 - `password-hash`はPHC stringの生成・検証の共通設計として扱う。scryptとArgon2は個別の低水準derive APIに加え、必要ならPHC stringベースのhash/verify APIを公開する。
-- scryptはN/r/pを明示的に渡すAPIを基本にする。極端なメモリ使用を避けるため、Rust側でパラメータ妥当性を確認し、不正または過大な値は整数エラーコードで返す。
-- Argon2はArgon2idを優先する。memory cost、time cost、parallelism、salt、出力長を明示し、PHC stringを扱うAPIでは出力文字列の最大長と実出力長を明確にする。
+- scryptはN/r/pを明示的に渡すAPIを基本にする。Nim側では `N` を 2 の冪として受け取り、Rust側で `log_n` に変換する。`r` と `p` は正の値のみ受け入れ、出力長は RFC 7914 の上限まで許可する。追加の任意なメモリ上限は設けず、RFC の既知ベクトルと実運用での互換性を優先する。
+- Argon2はArgon2idを優先する。Rust側では `Argon2id` の raw derive と PHC 生成・検証を実装し、`m_cost`、`t_cost`、`p_cost`、`salt`、`hashLen` を明示する。PHC string を扱うAPIでは出力文字列の最大長と実出力長を明確にし、Nim側では生成時にバッファを動的拡張できるようにする。
 - AES-GCMとAES-GCM-SIVは別API名にする。AES-GCM-SIVはnonce再利用耐性を持つ別方式として扱い、AES-GCMの代替実装として暗黙に切り替えない。
 - BLAKE2は既存のSHA-256/SHA3-256/Keccak-256と同じone-shotハッシュAPIの形に揃える。最初にBLAKE2b-512とBLAKE2s-256のどちらを公開するか、READMEの用途に照らして決める。
 - READMEの優先順位 25 以降である `p256`、`p384`、`x509-cert`、`rsa`、`dsa`、楕円曲線暗号化、`ascon`、`ml-kem` はこのブランチの対象外とする。ただしDER/PKCS#8/PEMの設計では、後続でこれらを追加しやすい命名、エラーコード、バッファ設計を維持する。

@@ -1,6 +1,6 @@
 use crate::{
-    aead_common, RUSTCRYPTO_ERR_INVALID_PARAMETER, RUSTCRYPTO_ERR_NULL_OUTPUT,
-    RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT, RUSTCRYPTO_OK,
+    RUSTCRYPTO_ERR_INVALID_PARAMETER, RUSTCRYPTO_ERR_NULL_OUTPUT, RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT,
+    RUSTCRYPTO_OK, aead_common,
 };
 use core::ffi::c_int;
 use pbkdf2::pbkdf2_hmac;
@@ -90,7 +90,8 @@ mod tests {
         assert_eq!(status, RUSTCRYPTO_OK);
         assert_eq!(
             &output,
-            hex_bytes("120fb6cffcf8b32c43e7225256c4f837a86548c92ccc35480805987cb70be17b").as_slice()
+            hex_bytes("120fb6cffcf8b32c43e7225256c4f837a86548c92ccc35480805987cb70be17b")
+                .as_slice()
         );
     }
 
@@ -114,7 +115,8 @@ mod tests {
         assert_eq!(status, RUSTCRYPTO_OK);
         assert_eq!(
             &output,
-            hex_bytes("ae4d0c95af6b46d32d0adff928f06dd02a303f8ef3c251dfd6e2d85a95474c43").as_slice()
+            hex_bytes("ae4d0c95af6b46d32d0adff928f06dd02a303f8ef3c251dfd6e2d85a95474c43")
+                .as_slice()
         );
     }
 
@@ -163,7 +165,8 @@ mod tests {
         assert_eq!(status, RUSTCRYPTO_OK);
         assert_eq!(
             &output,
-            hex_bytes("f7ce0b653d2d72a4108cf5abe912ffdd777616dbbb27a70e8204f3ae2d0f6fad").as_slice()
+            hex_bytes("f7ce0b653d2d72a4108cf5abe912ffdd777616dbbb27a70e8204f3ae2d0f6fad")
+                .as_slice()
         );
     }
 
@@ -186,7 +189,8 @@ mod tests {
         assert_eq!(status, RUSTCRYPTO_OK);
         assert_eq!(
             &output,
-            hex_bytes("c1232f10f62715fda06ae7c0a2037ca19b33cf103b727ba56d870c11f290a2ab").as_slice()
+            hex_bytes("c1232f10f62715fda06ae7c0a2037ca19b33cf103b727ba56d870c11f290a2ab")
+                .as_slice()
         );
     }
 

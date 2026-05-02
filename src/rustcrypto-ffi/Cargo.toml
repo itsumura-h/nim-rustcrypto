@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+argon2 = { version = "0.5.3", features = ["alloc", "password-hash"] }
 chacha20poly1305 = "0.10.1"
 const-oid = "0.9.6"
 digest = "0.11.2"
@@ -15,6 +16,7 @@ k256 = "0.13.4"
 password-hash = { version = "0.6.1", features = ["phc", "alloc"] }
 pbkdf2 = "0.13.0"
 pem-rfc7468 = "1.0.0"
+scrypt = "0.12.0"
 sha2 = "0.11.0"
 sha3 = "0.11.0"
 

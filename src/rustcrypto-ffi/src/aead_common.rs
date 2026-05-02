@@ -104,16 +104,21 @@ mod tests {
     #[test]
     fn fixed_input_accepts_exact_length() {
         let input = [1u8, 2, 3, 4];
-        let view = fixed_input(input.as_ptr(), input.len(), 4, RUSTCRYPTO_ERR_INVALID_PARAMETER)
-            .expect("exact length should pass");
+        let view = fixed_input(
+            input.as_ptr(),
+            input.len(),
+            4,
+            RUSTCRYPTO_ERR_INVALID_PARAMETER,
+        )
+        .expect("exact length should pass");
 
         assert_eq!(view, &input);
     }
 
     #[test]
     fn fixed_input_rejects_null_pointer_when_length_matches() {
-        let status = fixed_input(core::ptr::null(), 4, 4, RUSTCRYPTO_ERR_INVALID_PARAMETER)
-            .unwrap_err();
+        let status =
+            fixed_input(core::ptr::null(), 4, 4, RUSTCRYPTO_ERR_INVALID_PARAMETER).unwrap_err();
 
         assert_eq!(status, crate::RUSTCRYPTO_ERR_NULL_INPUT_WITH_DATA);
     }
@@ -135,8 +140,8 @@ mod tests {
     #[test]
     fn output_buffer_accepts_exact_length() {
         let mut output = [0u8; 4];
-        let view = output_buffer(output.as_mut_ptr(), output.len(), 4)
-            .expect("exact length should pass");
+        let view =
+            output_buffer(output.as_mut_ptr(), output.len(), 4).expect("exact length should pass");
 
         assert_eq!(view.len(), 4);
     }
@@ -158,19 +163,34 @@ mod tests {
 
     #[test]
     fn validate_aead_parameters_distinguishes_length_errors() {
-        assert_eq!(validate_aead_parameters(31, 32, 12, 12, 16, 16), RUSTCRYPTO_ERR_INVALID_KEY_LENGTH);
-        assert_eq!(validate_aead_parameters(32, 32, 11, 12, 16, 16), RUSTCRYPTO_ERR_INVALID_NONCE_LENGTH);
-        assert_eq!(validate_aead_parameters(32, 32, 12, 12, 15, 16), RUSTCRYPTO_ERR_INVALID_TAG_LENGTH);
+        assert_eq!(
+            validate_aead_parameters(31, 32, 12, 12, 16, 16),
+            RUSTCRYPTO_ERR_INVALID_KEY_LENGTH
+        );
+        assert_eq!(
+            validate_aead_parameters(32, 32, 11, 12, 16, 16),
+            RUSTCRYPTO_ERR_INVALID_NONCE_LENGTH
+        );
+        assert_eq!(
+            validate_aead_parameters(32, 32, 12, 12, 15, 16),
+            RUSTCRYPTO_ERR_INVALID_TAG_LENGTH
+        );
     }
 
     #[test]
     fn validate_aead_parameters_reports_success_for_matching_lengths() {
         assert_eq!(RUSTCRYPTO_OK, 0);
-        assert_eq!(validate_aead_parameters(32, 32, 12, 12, 16, 16), RUSTCRYPTO_OK);
+        assert_eq!(
+            validate_aead_parameters(32, 32, 12, 12, 16, 16),
+            RUSTCRYPTO_OK
+        );
     }
 
     #[test]
     fn validate_same_length_relation_reports_invalid_parameter_on_mismatch() {
-        assert_eq!(validate_same_length_relation(16, 15), RUSTCRYPTO_ERR_INVALID_PARAMETER);
+        assert_eq!(
+            validate_same_length_relation(16, 15),
+            RUSTCRYPTO_ERR_INVALID_PARAMETER
+        );
     }
 }

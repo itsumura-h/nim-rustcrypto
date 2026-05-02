@@ -45,6 +45,9 @@ const
   Secp256k1PublicKeyFormatCompressed* = 1.cint
   HkdfSha256PrkLen* = 32
   HkdfSha256MaxOkmLen* = 32 * 255
+  ScryptMaxOkmLen* = 137_438_953_440
+  Argon2idMinHashLen* = 4
+  Argon2idMaxHashLen* = 4_294_967_295
 
 proc sha256Raw*(
     input: ptr uint8,
@@ -72,6 +75,53 @@ proc pbkdf2HmacSha256Raw*(
     outputLen: csize_t,
     derivedLen: csize_t,
   ): cint {.cdecl, importc: "rustcrypto_pbkdf2_hmac_sha256".}
+
+proc scryptRaw*(
+    password: ptr uint8,
+    passwordLen: csize_t,
+    salt: ptr uint8,
+    saltLen: csize_t,
+    n: csize_t,
+    r: csize_t,
+    p: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    derivedLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_scrypt".}
+
+proc argon2idDeriveRaw*(
+    password: ptr uint8,
+    passwordLen: csize_t,
+    salt: ptr uint8,
+    saltLen: csize_t,
+    mCost: cuint,
+    tCost: cuint,
+    pCost: cuint,
+    output: ptr uint8,
+    outputLen: csize_t,
+    derivedLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_argon2id_derive".}
+
+proc argon2idHashPasswordRaw*(
+    password: ptr uint8,
+    passwordLen: csize_t,
+    salt: ptr uint8,
+    saltLen: csize_t,
+    mCost: cuint,
+    tCost: cuint,
+    pCost: cuint,
+    hashLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    writtenLen: ptr csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_argon2id_hash_password".}
+
+proc argon2idVerifyPasswordRaw*(
+    password: ptr uint8,
+    passwordLen: csize_t,
+    phc: ptr uint8,
+    phcLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_argon2id_verify_password".}
 
 proc passwordHashValidateRaw*(
     input: ptr uint8,
