@@ -32,6 +32,23 @@ suite "ed25519":
     )
     check ed25519Verify("", publicKey, signature)
 
+  test "high-level string scenario creates keys, signs, and verifies":
+    let secretKey = fromHexSecretKey(
+      "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
+    )
+    let publicKey = ed25519PublicKeyFromSecretKey(secretKey)
+    let message = "abc"
+    let signature = ed25519Sign(message, secretKey)
+
+    check hexOf(publicKey) ==
+      "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
+    check ed25519Verify(message, publicKey, signature)
+    check not ed25519Verify("abd", publicKey, signature)
+
+    var tamperedSignature = signature
+    tamperedSignature[0] = tamperedSignature[0] xor 0x01
+    check not ed25519Verify(message, publicKey, tamperedSignature)
+
   test "verify rejects a tampered signature":
     let secretKey = fromHexSecretKey(
       "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
