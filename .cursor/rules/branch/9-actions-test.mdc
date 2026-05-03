@@ -33,6 +33,9 @@ alwaysApply: false
 - [x] `docker compose exec -T app bash -lc 'cd /application/src/rustcrypto-ffi && cargo build --release --lib'` を実行する
 - [x] `docker compose exec -T app bash -lc 'cd /application/src/nim-rustcrypto && nimble test -y'` を実行する
 - [x] `if: always()` の後片付けステップで `docker compose down --remove-orphans` を実行する
+- [x] `cargo test` をローカルで実行し、Rustテストの警告4件を確認する
+- [x] `src/rustcrypto-ffi/src/p256.rs`、`src/rustcrypto-ffi/src/p384.rs`、`src/rustcrypto-ffi/src/rsa.rs`、`src/rustcrypto-ffi/src/x509.rs` の未使用コードを整理する
+- [x] `cargo test` を再実行し、警告なしで126件のRustテストが通ることを確認する
 - [ ] CIログでRustテスト、Rustビルド、Nimテストの失敗箇所が分かることを確認する
 - [ ] 必要に応じてREADMEにCIで実行される検証内容を追記する
 

@@ -838,27 +838,6 @@ mod tests {
         RUSTCRYPTO_OK,
     };
 
-    fn hex_bytes(hex: &str) -> Vec<u8> {
-        fn nibble(byte: u8) -> u8 {
-            match byte {
-                b'0'..=b'9' => byte - b'0',
-                b'a'..=b'f' => byte - b'a' + 10,
-                b'A'..=b'F' => byte - b'A' + 10,
-                _ => panic!("invalid hex digit"),
-            }
-        }
-
-        assert_eq!(hex.len() % 2, 0);
-        let bytes = hex.as_bytes();
-        let mut output = Vec::with_capacity(bytes.len() / 2);
-        let mut index = 0;
-        while index < bytes.len() {
-            output.push((nibble(bytes[index]) << 4) | nibble(bytes[index + 1]));
-            index += 2;
-        }
-        output
-    }
-
     const RSA_2048_PRIVATE_KEY_DER: &[u8] = include_bytes!("../tests/fixtures/rsa2048-private-key.der");
     const RSA_2048_PUBLIC_KEY_DER: &[u8] = include_bytes!("../tests/fixtures/rsa2048-public-key.der");
 
