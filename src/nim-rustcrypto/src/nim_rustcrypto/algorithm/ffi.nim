@@ -50,6 +50,8 @@ const
   RustCryptoErrInvalidTagLength* = 14.cint
   RustCryptoErrInvalidParameter* = 15.cint
   RustCryptoErrInvalidPasswordHashFormat* = 16.cint
+  RustCryptoErrInvalidCertificate* = 17.cint
+  RustCryptoErrDecryptionFailed* = 18.cint
   RustCryptoErrPanic* = -1.cint
   Secp256k1PublicKeyFormatUncompressed* = 0.cint
   Secp256k1PublicKeyFormatCompressed* = 1.cint
@@ -501,3 +503,356 @@ proc ed25519PublicKeyFromSpkiPemRaw*(
     output: ptr uint8,
     outputLen: csize_t,
   ): cint {.cdecl, importc: "rustcrypto_ed25519_public_key_from_spki_pem".}
+
+const
+  P256SecretKeyLen* = 32
+  P256PublicKeyCompressedLen* = 33
+  P256PublicKeyUncompressedLen* = 65
+  P256SignatureLen* = 64
+  P256MessageDigestLen* = 32
+  P256PrivateKeyDerMaxLen* = 256
+  P256PublicKeyDerMaxLen* = 128
+  P256PrivateKeyPemMaxLen* = 512
+  P256PublicKeyPemMaxLen* = 256
+  P384SecretKeyLen* = 48
+  P384PublicKeyCompressedLen* = 49
+  P384PublicKeyUncompressedLen* = 97
+  P384SignatureLen* = 96
+  P384MessageDigestLen* = 48
+  P384PrivateKeyDerMaxLen* = 256
+  P384PublicKeyDerMaxLen* = 160
+  P384PrivateKeyPemMaxLen* = 512
+  P384PublicKeyPemMaxLen* = 320
+  X509CertDerMaxLen* = 8192
+  X509CertPemMaxLen* = 11000
+  RsaPrivateKeyDerMaxLen* = 4096
+  RsaPublicKeyDerMaxLen* = 2048
+  RsaPssSignatureMaxLen* = 4096
+  RsaPkcs1v15SignatureMaxLen* = 4096
+  P256PublicKeyFormatUncompressed* = 0.cint
+  P256PublicKeyFormatCompressed* = 1.cint
+  P384PublicKeyFormatUncompressed* = 0.cint
+  P384PublicKeyFormatCompressed* = 1.cint
+
+proc p256PublicKeyFromSecretKeyRaw*(
+    secretKey: ptr uint8,
+    secretKeyLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    compressed: cint,
+  ): cint {.cdecl, importc: "rustcrypto_p256_public_key_from_secret_key".}
+
+proc p256EcdsaSignSha256Raw*(
+    message: ptr uint8,
+    messageLen: csize_t,
+    secretKey: ptr uint8,
+    secretKeyLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_p256_ecdsa_sign_sha256".}
+
+proc p256EcdsaVerifySha256Raw*(
+    message: ptr uint8,
+    messageLen: csize_t,
+    publicKey: ptr uint8,
+    publicKeyLen: csize_t,
+    publicKeyFormat: cint,
+    signature: ptr uint8,
+    signatureLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_p256_ecdsa_verify_sha256".}
+
+proc p256EcdsaSignPrehashRaw*(
+    messageDigest: ptr uint8,
+    messageDigestLen: csize_t,
+    secretKey: ptr uint8,
+    secretKeyLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_p256_ecdsa_sign_prehash".}
+
+proc p256EcdsaVerifyPrehashRaw*(
+    messageDigest: ptr uint8,
+    messageDigestLen: csize_t,
+    publicKey: ptr uint8,
+    publicKeyLen: csize_t,
+    publicKeyFormat: cint,
+    signature: ptr uint8,
+    signatureLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_p256_ecdsa_verify_prehash".}
+
+proc p256PrivateKeyToPkcs8DerRaw*(
+    secretKey: ptr uint8,
+    secretKeyLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    writtenLen: ptr csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_p256_private_key_to_pkcs8_der".}
+
+proc p256PrivateKeyFromPkcs8DerRaw*(
+    der: ptr uint8,
+    derLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_p256_private_key_from_pkcs8_der".}
+
+proc p256PublicKeyToSpkiDerRaw*(
+    publicKey: ptr uint8,
+    publicKeyLen: csize_t,
+    publicKeyFormat: cint,
+    output: ptr uint8,
+    outputLen: csize_t,
+    writtenLen: ptr csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_p256_public_key_to_spki_der".}
+
+proc p256PublicKeyFromSpkiDerRaw*(
+    der: ptr uint8,
+    derLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    outputFormat: cint,
+  ): cint {.cdecl, importc: "rustcrypto_p256_public_key_from_spki_der".}
+
+proc p384PublicKeyFromSecretKeyRaw*(
+    secretKey: ptr uint8,
+    secretKeyLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    compressed: cint,
+  ): cint {.cdecl, importc: "rustcrypto_p384_public_key_from_secret_key".}
+
+proc p384EcdsaSignSha384Raw*(
+    message: ptr uint8,
+    messageLen: csize_t,
+    secretKey: ptr uint8,
+    secretKeyLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_p384_ecdsa_sign_sha384".}
+
+proc p384EcdsaVerifySha384Raw*(
+    message: ptr uint8,
+    messageLen: csize_t,
+    publicKey: ptr uint8,
+    publicKeyLen: csize_t,
+    publicKeyFormat: cint,
+    signature: ptr uint8,
+    signatureLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_p384_ecdsa_verify_sha384".}
+
+proc p384EcdsaSignPrehashRaw*(
+    messageDigest: ptr uint8,
+    messageDigestLen: csize_t,
+    secretKey: ptr uint8,
+    secretKeyLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_p384_ecdsa_sign_prehash".}
+
+proc p384EcdsaVerifyPrehashRaw*(
+    messageDigest: ptr uint8,
+    messageDigestLen: csize_t,
+    publicKey: ptr uint8,
+    publicKeyLen: csize_t,
+    publicKeyFormat: cint,
+    signature: ptr uint8,
+    signatureLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_p384_ecdsa_verify_prehash".}
+
+proc p384PrivateKeyToPkcs8DerRaw*(
+    secretKey: ptr uint8,
+    secretKeyLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    writtenLen: ptr csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_p384_private_key_to_pkcs8_der".}
+
+proc p384PrivateKeyFromPkcs8DerRaw*(
+    der: ptr uint8,
+    derLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_p384_private_key_from_pkcs8_der".}
+
+proc p384PublicKeyToSpkiDerRaw*(
+    publicKey: ptr uint8,
+    publicKeyLen: csize_t,
+    publicKeyFormat: cint,
+    output: ptr uint8,
+    outputLen: csize_t,
+    writtenLen: ptr csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_p384_public_key_to_spki_der".}
+
+proc p384PublicKeyFromSpkiDerRaw*(
+    der: ptr uint8,
+    derLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    outputFormat: cint,
+  ): cint {.cdecl, importc: "rustcrypto_p384_public_key_from_spki_der".}
+
+proc x509CertValidateDerRaw*(
+    der: ptr uint8,
+    derLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_x509_cert_validate_der".}
+
+proc x509CertFromPemRaw*(
+    pem: ptr uint8,
+    pemLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    writtenLen: ptr csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_x509_cert_from_pem".}
+
+proc x509CertToPemRaw*(
+    der: ptr uint8,
+    derLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    writtenLen: ptr csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_x509_cert_to_pem".}
+
+proc x509CertSubjectPublicKeyInfoDerRaw*(
+    der: ptr uint8,
+    derLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    writtenLen: ptr csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_x509_cert_subject_public_key_info_der".}
+
+proc x509CertSignatureAlgorithmOidRaw*(
+    der: ptr uint8,
+    derLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    writtenLen: ptr csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_x509_cert_signature_algorithm_oid".}
+
+proc x509CertSubjectDerRaw*(
+    der: ptr uint8,
+    derLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    writtenLen: ptr csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_x509_cert_subject_der".}
+
+proc x509CertIssuerDerRaw*(
+    der: ptr uint8,
+    derLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    writtenLen: ptr csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_x509_cert_issuer_der".}
+
+proc rsaPrivateKeyToPkcs8DerRaw*(
+    der: ptr uint8,
+    derLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    writtenLen: ptr csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_rsa_private_key_to_pkcs8_der".}
+
+proc rsaPrivateKeyFromPkcs8DerRaw*(
+    der: ptr uint8,
+    derLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    writtenLen: ptr csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_rsa_private_key_from_pkcs8_der".}
+
+proc rsaPublicKeyToSpkiDerRaw*(
+    der: ptr uint8,
+    derLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    writtenLen: ptr csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_rsa_public_key_to_spki_der".}
+
+proc rsaPublicKeyFromSpkiDerRaw*(
+    der: ptr uint8,
+    derLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    writtenLen: ptr csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_rsa_public_key_from_spki_der".}
+
+proc rsaPssSignSha256Raw*(
+    message: ptr uint8,
+    messageLen: csize_t,
+    privateKeyDer: ptr uint8,
+    privateKeyDerLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    writtenLen: ptr csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_rsa_pss_sign_sha256".}
+
+proc rsaPssVerifySha256Raw*(
+    message: ptr uint8,
+    messageLen: csize_t,
+    publicKeyDer: ptr uint8,
+    publicKeyDerLen: csize_t,
+    signature: ptr uint8,
+    signatureLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_rsa_pss_verify_sha256".}
+
+proc rsaPkcs1v15SignSha256Raw*(
+    message: ptr uint8,
+    messageLen: csize_t,
+    privateKeyDer: ptr uint8,
+    privateKeyDerLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    writtenLen: ptr csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_rsa_pkcs1v15_sign_sha256".}
+
+proc rsaPkcs1v15VerifySha256Raw*(
+    message: ptr uint8,
+    messageLen: csize_t,
+    publicKeyDer: ptr uint8,
+    publicKeyDerLen: csize_t,
+    signature: ptr uint8,
+    signatureLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_rsa_pkcs1v15_verify_sha256".}
+
+proc rsaOaepSha256EncryptRaw*(
+    plaintext: ptr uint8,
+    plaintextLen: csize_t,
+    publicKeyDer: ptr uint8,
+    publicKeyDerLen: csize_t,
+    label: ptr uint8,
+    labelLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    writtenLen: ptr csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_rsa_oaep_sha256_encrypt".}
+
+proc rsaOaepSha256DecryptRaw*(
+    ciphertext: ptr uint8,
+    ciphertextLen: csize_t,
+    privateKeyDer: ptr uint8,
+    privateKeyDerLen: csize_t,
+    label: ptr uint8,
+    labelLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    writtenLen: ptr csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_rsa_oaep_sha256_decrypt".}
+
+proc rsaPkcs1v15EncryptRaw*(
+    plaintext: ptr uint8,
+    plaintextLen: csize_t,
+    publicKeyDer: ptr uint8,
+    publicKeyDerLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    writtenLen: ptr csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_rsa_pkcs1v15_encrypt".}
+
+proc rsaPkcs1v15DecryptRaw*(
+    ciphertext: ptr uint8,
+    ciphertextLen: csize_t,
+    privateKeyDer: ptr uint8,
+    privateKeyDerLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    writtenLen: ptr csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_rsa_pkcs1v15_decrypt".}

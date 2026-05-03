@@ -1,0 +1,190 @@
+---
+description: 13-p256-rsaブランチでの開発時に読み込む
+alwaysApply: false
+---
+13-p256-rsaブランチルール
+===
+
+このブランチで実装することは以下の通りです。
+- READMEの開発優先順位 25. `p256`
+- READMEの開発優先順位 26. `p384`
+- READMEの開発優先順位 27. `x509-cert`
+- READMEの開発優先順位 28. `rsa` signatures
+- READMEの開発優先順位 29. `rsa` asymmetric encryption
+
+このブランチでは、WebAuthn、一般Web/PKI、証明書連携、既存システム互換で必要になるP-256/P-384 ECDSA、X.509証明書の最小読み取り、RSA署名、RSA公開鍵暗号化を、RustCryptoを使ったRust FFIとNimラッパーとして実装する。
+対象は固定長バッファまたはDER/PEMバイト列を入出力するone-shot APIであり、Rustの所有権、trait、`Result`、`Vec`、`String`をFFI公開APIに出さない。
+
+このブランチでは、TLSの証明書パス検証、失効確認、信頼ストア管理、WebAuthn ceremony全体、CSR生成、証明書発行、ECIES/ECDH、RSA鍵生成、秘密鍵PEM暗号化は対象外とする。
+
+## 進捗
+- [x] `.cursor/rules/project.mdc` を読み、FFI、ビルド、TDD、依存追加ルールを確認する
+- [x] `.cursor/rules/branch.mdc` を読み、ブランチルールの形式と記録方針を確認する
+- [x] 現在ブランチ `13-p256-rsa` に対応する既存ブランチルールがないことを確認する
+- [x] READMEの開発優先順位25番から29番までの対象範囲を確認する
+- [x] 既存のsecp256k1、Ed25519、PKCS#8/SPKI/PEM実装の構成を確認する
+- [x] RustCryptoの `p256`、`p384`、`x509-cert`、`rsa` の安定系列とfeature構成を調査する
+- [x] 実装方針と設計をこのブランチルールに記録する
+- [x] 依存追加が必要なcrateを `cargo add` で追加する
+- [x] Rust側でP-256秘密鍵、公開鍵、ECDSA署名の長さ定数を追加する
+- [x] Rust側でP-384秘密鍵、公開鍵、ECDSA署名の長さ定数を追加する
+- [x] Rust側にP-256公開鍵導出APIを実装する
+- [x] Rust側にP-256 ECDSA SHA-256署名・検証APIを実装する
+- [x] Rust側にP-256 PKCS#8/SPKI DER変換APIを実装する
+- [x] Rust側にP-384公開鍵導出APIを実装する
+- [x] Rust側にP-384 ECDSA SHA-384署名・検証APIを実装する
+- [x] Rust側にP-384 PKCS#8/SPKI DER変換APIを実装する
+- [x] Rust側にX.509 DER/PEM証明書の最小読み取りAPIを実装する
+- [x] Rust側にRSA PKCS#8/SPKI DER変換APIを実装する
+- [x] Rust側にRSA-PSS SHA-256署名・検証APIを実装する
+- [x] Rust側にRSA PKCS#1 v1.5 SHA-256署名・検証APIを実装する
+- [x] Rust側にRSA-OAEP SHA-256暗号化・復号APIを実装する
+- [x] 必要な互換用途に限ってRSA PKCS#1 v1.5暗号化・復号APIを追加する
+- [x] Rust側でNULLポインタ、不正長、不正鍵、不正署名、不正証明書、短い出力バッファ、検証失敗、復号失敗を整数エラーコードで返す
+- [x] Rust側のpanicをFFI境界の外へ漏らさない
+- [x] Rust側テストで公式または標準的な既知ベクトル、round-trip、改ざん失敗を確認する
+- [x] Rustでビルドし、`librust_crypto_ffi.a` を出力する
+- [x] Nim側にP-256用の低水準FFI proc、型、高水準API、テストを追加する
+- [x] Nim側にP-384用の低水準FFI proc、型、高水準API、テストを追加する
+- [x] Nim側にX.509用の低水準FFI proc、型、高水準API、テストを追加する
+- [x] Nim側にRSA署名用の低水準FFI proc、型、高水準API、テストを追加する
+- [x] Nim側にRSA暗号化用の低水準FFI proc、型、高水準API、テストを追加する
+- [x] Nim側verify APIは暗号学的な検証失敗を `false` として返し、呼び出し方の誤りは例外にする
+- [x] READMEの開発優先順位、提供API、テストベクトルを新規APIに合わせて更新する
+
+## 参考資料
+- RustCrypto: https://github.com/RustCrypto
+- RustCrypto `p256`: https://github.com/RustCrypto/elliptic-curves/tree/master/p256
+- `p256` crate documentation: https://docs.rs/p256/
+- `p256` 0.13.2 crate metadata: https://crates.io/crates/p256/0.13.2
+- RustCrypto `p384`: https://github.com/RustCrypto/elliptic-curves/tree/master/p384
+- `p384` crate documentation: https://docs.rs/p384/
+- `p384` 0.13.1 crate metadata: https://crates.io/crates/p384/0.13.1
+- RustCrypto `x509-cert`: https://github.com/RustCrypto/formats/tree/master/x509-cert
+- `x509-cert` crate documentation: https://docs.rs/x509-cert/0.2.5/
+- `x509-cert` 0.2.5 crate metadata: https://crates.io/crates/x509-cert/0.2.5
+- RustCrypto `rsa`: https://github.com/RustCrypto/RSA
+- `rsa` crate documentation: https://docs.rs/rsa/
+- `rsa` 0.9.8 crate metadata: https://crates.io/crates/rsa/0.9.8
+- RustCrypto `signature`: https://github.com/RustCrypto/traits/tree/master/signature
+- RustCrypto `formats`: https://github.com/RustCrypto/formats
+- RFC 5280: Internet X.509 Public Key Infrastructure Certificate and CRL Profile: https://www.rfc-editor.org/rfc/rfc5280
+- RFC 8017: PKCS #1: RSA Cryptography Specifications Version 2.2: https://www.rfc-editor.org/rfc/rfc8017
+- RFC 5915: Elliptic Curve Private Key Structure: https://www.rfc-editor.org/rfc/rfc5915
+- RFC 5958: Asymmetric Key Packages: https://www.rfc-editor.org/rfc/rfc5958
+- RFC 7468: Textual Encodings of PKIX, PKCS, and CMS Structures: https://www.rfc-editor.org/rfc/rfc7468
+- RFC 8018: PKCS #5: Password-Based Cryptography Specification Version 2.1: https://www.rfc-editor.org/rfc/rfc8018
+- FIPS 186-5 Digital Signature Standard: https://csrc.nist.gov/pubs/fips/186-5/final
+- NIST SP 800-186: Recommendations for Discrete Logarithm-Based Cryptography: Elliptic Curve Domain Parameters: https://csrc.nist.gov/pubs/sp/800/186/final
+- NIST CAVP ECDSA test vectors: https://csrc.nist.gov/projects/cryptographic-algorithm-validation-program/digital-signatures
+- Rust Reference Linkage: https://doc.rust-lang.org/reference/linkage.html
+- Nim Manual: https://nim-lang.org/docs/manual.html
+- Nim system module: https://nim-lang.org/docs/system.html
+
+## 調査結果・設計まとめ
+- 2026-05-03時点の調査では、`p256` の安定系列は0.13.2、`p384` の安定系列は0.13.1、`x509-cert` の安定系列は0.2.5、`rsa` の安定系列は0.9.8である。crates.io上にはそれぞれ0.14/0.3/0.10系のRCが存在するが、このブランチでは既存依存と互換性を取りやすい安定系列を優先する。
+- 依存追加はプロジェクトルール `SYW-DEPS-001` に従い、`Cargo.toml` 手編集ではなく `cargo add` を使う。想定する追加依存は `p256@0.13.2`、`p384@0.13.1`、`x509-cert@0.2.5`、`rsa@0.9.8`、必要に応じて `rand_core` または `rand` である。
+- `p256` 0.13.2のdefault featureには `arithmetic`、`ecdsa`、`pem`、`std` が含まれ、`ecdsa` は `sha256` を有効にする。P-256の署名本文入力APIはSHA-256を基本にする。
+- `p384` 0.13.1のdefault featureには `arithmetic`、`ecdh`、`ecdsa`、`pem`、`std` が含まれ、`ecdsa` は `sha384` を有効にする。P-384の署名本文入力APIはSHA-384を基本にする。
+- `x509-cert` 0.2.5はRFC 5280のX.509証明書形式を扱うcrateであり、default featureは `pem` と `std` である。証明書パス検証や信頼判定ではなく、DER/PEMの構造読み取りと必要フィールド抽出に範囲を絞る。
+- `rsa` 0.9.8はPKCS#1 v1.5暗号化、OAEP、PKCS#1 v1.5署名、PSS、PKCS#1/PKCS#8/SPKI入出力を扱える。セキュリティ上の基本APIはRSA-PSS署名とRSA-OAEP SHA-256暗号化を優先し、PKCS#1 v1.5系は互換用途として明示的に名前を分ける。
+- このブランチの作業は、プロジェクトルール `SYW-DEV-001` に従い、Rust実装、Rustテスト、Rust静的アーカイブ出力、Nim FFIラッパー実装、Nimテストの順に進める。
+- FFI公開APIは、入力ポインタ、入力長、出力ポインタ、出力長、必要に応じた `written_len`、戻り値 `c_int` の形を基本にする。Rust側で確保したメモリをNim側へ所有させるAPIは作らない。
+- DER、PEM、証明書、RSA暗号文のような可変長出力は、呼び出し元が出力バッファを渡し、Rust側が `written_len` に実際の書き込み長を返す設計にする。短い出力バッファは `RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT` を返す。
+- 空入力は、本文メッセージやlabelなど意味的に空を許容できるものだけ `ptr == NULL && len == 0` を許容する。鍵、署名、証明書、暗号文で長さ0が不正なものは `RUSTCRYPTO_ERR_INVALID_LENGTH` または用途別エラーにする。
+- エラーコードは既存定数を優先して再利用する。NULL出力は `RUSTCRYPTO_ERR_NULL_OUTPUT`、短い出力バッファは `RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT`、長さ付きNULL入力は `RUSTCRYPTO_ERR_NULL_INPUT_WITH_DATA`、不正秘密鍵は `RUSTCRYPTO_ERR_INVALID_SECRET_KEY`、不正公開鍵は `RUSTCRYPTO_ERR_INVALID_PUBLIC_KEY_FORMAT`、不正署名は `RUSTCRYPTO_ERR_INVALID_SIGNATURE`、検証失敗は `RUSTCRYPTO_ERR_VERIFICATION_FAILED`、一般的なDER/PEM/証明書/パディング不正は `RUSTCRYPTO_ERR_INVALID_PARAMETER` または `RUSTCRYPTO_ERR_INVALID_LENGTH` とする。
+- RSA のテスト fixture は、証明書 fixture と秘密鍵 fixture が別ペアである場合があるため、X.509 の抽出テストと RSA の署名・暗号化テストでは使う fixture を分ける。
+- P-384 の公開 API 名は `sha384` を使い、`sha256` にはしない。Nim 側の FFI 宣言名と Rust 側の export 名を一致させる。
+- 既存エラーコードで意味が曖昧になる場合だけ、追加エラーコードを検討する。候補は `RUSTCRYPTO_ERR_DECRYPTION_FAILED`、`RUSTCRYPTO_ERR_INVALID_CERTIFICATE`、`RUSTCRYPTO_ERR_UNSUPPORTED_ALGORITHM` だが、追加前に既存Nimエラーマッピングへの影響を確認する。
+- Rust側実装ファイルは、P-256を `src/rustcrypto-ffi/src/p256.rs`、P-384を `src/rustcrypto-ffi/src/p384.rs`、X.509を `src/rustcrypto-ffi/src/x509.rs`、RSAを `src/rustcrypto-ffi/src/rsa.rs` に分離する方針とする。`lib.rs` には定数、エラーコード、`mod` 宣言だけを追加する。
+- Nim側実装ファイルは、P-256を `src/nim-rustcrypto/src/nim_rustcrypto/algorithm/p256.nim`、P-384を `src/nim-rustcrypto/src/nim_rustcrypto/algorithm/p384.nim`、X.509を `src/nim-rustcrypto/src/nim_rustcrypto/algorithm/x509.nim`、RSAを `src/nim-rustcrypto/src/nim_rustcrypto/algorithm/rsa.nim` に分離する方針とする。低水準FFI procは既存方針に合わせて `algorithm/ffi.nim` に集約する。
+
+### P-256設計
+- P-256はWebAuthn、証明書、一般Web/PKI連携向けのNIST P-256 ECDSAとして扱う。secp256k1とは別曲線であり、既存 `secp256k1` APIとは型名、関数名、定数を分ける。
+- P-256秘密鍵は32バイト固定長、公開鍵はSEC1圧縮33バイトと非圧縮65バイト、raw ECDSA署名は64バイト固定長 `(r, s)` とする。
+- Rust側FFI公開API案は以下とする。
+  - `rustcrypto_p256_public_key_from_secret_key(secret_key, secret_key_len, output, output_len, compressed) -> c_int`
+  - `rustcrypto_p256_ecdsa_sign_sha256(message, message_len, secret_key, secret_key_len, output, output_len) -> c_int`
+  - `rustcrypto_p256_ecdsa_verify_sha256(message, message_len, public_key, public_key_len, public_key_format, signature, signature_len) -> c_int`
+  - `rustcrypto_p256_ecdsa_sign_prehash(message_digest, message_digest_len, secret_key, secret_key_len, output, output_len) -> c_int`
+  - `rustcrypto_p256_ecdsa_verify_prehash(message_digest, message_digest_len, public_key, public_key_len, public_key_format, signature, signature_len) -> c_int`
+  - `rustcrypto_p256_private_key_to_pkcs8_der(private_key, private_key_len, output, output_len, written_len) -> c_int`
+  - `rustcrypto_p256_private_key_from_pkcs8_der(der, der_len, output, output_len) -> c_int`
+  - `rustcrypto_p256_public_key_to_spki_der(public_key, public_key_len, public_key_format, output, output_len, written_len) -> c_int`
+  - `rustcrypto_p256_public_key_from_spki_der(der, der_len, output, output_len, output_format) -> c_int`
+- Nim側公開API案は以下とする。
+  - `p256PublicKeyCompressed(secretKey: P256SecretKey): P256PublicKeyCompressed`
+  - `p256PublicKeyUncompressed(secretKey: P256SecretKey): P256PublicKeyUncompressed`
+  - `p256EcdsaSignSha256(message: string, secretKey: P256SecretKey): P256Signature`
+  - `p256EcdsaVerifySha256(message: string, publicKey: openArray[byte], publicKeyFormat: PublicKeyFormat, signature: P256Signature): bool`
+  - `p256EcdsaSignPrehash(digest: P256MessageDigest, secretKey: P256SecretKey): P256Signature`
+  - `p256EcdsaVerifyPrehash(digest: P256MessageDigest, publicKey: openArray[byte], publicKeyFormat: PublicKeyFormat, signature: P256Signature): bool`
+  - `p256PrivateKeyToPkcs8Der` / `p256PrivateKeyFromPkcs8Der`
+  - `p256PublicKeyToSpkiDer` / `p256PublicKeyFromSpkiDer`
+- テストは秘密鍵 `0x...01` からの公開鍵導出、NIST/Wycheproof系ECDSAベクトル、署名生成と検証、改ざん署名の失敗、PKCS#8/SPKI DER round-tripを確認する。
+
+### P-384設計
+- P-384は高セキュリティ寄りのPKI/証明書連携向けNIST P-384 ECDSAとして扱う。P-256と同じAPI形状に揃え、ハッシュと長さだけを明確に分ける。
+- P-384秘密鍵は48バイト固定長、公開鍵はSEC1圧縮49バイトと非圧縮97バイト、raw ECDSA署名は96バイト固定長 `(r, s)` とする。
+- Rust側FFI公開API案は以下とする。
+  - `rustcrypto_p384_public_key_from_secret_key(secret_key, secret_key_len, output, output_len, compressed) -> c_int`
+  - `rustcrypto_p384_ecdsa_sign_sha384(message, message_len, secret_key, secret_key_len, output, output_len) -> c_int`
+  - `rustcrypto_p384_ecdsa_verify_sha384(message, message_len, public_key, public_key_len, public_key_format, signature, signature_len) -> c_int`
+  - `rustcrypto_p384_ecdsa_sign_prehash(message_digest, message_digest_len, secret_key, secret_key_len, output, output_len) -> c_int`
+  - `rustcrypto_p384_ecdsa_verify_prehash(message_digest, message_digest_len, public_key, public_key_len, public_key_format, signature, signature_len) -> c_int`
+  - `rustcrypto_p384_private_key_to_pkcs8_der(private_key, private_key_len, output, output_len, written_len) -> c_int`
+  - `rustcrypto_p384_private_key_from_pkcs8_der(der, der_len, output, output_len) -> c_int`
+  - `rustcrypto_p384_public_key_to_spki_der(public_key, public_key_len, public_key_format, output, output_len, written_len) -> c_int`
+  - `rustcrypto_p384_public_key_from_spki_der(der, der_len, output, output_len, output_format) -> c_int`
+- Nim側公開API案はP-256と同型で、名前を `p384...`、型を `P384...` にする。
+- テストはP-384の公開鍵導出、SHA-384本文入力署名・検証、prehash署名・検証、改ざん失敗、PKCS#8/SPKI DER round-tripを確認する。
+
+### X.509設計
+- X.509は証明書DER/PEMの読み取りと、Nim側で扱いやすい最小情報の抽出に範囲を絞る。証明書チェーン検証、時刻検証、名前制約、鍵用途判定、CRL/OCSP、ルート信頼はこのブランチの対象外とする。
+- 最初に公開する情報は、DER正規化、PEMからDERへの変換、DERからPEMへの変換、subject public key info DER抽出、signature algorithm OID抽出、subject/issuer DER抽出、serial number bytes抽出、有効期間の文字列表現またはUnix時刻変換可否を調査して決める。
+- Rust側FFI公開API案は以下とする。
+  - `rustcrypto_x509_cert_validate_der(der, der_len) -> c_int`
+  - `rustcrypto_x509_cert_from_pem(pem, pem_len, output, output_len, written_len) -> c_int`
+  - `rustcrypto_x509_cert_to_pem(der, der_len, output, output_len, written_len) -> c_int`
+  - `rustcrypto_x509_cert_subject_public_key_info_der(der, der_len, output, output_len, written_len) -> c_int`
+  - `rustcrypto_x509_cert_signature_algorithm_oid(der, der_len, output, output_len, written_len) -> c_int`
+  - `rustcrypto_x509_cert_subject_der(der, der_len, output, output_len, written_len) -> c_int`
+  - `rustcrypto_x509_cert_issuer_der(der, der_len, output, output_len, written_len) -> c_int`
+- X.509の公開鍵検証は、証明書からSPKI DERを取り出し、P-256/P-384/RSAのSPKI読み込みAPIへ渡す形を基本にする。X.509モジュール自体に署名検証ロジックを抱え込まない。
+- Nim側公開APIは `x509CertValidateDer`、`x509CertFromPem`、`x509CertToPem`、`x509CertSubjectPublicKeyInfoDer` などのバイト列APIを基本にする。高度な構造体化は、必要フィールドとエンコード方針が安定してから追加する。
+- テストは既知の自己署名証明書DER/PEM、PEM round-trip、不正DERの失敗、SPKI抽出結果を曲線/RSA公開鍵APIで読めることを確認する。
+
+### RSA署名設計
+- RSA署名は既存PKIや古いシステムとの互換を目的とする。新規用途ではRSA-PSS SHA-256を優先し、PKCS#1 v1.5署名は互換用途として明示的な関数名にする。
+- RSA鍵は可変長であり、Nim公開型は固定長配列ではなくDERバイト列を基本にする。秘密鍵はPKCS#8 DER、公開鍵はSPKI DERを通常入力とし、必要に応じてPKCS#1 DER対応を別APIで追加する。
+- RSA署名の出力長は鍵サイズに依存するため、出力バッファと `written_len` を使う。検証側は署名バイト列の長さを受け取り、鍵サイズと合わない場合は不正署名として扱う。
+- Rust側FFI公開API案は以下とする。
+  - `rustcrypto_rsa_private_key_from_pkcs8_der(der, der_len) -> c_int` は作らず、署名・復号APIにDERを直接渡すone-shot設計を基本にする
+  - `rustcrypto_rsa_public_key_from_spki_der(der, der_len) -> c_int` は作らず、検証・暗号化APIにDERを直接渡すone-shot設計を基本にする
+  - `rustcrypto_rsa_pss_sign_sha256(message, message_len, private_key_der, private_key_der_len, output, output_len, written_len) -> c_int`
+  - `rustcrypto_rsa_pss_verify_sha256(message, message_len, public_key_der, public_key_der_len, signature, signature_len) -> c_int`
+  - `rustcrypto_rsa_pkcs1v15_sign_sha256(message, message_len, private_key_der, private_key_der_len, output, output_len, written_len) -> c_int`
+  - `rustcrypto_rsa_pkcs1v15_verify_sha256(message, message_len, public_key_der, public_key_der_len, signature, signature_len) -> c_int`
+  - `rustcrypto_rsa_private_key_to_pkcs8_der(...)` と `rustcrypto_rsa_public_key_to_spki_der(...)` は、raw RSA部品入力の設計が必要になるため初期実装の対象外とする
+- PSSのsalt長は、まずRustCrypto `rsa` crateの標準的なSHA-256 PSS signing/verifying keyの挙動に合わせる。相互運用上salt長指定が必要と判明した場合のみ、`salt_len` 引数付きの別APIを追加する。
+- RNGが必要な署名APIはRust側内部でOS乱数を使う。依存は `rand_core` の `OsRng` または互換の `rand` を調査して採用する。FFI越しに乱数バッファを渡すAPIは初期実装では作らない。
+- Nim側公開API案は `rsaPssSignSha256`、`rsaPssVerifySha256`、`rsaPkcs1v15SignSha256`、`rsaPkcs1v15VerifySha256` とし、鍵は `openArray[byte]` のDER入力を受ける。
+- テストはRFC 8017系またはOpenSSLで生成した既知鍵による署名・検証、改ざんメッセージ、改ざん署名、不正鍵DERを確認する。
+
+### RSA公開鍵暗号化設計
+- RSA公開鍵暗号化は互換用途であり、Bitcoin/Ethereum/Lightningの中核ではない。基本APIはRSA-OAEP SHA-256暗号化・復号を優先する。
+- PKCS#1 v1.5暗号化はレガシー互換用として扱う。実装する場合は関数名に `pkcs1v15` を含め、READMEでも推奨ではなく互換用途であることを明記する。
+- RSA暗号文長は鍵サイズに等しい。平文最大長はパディングと鍵サイズに依存するため、Rust側でcrateのエラーを整数エラーコードへ変換する。
+- Rust側FFI公開API案は以下とする。
+  - `rustcrypto_rsa_oaep_sha256_encrypt(plaintext, plaintext_len, public_key_der, public_key_der_len, label, label_len, output, output_len, written_len) -> c_int`
+  - `rustcrypto_rsa_oaep_sha256_decrypt(ciphertext, ciphertext_len, private_key_der, private_key_der_len, label, label_len, output, output_len, written_len) -> c_int`
+  - `rustcrypto_rsa_pkcs1v15_encrypt(plaintext, plaintext_len, public_key_der, public_key_der_len, output, output_len, written_len) -> c_int`
+  - `rustcrypto_rsa_pkcs1v15_decrypt(ciphertext, ciphertext_len, private_key_der, private_key_der_len, output, output_len, written_len) -> c_int`
+- OAEP labelは `label_len == 0 && label == NULL` を許容する。`label_len > 0 && label == NULL` は `RUSTCRYPTO_ERR_NULL_INPUT_WITH_DATA` とする。
+- Nim側公開API案は `rsaOaepSha256Encrypt`、`rsaOaepSha256Decrypt`、`rsaPkcs1v15Encrypt`、`rsaPkcs1v15Decrypt` とし、戻り値は `seq[byte]` とする。
+- テストは暗号化・復号round-trip、labelあり/なし、異なるlabelでの復号失敗、改ざん暗号文の復号失敗、短い出力バッファ、不正鍵DERを確認する。
+
+### README更新方針
+- READMEの開発優先順位25番から29番は、実装とテストが完了した項目だけ `[x]` に変更する。
+- 提供APIにはP-256/P-384/RSA/X.509を用途別に追記し、RSA-PSS/OAEPを基本、PKCS#1 v1.5系を互換用途として書き分ける。
+- テストベクトルにはP-256/P-384 ECDSA、X.509 DER/PEM、RSA-PSS、RSA PKCS#1 v1.5署名、RSA-OAEP、必要に応じてRSA PKCS#1 v1.5暗号化を追記する。
