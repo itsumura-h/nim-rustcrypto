@@ -2,7 +2,7 @@
 
 RustCrypto: https://github.com/RustCrypto
 
-RustCrypto を Nim から安全に呼び出すための FFI ラッパーです。現時点では SHA-256、HMAC-SHA256、HKDF-SHA256、PBKDF2-HMAC-SHA256、scrypt、Argon2id、PHC 文字列の検証・正規化、AES-256-GCM、AES-256-GCM-SIV、BLAKE2b-512、BLAKE2s-256、secp256k1 公開鍵導出、ECDSA 署名・検証、SHA-256 / SHA3-256 / Keccak-256 を使う secp256k1 ECDSA 署名・検証、`nim_rustcrypto/algorithm/schnorr.nim` から使う secp256k1 Schnorr の低水準公開鍵導出・署名・検証、Ed25519 の公開鍵導出・署名・検証、PKCS#8/SPKI 変換と PEM 変換、P-256 / P-384 ECDSA、X.509 証明書の最小読み取り、RSA-PSS 署名、RSA PKCS#1 v1.5 署名、RSA-OAEP 暗号化、RSA PKCS#1 v1.5 暗号化を提供しています。Schnorr は ECDSA とは別形式で、公開鍵と署名は互換ではありません。
+RustCrypto を Nim から安全に呼び出すための FFI ラッパーです。`nim_rustcrypto/algorithm/*` は SHA-256、HMAC-SHA256、HKDF-SHA256、PBKDF2-HMAC-SHA256、scrypt、Argon2id、PHC 文字列の検証・正規化、AES-256-GCM、AES-256-GCM-SIV、BLAKE2b-512、BLAKE2s-256、secp256k1 公開鍵導出、ECDSA 署名・検証、SHA-256 / SHA3-256 / Keccak-256 を使う secp256k1 ECDSA 署名・検証、`nim_rustcrypto/algorithm/schnorr.nim` から使う secp256k1 Schnorr の低水準公開鍵導出・署名・検証、Ed25519 の公開鍵導出・署名・検証、PKCS#8/SPKI 変換と PEM 変換、P-256 / P-384 ECDSA、X.509 証明書の最小読み取り、RSA-PSS 署名、RSA PKCS#1 v1.5 署名、RSA-OAEP 暗号化、RSA PKCS#1 v1.5 暗号化の低水準 API を提供します。その上に `nim_rustcrypto/bitcoin`、`nim_rustcrypto/lightning`、`nim_rustcrypto/ethereum`、`nim_rustcrypto/jwt` の高水準 API を重ね、プロトコル別の前処理や署名形式変換をまとめて扱えるようにしています。Schnorr は ECDSA とは別形式で、公開鍵と署名は互換ではありません。
 
 ## 開発優先順位
 
@@ -176,6 +176,19 @@ nimble test -y
 - `rsaPkcs1v15SignSha256`, `rsaPkcs1v15VerifySha256`
 - `rsaOaepSha256Encrypt`, `rsaOaepSha256Decrypt`
 - `rsaPkcs1v15Encrypt`, `rsaPkcs1v15Decrypt`
+
+## 高水準 API
+
+- `bitcoin`: Bitcoin Signed Message、BIP340 tagged hash、Taproot 向け署名補助
+- `lightning`: BOLT 11 invoice の hash と recoverable ECDSA 署名補助
+- `ethereum`: Keccak-256、アドレス導出、EIP-191/EIP-712 の署名補助
+- `jwt`: JWS Compact Serialization の `HS256`、`ES256`、`EdDSA`、`RS256`、`PS256`
+
+注意:
+
+- `jwt` は `alg: none` を受け付けません
+- `bitcoin` / `lightning` / `ethereum` はフルノード、ウォレット、トランザクション完全実装ではありません
+- `jwt` は JSON の正規化、claim 検証、JWKS 取得を行いません
 
 ## テストベクトル
 

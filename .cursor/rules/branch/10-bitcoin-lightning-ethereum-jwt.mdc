@@ -1,0 +1,189 @@
+---
+description: 10-bitcoin-lightning-ethereum-jwtブランチでの開発時に読み込む
+alwaysApply: false
+---
+10-bitcoin-lightning-ethereum-jwtブランチルール
+===
+
+このブランチで実装することは以下の通りです。
+- Nim側テストのうち、Rust FFIの呼び出しシナリオを検証する低レベルテストを `src/nim-rustcrypto/tests/algorithm/` 配下へ移動する
+- テスト移動に伴い、相対import、共通fixture、`config.nims` から見たパスを修正する
+- `src/nim-rustcrypto/src/nim_rustcrypto/bitcoin.nim` を追加し、Bitcoinで現実的に使う高レベルAPIを提供する
+- `src/nim-rustcrypto/src/nim_rustcrypto/lightning.nim` を追加し、Lightning Networkで現実的に使う高レベルAPIを提供する
+- `src/nim-rustcrypto/src/nim_rustcrypto/ethereum.nim` を追加し、Ethereumで現実的に使う高レベルAPIを提供する
+- `src/nim-rustcrypto/src/nim_rustcrypto/jwt.nim` を追加し、JWT/JWSで現実的に使う高レベルAPIを提供する
+- `src/nim-rustcrypto/tests/` 直下に、上記4つの高レベルAPIのユースケーステストを追加する
+
+このブランチでは、既存の `nim_rustcrypto/algorithm/*` を暗号プリミティブ別の低レベルAPIとして維持し、その上に `bitcoin`、`lightning`、`ethereum`、`jwt` のユースケース別APIを重ねる。高レベルAPIはアプリケーションが直接使う入口であり、呼び出し側がハッシュ前処理、署名対象バイト列、署名形式変換、base64url、プロトコル別prefixなどを毎回手で組み立てなくてよい形にする。
+
+このブランチでは、Bitcoinフルノード、ウォレット、トランザクションビルダー、Scriptインタプリタ、PSBT完全実装、Lightningノード、BOLT 4 onion packet、BOLT 7 gossip、BOLT 12 offer、Ethereum ABI/RLP/transaction完全実装、JSONパーサ、JWKS取得、JWE、OAuth/OIDC検証全体は対象外とする。対象は既存RustCrypto FFIで安全に提供できる署名、検証、ハッシュ、MAC、エンコード補助を組み合わせた薄い高レベルAPIに絞る。
+
+## 進捗
+- [x] `.cursor/rules/project.mdc` を読み、FFI、ビルド、TDD、依存追加ルールを確認する
+- [x] `.cursor/rules/branch.mdc` を読み、ブランチルールの形式と記録方針を確認する
+- [x] 現在ブランチ `10-bitcoin-lightning-ethereum-jwt` に対応する既存ブランチルールがないことを確認する
+- [x] 既存のNim低レベルAPIとテスト配置を確認する
+- [x] Bitcoin、Lightning、Ethereum、JWT/JWSの標準仕様を調査する
+- [x] 実装方針と設計をこのブランチルールに記録する
+- [ ] `src/nim-rustcrypto/tests/algorithm/` を作成し、低レベルFFIシナリオのテストを移動する
+- [ ] 移動した低レベルテストの `import ./utils` などを新しい階層に合わせて修正する
+- [ ] `tests/config.nims` やnimble test対象が必要に応じて `tests/algorithm/*.nim` を拾えることを確認する
+- [ ] `src/nim-rustcrypto/src/nim_rustcrypto/bitcoin.nim` を追加する
+- [ ] `src/nim-rustcrypto/src/nim_rustcrypto/lightning.nim` を追加する
+- [ ] `src/nim-rustcrypto/src/nim_rustcrypto/ethereum.nim` を追加する
+- [ ] `src/nim-rustcrypto/src/nim_rustcrypto/jwt.nim` を追加する
+- [ ] `src/nim-rustcrypto/tests/test_bitcoin.nim` にBitcoin高レベルAPIのテストを追加する
+- [ ] `src/nim-rustcrypto/tests/test_lightning.nim` にLightning高レベルAPIのテストを追加する
+- [ ] `src/nim-rustcrypto/tests/test_ethereum.nim` にEthereum高レベルAPIのテストを追加する
+- [ ] `src/nim-rustcrypto/tests/test_jwt.nim` にJWT/JWS高レベルAPIのテストを追加する
+- [ ] 必要に応じてREADMEへ高レベルAPIの入口と使い分けを追記する
+- [ ] Rust/Nimの既存テストを壊していないことを確認する
+
+## 参考資料
+- RustCrypto: https://github.com/RustCrypto
+- Bitcoin BIP 137: Signatures of Messages using Private Keys: https://bips.dev/137/
+- Bitcoin BIP 143: Transaction Signature Verification for Version 0 Witness Program: https://bips.dev/143/
+- Bitcoin BIP 340: Schnorr Signatures for secp256k1: https://bips.xyz/0340
+- Bitcoin BIP 341: Taproot: https://bips.xyz/341
+- Bitcoin BIP 173: Base32 address format for native v0-16 witness outputs: https://bips.dev/173/
+- Bitcoin BIP 350: Bech32m format for v1+ witness addresses: https://bips.dev/350/
+- Lightning BOLT 11: Invoice Protocol for Lightning Payments: https://github.com/lightning/bolts/blob/master/11-payment-encoding.md
+- Ethereum EIP-155: Simple replay attack protection: https://eips.ethereum.org/EIPS/eip-155
+- Ethereum EIP-191: Signed Data Standard: https://eips.ethereum.org/EIPS/eip-191
+- Ethereum EIP-712: Typed structured data hashing and signing: https://eips.ethereum.org/EIPS/eip-712
+- RFC 7515: JSON Web Signature: https://www.rfc-editor.org/rfc/rfc7515
+- RFC 7518: JSON Web Algorithms: https://www.rfc-editor.org/rfc/rfc7518
+- RFC 7519: JSON Web Token: https://www.rfc-editor.org/rfc/rfc7519
+- RFC 8037: CFRG Elliptic Curve Diffie-Hellman and Signatures in JOSE: https://www.rfc-editor.org/rfc/rfc8037
+- Nim Manual: https://nim-lang.org/docs/manual.html
+- Nim unittest module: https://nim-lang.org/docs/unittest.html
+
+## 調査結果・設計まとめ
+- 2026-05-03時点の調査では、このブランチの4領域は新しい暗号プリミティブをRust FFIへ追加するより、既存の `sha256`、`sha3`、`hmac`、`secp256k1`、`schnorr`、`p256`、`ed25519`、`rsa` などを組み合わせる高レベルAPIとして実装するのが適切である。
+- `nim_rustcrypto/algorithm/*` は低レベルAPIとして維持する。これらはFFI境界、固定長バッファ、エラーコード変換、プリミティブ別のテストベクトルを扱う層であり、プロトコル固有の意味を持たせない。
+- `nim_rustcrypto/bitcoin`、`nim_rustcrypto/lightning`、`nim_rustcrypto/ethereum`、`nim_rustcrypto/jwt` は高レベルAPIとして追加する。これらはプロトコル別の署名対象生成、検証対象生成、エンコード補助、署名形式変換を扱う層とする。
+- 高レベルAPIはRust FFIを直接importしない。必ず `nim_rustcrypto/algorithm/*` の公開APIを経由して呼び出す。これにより、FFIリンク指定、`ptr uint8`、`csize_t`、整数エラーコードをアプリ側へ漏らさない。
+- 高レベルAPIのテストは `src/nim-rustcrypto/tests/` 直下に置く。ファイル名は `test_bitcoin.nim`、`test_lightning.nim`、`test_ethereum.nim`、`test_jwt.nim` とし、ユースケース単位で読む。
+- 既存の低レベルテストは `src/nim-rustcrypto/tests/algorithm/` 配下へ移動する。ファイル名は原則維持し、`test_sha256.nim`、`test_secp256k1.nim` などのままにする。
+- `tests/utils.nim` は低レベルテストと高レベルテストの両方から使う共通ヘルパーとして `tests/` 直下に残す。移動後の低レベルテストは `import ../utils` を使う。
+- `tests/config.nims` はテストランナーの実行ディレクトリとimportパスに影響するため、移動後に `nim` / `nimble` から `tests/algorithm/*.nim` を個別実行できるか確認する。
+- テスト移動は機械的な配置変更であり、低レベルテストの検証内容は変更しない。失敗した場合はimportパス、fixtureパス、テストランナー設定の修正に限定する。
+- 高レベルAPIは「現実的な利用で事故りやすい前処理を閉じ込める」ことを目的にする。完全なプロトコル実装ではなく、署名や検証に必要な暗号学的な境界を明確にする。
+- 署名生成APIは秘密鍵を受け取り、署名対象のプロトコル固有hashを内部で作る。署名検証APIは公開鍵、メッセージ、署名を受け取り、プロトコル固有の検証対象を内部で再構成する。
+- 署名形式がプロトコルごとに異なる場合は、型名で区別する。Bitcoin/Ethereum/Lightningのsecp256k1 ECDSAは、raw 64バイト、DER、recoverable 65バイトを混同しない。
+- 高レベルAPIで文字列を受ける場合は、プロトコル仕様でUTF-8が求められるものだけ `string` を受ける。任意バイト列の署名対象は `openArray[byte]` を基本にする。
+- verify APIは既存方針に合わせ、暗号学的な検証失敗を `false` として返し、不正な鍵長、不正な署名形式、エンコード不正、未対応アルゴリズムなど呼び出し方の誤りは例外にする。
+- 実装順は、まずテスト整理、次に高レベルAPIの薄い型とヘルパー、最後にユースケーステスト追加とREADME更新とする。Rust側の変更が必要になった場合は、プロジェクトルール `SYW-DEV-001` に戻り、Rust実装、Rustテスト、Rustビルド、Nim実装、Nimテストの順にする。
+
+### テスト再配置設計
+- 移動対象は `src/nim-rustcrypto/tests/test_*.nim` のうち、`nim_rustcrypto/algorithm/*` を直接importし、低レベルFFI procやプリミティブ単体を検証しているものとする。
+- `src/nim-rustcrypto/tests/utils.nim` と `src/nim-rustcrypto/tests/config.nims` は移動しない。
+- 移動後の低レベルテストは `import ../utils` を使う。高レベルテストは引き続き `import ./utils` を使う。
+- テストsuite名は既存名を維持する。ただし将来の読みやすさのため、必要に応じてsuite名だけ `algorithm/sha256` のように階層が分かる名前へ変更してよい。
+- テストランナーがディレクトリ直下のみを対象にしている場合は、`algorithm/*.nim` も実行対象に含める。実装時には `nimble test` の挙動を確認し、必要最小限の設定変更に留める。
+
+### Bitcoin API設計
+- Bitcoinモジュールは、Bitcoin Core互換のメッセージ署名、BIP340 Schnorr署名補助、Taproot向けtagged hash補助、BIP143/BIP341署名hashの部品化を対象にする。
+- 最初の公開APIはトランザクション完全構築ではなく、署名対象hashをすでに持つ呼び出し元、またはメッセージ署名を行いたい呼び出し元に便利な入口から始める。
+- 型案:
+  - `BitcoinMessageSignature* = array[65, byte]`
+  - `BitcoinEcdsaSignature* = Secp256k1Signature`
+  - `BitcoinSchnorrSignature* = SchnorrSignature`
+  - `BitcoinXOnlyPublicKey* = SchnorrPublicKey`
+  - `BitcoinMessageHash* = Sha256Digest`
+  - `BitcoinNetwork* = enum bitcoinMainnet, bitcoinTestnet, bitcoinRegtest`
+- 公開API案:
+  - `bitcoinHash256(data: openArray[byte]): Sha256Digest`
+  - `bitcoinTaggedHash(tag: string; message: openArray[byte]): Sha256Digest`
+  - `bitcoinMessageHash(message: string): Sha256Digest`
+  - `bitcoinSignMessage(message: string; secretKey: Secp256k1SecretKey): BitcoinMessageSignature`
+  - `bitcoinVerifyMessage(message: string; publicKey: Secp256k1CompressedPublicKey; signature: BitcoinMessageSignature): bool`
+  - `bitcoinSignDigestEcdsa(digest: Sha256Digest; secretKey: Secp256k1SecretKey): BitcoinEcdsaSignature`
+  - `bitcoinVerifyDigestEcdsa(digest: Sha256Digest; publicKey: Secp256k1CompressedPublicKey; signature: BitcoinEcdsaSignature): bool`
+  - `bitcoinSignTaprootDigest(digest: Sha256Digest; secretKey: SchnorrSecretKey): BitcoinSchnorrSignature`
+  - `bitcoinVerifyTaprootDigest(digest: Sha256Digest; publicKey: BitcoinXOnlyPublicKey; signature: BitcoinSchnorrSignature): bool`
+- `bitcoinMessageHash` はBitcoin Signed MessageのprefixとCompactSize風の長さエンコードを内部で行い、二重SHA-256を返す。BIP137のアドレス種別別ヘッダ値やbase64表現は、初期実装では署名バイト列APIを優先し、必要に応じて文字列表現APIを後で追加する。
+- `bitcoinTaggedHash` はBIP340/BIP341のtagged hash形式、つまり `SHA256(SHA256(tag) || SHA256(tag) || message)` を実装する。Taprootの細かなsighash構築そのものは初期対象外とし、呼び出し元が署名対象メッセージを作る場合の安全な部品として提供する。
+- BIP143/BIP341の完全なtransaction sighash APIは、トランザクション型、script、amount、sighash flagの設計が必要なため初期実装では対象外とする。追加する場合は `bitcoinTransactionDigestBip143` / `bitcoinTaprootSighash` のように仕様名を含める。
+- テストはBitcoin message hashの既知値、ECDSA digest署名/検証、改ざんメッセージの失敗、BIP340 tagged hash既知値または参照実装との一致、Taproot digest署名/検証を確認する。
+
+### Lightning API設計
+- Lightningモジュールは、BOLT 11 invoice署名・検証の暗号部分と、payment preimage/hash、payment secretなど実運用でよく使う固定長値の補助を対象にする。
+- BOLT 11のbech32全体エンコード/デコード、tagged field完全パーサ、route hint完全実装、feature bits完全実装は初期対象外とする。初期実装では、署名対象バイト列を受け取ってBOLT 11で必要なcompact ECDSA署名を作るAPIを優先する。
+- 型案:
+  - `LightningPaymentPreimage* = array[32, byte]`
+  - `LightningPaymentHash* = Sha256Digest`
+  - `LightningPaymentSecret* = array[32, byte]`
+  - `LightningNodeId* = Secp256k1CompressedPublicKey`
+  - `LightningInvoiceSignature* = array[65, byte]`
+- 公開API案:
+  - `lightningPaymentHash(preimage: LightningPaymentPreimage): LightningPaymentHash`
+  - `lightningNodeId(secretKey: Secp256k1SecretKey): LightningNodeId`
+  - `lightningInvoiceSigningHash(hrp: string; dataPartWithoutSignature: openArray[byte]): Sha256Digest`
+  - `lightningSignInvoice(hrp: string; dataPartWithoutSignature: openArray[byte]; secretKey: Secp256k1SecretKey): LightningInvoiceSignature`
+  - `lightningVerifyInvoice(hrp: string; dataPartWithoutSignature: openArray[byte]; nodeId: LightningNodeId; signature: LightningInvoiceSignature): bool`
+  - `lightningVerifyInvoiceHash(signingHash: Sha256Digest; nodeId: LightningNodeId; signature: LightningInvoiceSignature): bool`
+- BOLT 11では署名対象が「human-readable partのUTF-8 bytes」と「signatureを除いたdata part」を連結し、5bit data partをbyte境界へ0 paddingしたもののSHA-256である。`lightningInvoiceSigningHash` はこの変換済みdata partを受ける形にするか、5bit wordsを受けてpaddingする形にするかを実装時に確定する。
+- BOLT 11署名は64バイト `(R || S)` と1バイトrecovery idの65バイト形式である。既存FFIにrecoverable signature作成やpublic key recoveryがない場合は、まず `n` tagged fieldのnode idを使う検証APIを提供し、recovery idは署名生成側の追加FFIが必要か調査する。
+- 既存 `secp256k1` APIがrecoverable署名を返せない場合、Rust側にrecoverable ECDSA署名APIを追加する必要がある。この場合はプロジェクトルール通りRust側テストから着手する。
+- テストはpayment preimageからpayment hash、invoice signing hash、署名/検証、改ざんdata partの失敗を確認する。BOLT 11の完全なサンプルinvoiceを使う場合は、復号済みのhrp/data/signatureをfixtureとして保持する。
+
+### Ethereum API設計
+- Ethereumモジュールは、Keccak-256、Ethereum address導出、EIP-191 personal_sign、EIP-712の最終digest署名、EIP-155のchain id付き署名値補助を対象にする。
+- RLP transaction完全構築、ABI encoder、Solidity型システム完全実装、EIP-712 typed data JSON完全パーサは初期対象外とする。EIP-712は `domainSeparator` と `structHash` を呼び出し元が計算済みの場合の最終digest作成から始める。
+- 型案:
+  - `EthereumAddress* = array[20, byte]`
+  - `EthereumHash* = array[32, byte]`
+  - `EthereumSignature* = object r*: array[32, byte]; s*: array[32, byte]; v*: byte`
+  - `EthereumChainId* = uint64`
+- 公開API案:
+  - `ethereumKeccak256(data: openArray[byte]): EthereumHash`
+  - `ethereumAddress(publicKey: Secp256k1UncompressedPublicKey): EthereumAddress`
+  - `ethereumPersonalMessageHash(message: string): EthereumHash`
+  - `ethereumSignPersonalMessage(message: string; secretKey: Secp256k1SecretKey; chainId: EthereumChainId = 0): EthereumSignature`
+  - `ethereumVerifyPersonalMessage(message: string; publicKey: Secp256k1UncompressedPublicKey; signature: EthereumSignature): bool`
+  - `ethereumTypedDataHash(domainSeparator: EthereumHash; structHash: EthereumHash): EthereumHash`
+  - `ethereumSignTypedDataHash(domainSeparator: EthereumHash; structHash: EthereumHash; secretKey: Secp256k1SecretKey; chainId: EthereumChainId = 0): EthereumSignature`
+  - `ethereumVerifyTypedDataHash(domainSeparator: EthereumHash; structHash: EthereumHash; publicKey: Secp256k1UncompressedPublicKey; signature: EthereumSignature): bool`
+- `ethereumPersonalMessageHash` はEIP-191の `"\x19Ethereum Signed Message:\n" || decimal(len(message)) || message` をKeccak-256する。
+- `ethereumTypedDataHash` はEIP-712の `keccak256("\x19\x01" || domainSeparator || structHash)` を実装する。
+- `ethereumAddress` はSEC1非圧縮公開鍵の先頭 `0x04` を除いた64バイトをKeccak-256し、末尾20バイトを返す。EIP-55 checksum文字列は初期実装では補助APIとして追加してよいが、必須ではない。
+- Ethereum署名にはrecoverable ECDSA署名と `v` の扱いが必要である。既存FFIにrecoverable署名がない場合はRust側追加が必要になる。`chainId == 0` はlegacy/personal_sign向けに `v` を27/28相当にし、`chainId > 0` の場合はEIP-155の `v = yParity + 35 + chainId * 2` を返す方針とする。
+- テストはEIP-191 personal message hashの既知値、Ethereum address導出の既知値、EIP-712最終digest、署名/検証、改ざんメッセージの失敗、chain id付き `v` 計算を確認する。
+
+### JWT/JWS API設計
+- JWTモジュールはJWS Compact Serializationの署名・検証を対象にする。JWE、JWKS取得、HTTP経由の鍵ローテーション、OIDC claim検証全体は対象外とする。
+- 初期対応アルゴリズムは既存プリミティブで安定して提供できる `HS256`、`ES256`、`EdDSA`、`RS256`、`PS256` を候補にする。最小実装では `HS256` と `ES256` を優先し、既存APIの完成度に合わせて `EdDSA`、`RS256`、`PS256` を追加する。
+- `alg: none` は実装しない。検証APIで `none` を受けた場合は未対応アルゴリズムとして例外にする。
+- 型案:
+  - `JwtAlgorithm* = enum jwtHS256, jwtES256, jwtEdDSA, jwtRS256, jwtPS256`
+  - `JwtCompact* = string`
+  - `JwtHeaderJson* = string`
+  - `JwtClaimsJson* = string`
+  - `JwtSecret* = seq[byte]`
+- 公開API案:
+  - `jwtBase64UrlEncode(data: openArray[byte]): string`
+  - `jwtBase64UrlDecode(data: string): seq[byte]`
+  - `jwtSigningInput(headerJson: string; claimsJson: string): string`
+  - `jwtSignHS256(headerJson: string; claimsJson: string; secret: openArray[byte]): JwtCompact`
+  - `jwtVerifyHS256(token: JwtCompact; secret: openArray[byte]): bool`
+  - `jwtSignES256(headerJson: string; claimsJson: string; secretKey: P256SecretKey): JwtCompact`
+  - `jwtVerifyES256(token: JwtCompact; publicKey: P256CompressedPublicKey | P256UncompressedPublicKey): bool`
+  - `jwtSignEdDSA(headerJson: string; claimsJson: string; secretKey: Ed25519SecretKey): JwtCompact`
+  - `jwtVerifyEdDSA(token: JwtCompact; publicKey: Ed25519PublicKey): bool`
+  - `jwtSignRS256(headerJson: string; claimsJson: string; privateKeyDer: openArray[byte]): JwtCompact`
+  - `jwtVerifyRS256(token: JwtCompact; publicKeyDer: openArray[byte]): bool`
+  - `jwtSignPS256(headerJson: string; claimsJson: string; privateKeyDer: openArray[byte]): JwtCompact`
+  - `jwtVerifyPS256(token: JwtCompact; publicKeyDer: openArray[byte]): bool`
+- JWS署名対象は `base64url(headerJson) || "." || base64url(claimsJson)` とする。JSONの正規化やclaim検証は呼び出し元責務とし、このモジュールは与えられたJSON文字列をそのままbase64url化する。
+- ES256署名はRFC 7518に従い、P-256 ECDSA署名をDERではなく64バイトのraw `(R || S)` としてJWS signatureへ入れる。既存 `p256EcdsaSignSha256` がraw署名を返すため、この用途に合う。
+- HS256はHMAC-SHA256を使い、secret長が短すぎる場合は実装時に警告的な例外にするか、RFC上の最小要件を調査して方針を確定する。
+- EdDSAはRFC 8037の `EdDSA` algとして扱う。既存Ed25519 APIがmessage本文署名と検証を提供している場合に追加する。
+- RS256はRSASSA-PKCS1-v1_5 SHA-256、PS256はRSASSA-PSS SHA-256として扱う。既存RSA APIの署名形式がJWS期待値に合うことを確認してから公開する。
+- 検証APIはtokenのcompact形式を3要素に分割し、headerの `alg` と呼び出しAPIのアルゴリズムが一致することを確認する。`alg` 差し替え攻撃を避けるため、token内の `alg` だけで検証アルゴリズムを自動選択しない。
+- テストはRFC 7515/7518の考え方に沿ったcompact JWS生成、base64url paddingなしエンコード、HS256既知値、ES256署名/検証、`alg` 不一致拒否、署名改ざん拒否を確認する。
+
+### README更新方針
+- READMEでは、`nim_rustcrypto/algorithm/*` はプリミティブ別低レベルAPI、`nim_rustcrypto/{bitcoin,lightning,ethereum,jwt}` はユースケース別高レベルAPIであることを明記する。
+- 実装済みの高レベルAPIだけを使用例に載せる。未実装または設計中のAPIはREADMEの利用例に載せない。
+- セキュリティ上の注意として、JWTの `alg: none` 非対応、Ethereum EIP-712 JSON完全パース非対応、Bitcoin/Lightningの完全ウォレット/ノード機能非対応を明記する。
