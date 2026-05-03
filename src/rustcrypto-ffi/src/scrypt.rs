@@ -4,8 +4,8 @@ use crate::{
 };
 use ::scrypt::{Params, scrypt as scrypt_derive};
 use core::ffi::c_int;
-use std::slice;
 use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::slice;
 
 const SCRYPT_MAX_DERIVED_KEY_LEN: u64 = (u32::MAX as u64) * 32;
 

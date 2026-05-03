@@ -1,4 +1,7 @@
-use crate::{HKDF_SHA256_MAX_OKM_LEN, HKDF_SHA256_PRK_LEN, RUSTCRYPTO_ERR_INVALID_LENGTH, RUSTCRYPTO_ERR_INVALID_PRK_LENGTH, RUSTCRYPTO_ERR_NULL_OUTPUT, RUSTCRYPTO_OK};
+use crate::{
+    HKDF_SHA256_MAX_OKM_LEN, HKDF_SHA256_PRK_LEN, RUSTCRYPTO_ERR_INVALID_LENGTH,
+    RUSTCRYPTO_ERR_INVALID_PRK_LENGTH, RUSTCRYPTO_ERR_NULL_OUTPUT, RUSTCRYPTO_OK,
+};
 use ::hkdf::Hkdf;
 use ::sha2::Sha256;
 use core::ffi::c_int;
@@ -10,7 +13,9 @@ fn hkdf_optional_slice<'a>(input: *const u8, input_len: usize) -> Result<Option<
     } else if input.is_null() {
         Err(crate::RUSTCRYPTO_ERR_NULL_INPUT_WITH_DATA)
     } else {
-        Ok(Some(unsafe { core::slice::from_raw_parts(input, input_len) }))
+        Ok(Some(unsafe {
+            core::slice::from_raw_parts(input, input_len)
+        }))
     }
 }
 
@@ -185,7 +190,9 @@ pub extern "C" fn rustcrypto_hkdf_sha256_derive(
     output_len: usize,
 ) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
-        hkdf_derive_impl(salt, salt_len, ikm, ikm_len, info, info_len, output, output_len)
+        hkdf_derive_impl(
+            salt, salt_len, ikm, ikm_len, info, info_len, output, output_len,
+        )
     }))
     .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
 }
@@ -193,7 +200,10 @@ pub extern "C" fn rustcrypto_hkdf_sha256_derive(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{HKDF_SHA256_MAX_OKM_LEN, HKDF_SHA256_PRK_LEN, RUSTCRYPTO_ERR_INVALID_LENGTH, RUSTCRYPTO_ERR_INVALID_PRK_LENGTH, RUSTCRYPTO_ERR_NULL_INPUT_WITH_DATA, RUSTCRYPTO_OK};
+    use crate::{
+        HKDF_SHA256_MAX_OKM_LEN, HKDF_SHA256_PRK_LEN, RUSTCRYPTO_ERR_INVALID_LENGTH,
+        RUSTCRYPTO_ERR_INVALID_PRK_LENGTH, RUSTCRYPTO_ERR_NULL_INPUT_WITH_DATA, RUSTCRYPTO_OK,
+    };
 
     fn digest_hex(bytes: &[u8]) -> String {
         const HEX_DIGITS: &[u8; 16] = b"0123456789abcdef";

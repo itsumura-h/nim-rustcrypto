@@ -1,0 +1,141 @@
+import unittest
+
+import ./utils
+import nim_rustcrypto/algorithm/schnorr
+
+proc basePointSchnorrSecretKey(): SchnorrSecretKey =
+  result = default(SchnorrSecretKey)
+  result[Secp256k1SecretKeyLen - 1] = 1
+
+suite "schnorr":
+  test "public key derivation matches the expected x-only encoding":
+    let secretKey = basePointSchnorrSecretKey()
+    let publicKey = schnorrPublicKey(secretKey)
+
+    check hexOf(publicKey) ==
+      "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+
+  test "sign and verify accept the message text":
+    let secretKey = basePointSchnorrSecretKey()
+    let publicKey = schnorrPublicKey(secretKey)
+    let signature = schnorrSign("abc", secretKey)
+
+    check schnorrVerify("abc", publicKey, signature)
+    check not schnorrVerify("abd", publicKey, signature)
+
+  test "raw signing accepts empty input via null pointer":
+    let secretKey = basePointSchnorrSecretKey()
+    var signature: SchnorrSignature
+
+    let status = schnorrSignRaw(
+      nil,
+      0,
+      bytesPtr(secretKey),
+      csize_t(secretKey.len),
+      cast[ptr uint8](addr signature[0]),
+      csize_t(signature.len),
+    )
+
+    check status == RustCryptoOk
+
+  test "verify rejects a tampered signature":
+    let secretKey = basePointSchnorrSecretKey()
+    let publicKey = schnorrPublicKey(secretKey)
+    var signature = schnorrSign("abc", secretKey)
+    signature[0] = signature[0] xor 0x01
+
+    check not schnorrVerify("abc", publicKey, signature)
+
+  test "raw sign rejects malformed inputs":
+    let secretKey = basePointSchnorrSecretKey()
+    var signature: SchnorrSignature
+
+    check schnorrSignRaw(
+      bytesPtr("abc"),
+      csize_t(3),
+      bytesPtr(secretKey),
+      csize_t(secretKey.len - 1),
+      cast[ptr uint8](addr signature[0]),
+      csize_t(signature.len),
+    ) == RustCryptoErrInvalidSecretKey
+
+    check schnorrSignRaw(
+      bytesPtr("abc"),
+      csize_t(3),
+      nil,
+      csize_t(secretKey.len),
+      cast[ptr uint8](addr signature[0]),
+      csize_t(signature.len),
+    ) == RustCryptoErrNullInputWithData
+
+    check schnorrSignRaw(
+      bytesPtr("abc"),
+      csize_t(3),
+      bytesPtr(secretKey),
+      csize_t(secretKey.len),
+      nil,
+      csize_t(signature.len),
+    ) == RustCryptoErrNullOutput
+
+    var shortOutput = newSeq[byte](SchnorrSignatureLen - 1)
+    check schnorrSignRaw(
+      bytesPtr("abc"),
+      csize_t(3),
+      bytesPtr(secretKey),
+      csize_t(secretKey.len),
+      bytesPtr(shortOutput),
+      csize_t(shortOutput.len),
+    ) == RustCryptoErrOutputTooShort
+
+  test "raw verify rejects malformed inputs":
+    let secretKey = basePointSchnorrSecretKey()
+    let publicKey = schnorrPublicKey(secretKey)
+    let signature = schnorrSign("abc", secretKey)
+
+    check schnorrVerifyRaw(
+      nil,
+      1,
+      bytesPtr(publicKey),
+      csize_t(publicKey.len),
+      bytesPtr(signature),
+      csize_t(signature.len),
+    ) == RustCryptoErrNullInputWithData
+
+    check schnorrVerifyRaw(
+      bytesPtr("abc"),
+      csize_t(3),
+      nil,
+      csize_t(publicKey.len),
+      bytesPtr(signature),
+      csize_t(signature.len),
+    ) == RustCryptoErrNullInputWithData
+
+    var shortPublicKey = newSeq[byte](SchnorrPublicKeyLen - 1)
+    check schnorrVerifyRaw(
+      bytesPtr("abc"),
+      csize_t(3),
+      bytesPtr(shortPublicKey),
+      csize_t(shortPublicKey.len),
+      bytesPtr(signature),
+      csize_t(signature.len),
+    ) == RustCryptoErrInvalidPublicKeyFormat
+
+    var malformedPublicKey: SchnorrPublicKey
+    check schnorrVerifyRaw(
+      bytesPtr("abc"),
+      csize_t(3),
+      bytesPtr(malformedPublicKey),
+      csize_t(malformedPublicKey.len),
+      bytesPtr(signature),
+      csize_t(signature.len),
+    ) == RustCryptoErrInvalidPublicKeyFormat
+
+    var shortSignature = newSeq[byte](SchnorrSignatureLen - 1)
+    check schnorrVerifyRaw(
+      bytesPtr("abc"),
+      csize_t(3),
+      bytesPtr(publicKey),
+      csize_t(publicKey.len),
+      bytesPtr(shortSignature),
+      csize_t(shortSignature.len),
+    ) == RustCryptoErrInvalidSignature

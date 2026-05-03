@@ -1,0 +1,87 @@
+---
+description: 7-shnorrブランチでの開発時に読み込む
+alwaysApply: false
+---
+7-shnorrブランチルール
+===
+
+このブランチで実装することは以下の通りです。
+- Rust側でSchnorr署名処理を行うライブラリを利用し、C ABI互換FFIとして公開する
+- Nim側では `nim_rustcrypto/algorithm/schnorr.nim` を追加し、algorithm配下の低レベル実装として利用できるようにする
+- Nim側のSchnorr実装は、既存のalgorithm配下モジュールと同様に、Rust FFI呼び出し、型、エラー処理を閉じ込める
+- 既存のsecp256k1 ECDSA API、DER API、ハッシュAPIを壊さずにSchnorr APIを追加する
+- BIP340/Taprootへの準拠はこのブランチの必須要件にしない
+
+このブランチでは、ユーザー指定の "shnorr" は "Schnorr" 署名を指すものとして扱う。
+対象はNim側でalgorithm配下から呼べるSchnorr署名の低レベル実装であり、MuSig、FROST、アダプタ署名、集約署名、Taproot tweak、script path/key path制御、DER変換はこのブランチの対象外とする。
+
+## 進捗
+- [x] `.cursor/rules/project.mdc` を読み、FFI、ビルド、TDD、依存追加ルールを確認する
+- [x] `.cursor/rules/branch.mdc` を読み、ブランチルールの形式と記録方針を確認する
+- [x] 現在ブランチ `7-shnorr` に対応する既存ブランチルールがないことを確認する
+- [x] RustでSchnorr署名を扱う候補ライブラリを調査する
+- [x] 既存依存の `k256` が `schnorr` featureを持ち、現在の依存解決でも有効であることを確認する
+- [x] 実装方針と設計をこのブランチルールに記録する
+- [x] 実装開始時に、`k256` の依存指定は現状維持でよいと判断した
+- [x] 依存指定は変更せず、既存の `k256 = "0.13.4"` をそのまま利用する
+- [x] Rust側で公開するFFI関数名、引数、戻り値、エラーコードを最終確定する
+- [x] Rust側にSchnorr公開鍵導出APIを実装する
+- [x] Rust側にSchnorr署名生成APIを実装する
+- [x] Rust側にSchnorr署名検証APIを実装する
+- [x] Rust側でNULLポインタ、不正秘密鍵、不正公開鍵、不正署名、短い出力バッファ、検証失敗を整数エラーコードで返す
+- [x] Rust側のpanicをFFI境界の外へ漏らさない
+- [x] Rust側テストで採用ライブラリの仕様に合う既知ベクトルまたは生成・検証・改ざん失敗を確認する
+- [x] Rustでビルドし、`librust_crypto_ffi.a` を出力する
+- [x] Nim側に `src/nim-rustcrypto/src/nim_rustcrypto/algorithm/schnorr.nim` を追加する
+- [x] Nim側にSchnorr用の長さ定数、低水準FFI proc、公開型を追加する
+- [x] Nim側にSchnorr公開鍵導出、署名生成、署名検証の低レベルAPIを追加する
+- [x] Nim側verify APIは検証失敗を例外ではなく `false` として返す設計に揃える
+- [x] Nim側テストで既知ベクトルまたは生成・検証・改ざん失敗、不正入力を確認する
+- [x] READMEまたは利用手順を新規APIに合わせて更新する
+
+## 参考資料
+- RustCrypto: https://github.com/RustCrypto
+- RustCrypto `k256`: https://github.com/RustCrypto/elliptic-curves/tree/master/k256
+- `k256` crate documentation: https://docs.rs/k256/latest/k256/
+- `k256::schnorr`: https://docs.rs/k256/latest/k256/schnorr/
+- `k256::schnorr::SigningKey`: https://docs.rs/k256/latest/k256/schnorr/struct.SigningKey.html
+- `k256` feature flags: https://docs.rs/crate/k256/latest/features
+- SEC 2: Recommended Elliptic Curve Domain Parameters: https://www.secg.org/sec2-v2.pdf
+- Rust Reference Linkage: https://doc.rust-lang.org/reference/linkage.html
+- Nim Manual: https://nim-lang.org/docs/manual.html
+- Nim system module: https://nim-lang.org/docs/system.html
+
+## 調査結果・設計まとめ
+- 2026-05-03 時点の調査では、RustCrypto `k256` 0.13.4 はBIP340/Taproot Schnorr署名を `k256::schnorr` として提供している。
+- `k256::schnorr` はTaproot Schnorr署名をBIP340として実装しており、署名鍵 `SigningKey`、検証鍵 `VerifyingKey`、64バイト署名 `Signature` を提供する。
+- `k256` の `schnorr` featureは0.13.4のdefault featureに含まれている。現在の `Cargo.toml` は `k256 = "0.13.4"` であり、`cargo tree -e features -i k256` でも `schnorr` featureが有効であることを確認済み。
+- ただし、このブランチの要件はBIP340/Taproot準拠ではなく、Nim側で `algorithm/schnorr.nim` としてSchnorr署名の低レベル処理を使えるようにすることである。`k256::schnorr` を採用する場合も、BIP340準拠をブランチの達成条件にはしない。
+- 新しいRust crateを追加するより、既存の `k256` 依存を使って `k256::schnorr` を有効利用する方針を採用した。これは既存のsecp256k1 ECDSA実装と同じRustCrypto系ライブラリを使えるため、依存、鍵型、エラー処理、レビュー範囲を小さくできる。
+- 公開鍵形式と署名形式は、採用するRustライブラリが公開するSchnorr実装の表現に合わせ、32バイト公開鍵と64バイト署名を採用した。これはBIP340準拠を目的にするためではなく、採用ライブラリのAPIに合わせるためである。
+- Schnorr用の長さ定数は、Rust側とNim側の両方に追加する。Rust側は `SECP256K1_SCHNORR_PUBLIC_KEY_LEN = 32` と `SECP256K1_SCHNORR_SIGNATURE_LEN = 64`、Nim側も同じ長さを定数化した。
+- Nim側の公開型は、`SchnorrSecretKey` / `SchnorrPublicKey` / `SchnorrSignature` を採用した。
+- Rust側FFI公開APIは以下で確定した。
+  - `rustcrypto_secp256k1_schnorr_public_key_from_secret_key(secret_key, secret_key_len, output, output_len) -> c_int`
+  - `rustcrypto_secp256k1_schnorr_sign(message, message_len, secret_key, secret_key_len, output, output_len) -> c_int`
+  - `rustcrypto_secp256k1_schnorr_verify(message, message_len, public_key, public_key_len, signature, signature_len) -> c_int`
+- 署名APIは任意長メッセージ入力APIを公開し、Rust内部では `k256::schnorr::Signer` / `Verifier` trait を使って本文を SHA-256 ベースで扱う方針にした。FFI公開APIにはRust trait、`Result`、`Vec`、`String`、Rust参照を出していない。
+- `aux_rand` は公開 API に含めない。決定論的な挙動は `Signer` 実装のデフォルト挙動に委ねる。
+- 既存ECDSAのprehash APIとは異なり、Schnorrで最初に公開するAPIはメッセージ本文入力を基本とする。prehash専用APIは、プロトコル側から32バイトダイジェストが直接与えられる必要が出た場合に追加設計する。
+- 検証APIは採用ライブラリの公開鍵形式と署名形式を受け取る。既存ECDSA検証のような `public_key_format` 引数は不要と判断した。
+- 既存のSEC1圧縮/非圧縮公開鍵からSchnorr公開鍵形式へ変換するAPIは、このブランチの必須範囲外とする。
+- エラーコードは既存定数を優先して再利用する。NULL出力は `RUSTCRYPTO_ERR_NULL_OUTPUT`、短い出力バッファは `RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT`、NULL入力は `RUSTCRYPTO_ERR_NULL_INPUT_WITH_DATA`、不正秘密鍵は `RUSTCRYPTO_ERR_INVALID_SECRET_KEY`、不正公開鍵は `RUSTCRYPTO_ERR_INVALID_PUBLIC_KEY_FORMAT`、不正署名は `RUSTCRYPTO_ERR_INVALID_SIGNATURE`、検証失敗は `RUSTCRYPTO_ERR_VERIFICATION_FAILED` とする。
+- Schnorr公開鍵の長さ不正は、既存エラーコードとの互換を優先して `RUSTCRYPTO_ERR_INVALID_PUBLIC_KEY_FORMAT` として扱う。
+- 署名生成の出力所有権は呼び出し元であるNim側が持つ。Rust側は入力を借用し、64バイト署名出力バッファへ書き込むだけにする。
+- 空メッセージは、既存の任意長メッセージAPIと同様に `message_len == 0 && message == NULL` を許容する。`message_len > 0 && message == NULL` は `RUSTCRYPTO_ERR_NULL_INPUT_WITH_DATA` とする。
+- Rust側実装は `src/rustcrypto-ffi/src/schnorr.rs` に分離した。既存 `secp256k1.rs` を汚さず、Schnorr 固有の定数と FFI 関数を `lib.rs` から公開する構成にした。
+- Nim側実装は `src/nim-rustcrypto/src/nim_rustcrypto/algorithm/schnorr.nim` を追加した。`secp256k1.nim` へSchnorr APIを混ぜず、algorithm配下の独立した低レベルSchnorrモジュールとして扱う。
+- Nim側低水準FFI procは `src/nim-rustcrypto/src/nim_rustcrypto/algorithm/ffi.nim` に追加し、`algorithm/schnorr.nim` から呼び出す。通常利用者がRust静的ライブラリのリンク指定を直接書かなくてよい構成を維持する。
+- Nim APIは以下で確定した。
+  - `schnorrPublicKey(secretKey: SchnorrSecretKey): SchnorrPublicKey`
+  - `schnorrSign(message: string, secretKey: SchnorrSecretKey): SchnorrSignature`
+  - `schnorrVerify(message: string, publicKey: SchnorrPublicKey, signature: SchnorrSignature): bool`
+- Nim verify APIは、暗号学的な検証失敗だけを `false` として返し、NULL入力、不正鍵、不正署名長など呼び出し方の誤りは既存方針に合わせて例外にする。
+- テストはRust/Nim双方で、固定秘密鍵・固定メッセージによる生成、検証、改ざん失敗と不正入力を確認する方針にした。BIP340公式ベクトルの利用は必須ではない。
+- README更新では、Schnorr APIがalgorithm配下の低レベル実装として追加されたこと、ECDSA署名とは互換ではないこと、公開鍵・署名の長さは採用ライブラリの仕様に従うことを明記した。
+- 既存ECDSAのDER変換APIはSchnorr署名には適用しない。Schnorr署名は採用ライブラリの固定長署名形式として扱い、DER変換対象に含めない。
+- 実装順はプロジェクトルール `SYW-DEV-001` に従い、Rust実装、Rustテスト、Rust静的アーカイブ出力、Nim FFIラッパー実装、Nimテストの順に進める。

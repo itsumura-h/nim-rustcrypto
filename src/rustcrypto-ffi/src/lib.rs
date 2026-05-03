@@ -1,18 +1,19 @@
 use core::ffi::c_int;
 
 mod aead_common;
-mod chacha20poly1305;
 mod aes_gcm;
 mod aes_gcm_siv;
 mod argon2;
 mod blake2;
-mod hash;
+mod chacha20poly1305;
 mod ed25519;
+mod hash;
 mod hkdf;
 mod hmac;
 mod oid;
 mod password_hash;
 mod pbkdf2;
+mod schnorr;
 mod scrypt;
 mod secp256k1;
 
@@ -58,6 +59,8 @@ pub const SECP256K1_PUBLIC_KEY_UNCOMPRESSED_LEN: usize = 65;
 pub const SECP256K1_SIGNATURE_LEN: usize = 64;
 pub const SECP256K1_SIGNATURE_DER_MAX_LEN: usize = 72;
 pub const SECP256K1_MESSAGE_DIGEST_LEN: usize = 32;
+pub const SECP256K1_SCHNORR_PUBLIC_KEY_LEN: usize = 32;
+pub const SECP256K1_SCHNORR_SIGNATURE_LEN: usize = 64;
 pub const ED25519_PRIVATE_KEY_LEN: usize = 32;
 pub const ED25519_PUBLIC_KEY_LEN: usize = 32;
 pub const ED25519_SIGNATURE_LEN: usize = 64;

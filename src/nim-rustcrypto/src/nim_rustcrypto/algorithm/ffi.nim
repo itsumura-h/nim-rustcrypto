@@ -13,6 +13,8 @@ const
   Secp256k1SignatureLen* = 64
   Secp256k1SignatureDerMaxLen* = 72
   Secp256k1MessageDigestLen* = 32
+  SchnorrPublicKeyLen* = 32
+  SchnorrSignatureLen* = 64
   Ed25519PrivateKeyLen* = 32
   Ed25519PublicKeyLen* = 32
   Ed25519SignatureLen* = 64
@@ -389,6 +391,31 @@ proc secp256k1EcdsaSignatureFromDerRaw*(
     output: ptr uint8,
     outputLen: csize_t,
   ): cint {.cdecl, importc: "rustcrypto_secp256k1_ecdsa_signature_from_der".}
+
+proc schnorrPublicKeyFromSecretKeyRaw*(
+    secretKey: ptr uint8,
+    secretKeyLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_secp256k1_schnorr_public_key_from_secret_key".}
+
+proc schnorrSignRaw*(
+    message: ptr uint8,
+    messageLen: csize_t,
+    secretKey: ptr uint8,
+    secretKeyLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_secp256k1_schnorr_sign".}
+
+proc schnorrVerifyRaw*(
+    message: ptr uint8,
+    messageLen: csize_t,
+    publicKey: ptr uint8,
+    publicKeyLen: csize_t,
+    signature: ptr uint8,
+    signatureLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_secp256k1_schnorr_verify".}
 
 proc ed25519PrivateKeyToPkcs8DerRaw*(
     privateKey: ptr uint8,

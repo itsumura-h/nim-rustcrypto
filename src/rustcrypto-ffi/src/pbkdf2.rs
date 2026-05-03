@@ -5,8 +5,8 @@ use crate::{
 use core::ffi::c_int;
 use pbkdf2::pbkdf2_hmac;
 use sha2::Sha256;
-use std::slice;
 use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::slice;
 
 pub(crate) fn pbkdf2_hmac_sha256_impl(
     password: *const u8,

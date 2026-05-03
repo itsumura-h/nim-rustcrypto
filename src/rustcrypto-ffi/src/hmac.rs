@@ -60,7 +60,10 @@ pub extern "C" fn rustcrypto_hmac_sha256(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{HMAC_SHA256_MAC_LEN, RUSTCRYPTO_ERR_NULL_OUTPUT, RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT, RUSTCRYPTO_OK};
+    use crate::{
+        HMAC_SHA256_MAC_LEN, RUSTCRYPTO_ERR_NULL_OUTPUT, RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT,
+        RUSTCRYPTO_OK,
+    };
 
     fn digest_hex(bytes: &[u8]) -> String {
         const HEX_DIGITS: &[u8; 16] = b"0123456789abcdef";

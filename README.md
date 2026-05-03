@@ -2,7 +2,7 @@
 
 RustCrypto: https://github.com/RustCrypto
 
-RustCrypto を Nim から安全に呼び出すための FFI ラッパーです。現時点では SHA-256、HMAC-SHA256、HKDF-SHA256、PBKDF2-HMAC-SHA256、scrypt、Argon2id、PHC 文字列の検証・正規化、AES-256-GCM、AES-256-GCM-SIV、BLAKE2b-512、BLAKE2s-256、secp256k1 公開鍵導出、ECDSA 署名・検証、SHA-256 / SHA3-256 / Keccak-256 を使う secp256k1 ECDSA 署名・検証、Ed25519 の公開鍵導出・署名・検証、PKCS#8/SPKI 変換と PEM 変換を提供しています。
+RustCrypto を Nim から安全に呼び出すための FFI ラッパーです。現時点では SHA-256、HMAC-SHA256、HKDF-SHA256、PBKDF2-HMAC-SHA256、scrypt、Argon2id、PHC 文字列の検証・正規化、AES-256-GCM、AES-256-GCM-SIV、BLAKE2b-512、BLAKE2s-256、secp256k1 公開鍵導出、ECDSA 署名・検証、SHA-256 / SHA3-256 / Keccak-256 を使う secp256k1 ECDSA 署名・検証、secp256k1 Schnorr 公開鍵導出・署名・検証、Ed25519 の公開鍵導出・署名・検証、PKCS#8/SPKI 変換と PEM 変換を提供しています。Schnorr は ECDSA とは別形式で、公開鍵と署名は互換ではありません。
 
 ## 開発優先順位
 
@@ -147,6 +147,7 @@ nimble test -y
 - `secp256k1EcdsaSignSha3_256`, `secp256k1EcdsaVerifySha3_256`
 - `secp256k1EcdsaSignKeccak256`, `secp256k1EcdsaVerifyKeccak256`
 - `secp256k1EcdsaSignatureToDer`, `secp256k1EcdsaSignatureFromDer`
+- `schnorrPublicKey`, `schnorrSign`, `schnorrVerify`
 - `ed25519PublicKeyFromSecretKey`, `ed25519Sign`, `ed25519Verify`
 - `ed25519PrivateKeyToPkcs8Der`, `ed25519PrivateKeyFromPkcs8Der`
 - `ed25519PublicKeyToSpkiDer`, `ed25519PublicKeyFromSpkiDer`
@@ -175,6 +176,7 @@ nimble test -y
 - secp256k1 `abc` ダイジェストでの ECDSA 署名・検証
 - secp256k1 ECDSA SHA-256 / SHA3-256 / Keccak-256 の本文入力 API
 - secp256k1 ECDSA raw 64 バイト署名と DER 署名の相互変換
+- secp256k1 Schnorr の公開鍵導出、署名・検証、改ざん署名の失敗
 - Ed25519 RFC 8032 の公開鍵導出、署名・検証、改ざん署名の失敗
 - Ed25519 PKCS#8 / SPKI / PEM RFC 8410 / RFC 7468 の既知ベクトル
 - `SHA3-256("abc")`

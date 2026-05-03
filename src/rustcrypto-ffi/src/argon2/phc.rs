@@ -9,8 +9,8 @@ use ::argon2::{
     Algorithm, Argon2, Params, PasswordHash, PasswordHasher, PasswordVerifier, Version,
 };
 use core::ffi::c_int;
-use std::slice;
 use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::slice;
 
 fn build_argon2id_ctx(
     m_cost: u32,
@@ -165,8 +165,10 @@ pub extern "C" fn rustcrypto_argon2id_verify_password(
     phc: *const u8,
     phc_len: usize,
 ) -> c_int {
-    catch_unwind(AssertUnwindSafe(|| verify_password_impl(password, password_len, phc, phc_len)))
-        .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
+    catch_unwind(AssertUnwindSafe(|| {
+        verify_password_impl(password, password_len, phc, phc_len)
+    }))
+    .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
 }
 
 #[cfg(test)]
