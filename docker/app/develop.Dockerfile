@@ -1,11 +1,11 @@
-FROM ubuntu:24.04
+FROM ubuntu:26.04
 
 # prevent timezone dialogue
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt update && \
-    apt upgrade -y
-RUN apt install -y \
+    apt upgrade -y && \
+    apt install -y \
         build-essential \
         curl \
         git
