@@ -1,8 +1,10 @@
-use crate::{KECCAK_256_DIGEST_LEN, RUSTCRYPTO_OK, SHA256_DIGEST_LEN, SHA3_256_DIGEST_LEN, aead_common};
-use core::ffi::c_int;
-use digest::Digest;
+use crate::{
+    KECCAK_256_DIGEST_LEN, RUSTCRYPTO_OK, SHA3_256_DIGEST_LEN, SHA256_DIGEST_LEN, aead_common,
+};
 use ::sha2::Sha256;
 use ::sha3::{Keccak256, Sha3_256};
+use core::ffi::c_int;
+use digest::Digest;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 fn hash_one_shot<D>(input: &[u8], output: &mut [u8]) -> c_int
@@ -108,7 +110,10 @@ pub extern "C" fn rustcrypto_keccak_256(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{KECCAK_256_DIGEST_LEN, RUSTCRYPTO_ERR_NULL_INPUT_WITH_DATA, RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT, RUSTCRYPTO_OK, SHA256_DIGEST_LEN, SHA3_256_DIGEST_LEN};
+    use crate::{
+        KECCAK_256_DIGEST_LEN, RUSTCRYPTO_ERR_NULL_INPUT_WITH_DATA,
+        RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT, RUSTCRYPTO_OK, SHA3_256_DIGEST_LEN, SHA256_DIGEST_LEN,
+    };
 
     fn digest_hex(bytes: &[u8]) -> String {
         const HEX_DIGITS: &[u8; 16] = b"0123456789abcdef";
@@ -166,7 +171,12 @@ mod tests {
         let input = b"abc";
         let mut output = [0u8; SHA256_DIGEST_LEN - 1];
 
-        let status = rustcrypto_sha256(input.as_ptr(), input.len(), output.as_mut_ptr(), output.len());
+        let status = rustcrypto_sha256(
+            input.as_ptr(),
+            input.len(),
+            output.as_mut_ptr(),
+            output.len(),
+        );
 
         assert_eq!(status, RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT);
     }

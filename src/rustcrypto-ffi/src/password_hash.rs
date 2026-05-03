@@ -4,8 +4,8 @@ use crate::{
 };
 use core::ffi::c_int;
 use password_hash::phc::PasswordHash;
-use std::slice;
 use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::slice;
 
 fn parse_password_hash(input: *const u8, input_len: usize) -> Result<PasswordHash, c_int> {
     let input = match aead_common::optional_input(input, input_len) {

@@ -5,8 +5,8 @@ use crate::{
 };
 use ::argon2::{Algorithm, Argon2, Params, Version};
 use core::ffi::c_int;
-use std::slice;
 use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::slice;
 
 fn build_argon2id_ctx(
     m_cost: u32,
