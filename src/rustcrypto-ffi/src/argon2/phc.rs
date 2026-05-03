@@ -10,6 +10,7 @@ use ::argon2::{
 };
 use core::ffi::c_int;
 use std::slice;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 fn build_argon2id_ctx(
     m_cost: u32,
@@ -123,6 +124,49 @@ pub(crate) fn verify_password_impl(
         Ok(()) => RUSTCRYPTO_OK,
         Err(_) => RUSTCRYPTO_ERR_VERIFICATION_FAILED,
     }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_argon2id_hash_password(
+    password: *const u8,
+    password_len: usize,
+    salt: *const u8,
+    salt_len: usize,
+    m_cost: u32,
+    t_cost: u32,
+    p_cost: u32,
+    hash_len: usize,
+    output: *mut u8,
+    output_len: usize,
+    written_len: *mut usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        hash_password_impl(
+            password,
+            password_len,
+            salt,
+            salt_len,
+            m_cost,
+            t_cost,
+            p_cost,
+            hash_len,
+            output,
+            output_len,
+            written_len,
+        )
+    }))
+    .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_argon2id_verify_password(
+    password: *const u8,
+    password_len: usize,
+    phc: *const u8,
+    phc_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| verify_password_impl(password, password_len, phc, phc_len)))
+        .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
 }
 
 #[cfg(test)]

@@ -5,6 +5,7 @@ use crate::{
 use ::scrypt::{Params, scrypt as scrypt_derive};
 use core::ffi::c_int;
 use std::slice;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 const SCRYPT_MAX_DERIVED_KEY_LEN: u64 = (u32::MAX as u64) * 32;
 
@@ -79,6 +80,36 @@ pub(crate) fn scrypt_impl(
         Ok(()) => RUSTCRYPTO_OK,
         Err(_) => RUSTCRYPTO_ERR_INVALID_PARAMETER,
     }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_scrypt(
+    password: *const u8,
+    password_len: usize,
+    salt: *const u8,
+    salt_len: usize,
+    n: usize,
+    r: usize,
+    p: usize,
+    output: *mut u8,
+    output_len: usize,
+    derived_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        scrypt_impl(
+            password,
+            password_len,
+            salt,
+            salt_len,
+            n,
+            r,
+            p,
+            output,
+            output_len,
+            derived_len,
+        )
+    }))
+    .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
 }
 
 #[cfg(test)]

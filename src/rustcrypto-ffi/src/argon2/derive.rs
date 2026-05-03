@@ -6,6 +6,7 @@ use crate::{
 use ::argon2::{Algorithm, Argon2, Params, Version};
 use core::ffi::c_int;
 use std::slice;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 fn build_argon2id_ctx(
     m_cost: u32,
@@ -64,6 +65,36 @@ pub(crate) fn derive_impl(
         Ok(()) => RUSTCRYPTO_OK,
         Err(_) => RUSTCRYPTO_ERR_INVALID_PARAMETER,
     }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_argon2id_derive(
+    password: *const u8,
+    password_len: usize,
+    salt: *const u8,
+    salt_len: usize,
+    m_cost: u32,
+    t_cost: u32,
+    p_cost: u32,
+    output: *mut u8,
+    output_len: usize,
+    derived_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        derive_impl(
+            password,
+            password_len,
+            salt,
+            salt_len,
+            m_cost,
+            t_cost,
+            p_cost,
+            output,
+            output_len,
+            derived_len,
+        )
+    }))
+    .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
 }
 
 #[cfg(test)]

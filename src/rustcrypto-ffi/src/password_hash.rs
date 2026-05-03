@@ -5,6 +5,7 @@ use crate::{
 use core::ffi::c_int;
 use password_hash::phc::PasswordHash;
 use std::slice;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 fn parse_password_hash(input: *const u8, input_len: usize) -> Result<PasswordHash, c_int> {
     let input = match aead_common::optional_input(input, input_len) {
@@ -61,6 +62,26 @@ pub(crate) fn canonicalize_impl(
     }
 
     RUSTCRYPTO_OK
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_password_hash_validate(input: *const u8, input_len: usize) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| validate_impl(input, input_len)))
+        .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_password_hash_canonicalize(
+    input: *const u8,
+    input_len: usize,
+    output: *mut u8,
+    output_len: usize,
+    written_len: *mut usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        canonicalize_impl(input, input_len, output, output_len, written_len)
+    }))
+    .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
 }
 
 #[cfg(test)]
