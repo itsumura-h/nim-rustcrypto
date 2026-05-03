@@ -11,6 +11,42 @@ type
   P256PrivateKeyPkcs8Der* = seq[byte]
   P256PublicKeySpkiDer* = seq[byte]
 
+proc `$`*(value: P256CompressedPublicKey): string =
+  bytesToHexString(value)
+
+proc `$`*(value: P256UncompressedPublicKey): string =
+  bytesToHexString(value)
+
+proc `$`*(value: P256Signature): string =
+  bytesToHexString(value)
+
+proc `$`*(value: P256PublicKeySpkiDer): string =
+  bytesToHexString(value)
+
+proc randomSecretKey*(): P256SecretKey =
+  while true:
+    result = urandomBytes[P256SecretKeyLen]()
+    var publicKey: P256CompressedPublicKey
+    let status = p256PublicKeyFromSecretKeyRaw(
+      bytesPtr(result),
+      csize_t(result.len),
+      cast[ptr uint8](addr publicKey[0]),
+      csize_t(publicKey.len),
+      P256PublicKeyFormatCompressed,
+    )
+    case status
+    of RustCryptoOk:
+      return result
+    of RustCryptoErrInvalidSecretKey:
+      discard
+    of RustCryptoErrPanic:
+      raise newException(ValueError, "rustcrypto_p256_random_secret_key failed: panic")
+    else:
+      raise newException(
+        ValueError,
+        "rustcrypto_p256_random_secret_key failed: unexpected status " & $status,
+      )
+
 proc fromHexSecretKey*(hex: string): P256SecretKey =
   fromHexDigest[P256SecretKey](hex, P256SecretKeyLen)
 

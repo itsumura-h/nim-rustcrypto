@@ -1,7 +1,7 @@
 import unittest
 
 import ./utils
-import nim_rustcrypto/algorithm/p384
+import rustcrypto/algorithm/p384
 
 suite "p384":
   const
@@ -25,8 +25,24 @@ suite "p384":
   test "public key derivation matches the RFC 6979 vector":
     let secretKey = fromHexSecretKey(SecretKeyHex)
 
-    check hexOf(p384PublicKeyCompressed(secretKey)) == PublicKeyCompressedHex
-    check hexOf(p384PublicKeyUncompressed(secretKey)) == PublicKeyUncompressedHex
+    let compressed = p384PublicKeyCompressed(secretKey)
+    let uncompressed = p384PublicKeyUncompressed(secretKey)
+
+    check hexOf(compressed) == PublicKeyCompressedHex
+    check hexOf(uncompressed) == PublicKeyUncompressedHex
+    check $compressed == hexOf(compressed)
+    check $uncompressed == hexOf(uncompressed)
+
+  test "random secret key can derive public key and sign":
+    let secretKey = randomSecretKey()
+    let publicKey = p384PublicKeyCompressed(secretKey)
+    let signature = p384EcdsaSignSha384("test", secretKey)
+
+    check secretKey.len == P384SecretKeyLen
+    check publicKey.len == P384PublicKeyCompressedLen
+    check $publicKey == hexOf(publicKey)
+    check $signature == hexOf(signature)
+    check p384EcdsaVerifySha384("test", publicKey, P384PublicKeyFormatCompressed, signature)
 
   test "signing matches the RFC 6979 vector":
     let secretKey = fromHexSecretKey(SecretKeyHex)
@@ -60,6 +76,8 @@ suite "p384":
     let uncompressedSpki = p384PublicKeyToSpkiDer(uncompressed, P384PublicKeyFormatUncompressed)
 
     check compressedSpki == uncompressedSpki
+    check $compressedSpki == hexOf(compressedSpki)
+    check $uncompressedSpki == hexOf(uncompressedSpki)
     check hexOf(p384PublicKeyFromSpkiDer(compressedSpki, P384PublicKeyFormatCompressed)) == PublicKeyCompressedHex
     check hexOf(p384PublicKeyFromSpkiDer(uncompressedSpki, P384PublicKeyFormatUncompressed)) == PublicKeyUncompressedHex
 

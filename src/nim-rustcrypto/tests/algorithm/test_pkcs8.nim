@@ -1,7 +1,7 @@
 import unittest
 
 import ./utils
-import nim_rustcrypto/algorithm/pkcs8
+import rustcrypto/algorithm/pkcs8
 
 suite "pkcs8":
   test "raw private key encodes to the RFC 8410 example":
@@ -27,6 +27,7 @@ suite "pkcs8":
     let der = ed25519PublicKeyToSpkiDer(publicKey)
     check hexOf(der) ==
       "302a300506032b657003210019bf44096984cdfe8541bac167dc3b96c85086aa30b6b6cb0c5c38ad703166e1"
+    check $der == hexOf(der)
 
   test "raw public key decodes from the RFC 8410 example":
     let der = bytesFromHex(

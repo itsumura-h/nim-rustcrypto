@@ -11,6 +11,42 @@ type
   P384PrivateKeyPkcs8Der* = seq[byte]
   P384PublicKeySpkiDer* = seq[byte]
 
+proc `$`*(value: P384CompressedPublicKey): string =
+  bytesToHexString(value)
+
+proc `$`*(value: P384UncompressedPublicKey): string =
+  bytesToHexString(value)
+
+proc `$`*(value: P384Signature): string =
+  bytesToHexString(value)
+
+proc `$`*(value: P384PublicKeySpkiDer): string =
+  bytesToHexString(value)
+
+proc randomSecretKey*(): P384SecretKey =
+  while true:
+    result = urandomBytes[P384SecretKeyLen]()
+    var publicKey: P384CompressedPublicKey
+    let status = p384PublicKeyFromSecretKeyRaw(
+      bytesPtr(result),
+      csize_t(result.len),
+      cast[ptr uint8](addr publicKey[0]),
+      csize_t(publicKey.len),
+      P384PublicKeyFormatCompressed,
+    )
+    case status
+    of RustCryptoOk:
+      return result
+    of RustCryptoErrInvalidSecretKey:
+      discard
+    of RustCryptoErrPanic:
+      raise newException(ValueError, "rustcrypto_p384_random_secret_key failed: panic")
+    else:
+      raise newException(
+        ValueError,
+        "rustcrypto_p384_random_secret_key failed: unexpected status " & $status,
+      )
+
 proc fromHexSecretKey*(hex: string): P384SecretKey =
   fromHexDigest[P384SecretKey](hex, P384SecretKeyLen)
 

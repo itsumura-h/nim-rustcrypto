@@ -5,6 +5,9 @@ import ./common
 type
   Secp256k1DerSignature* = ecdsa_common.Secp256k1DerSignature
 
+proc `$`*(value: Secp256k1DerSignature): string =
+  bytesToHexString(value)
+
 proc secp256k1EcdsaSignatureToDer*(
     signature: Secp256k1Signature,
   ): Secp256k1DerSignature =

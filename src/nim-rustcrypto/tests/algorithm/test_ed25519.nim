@@ -1,7 +1,7 @@
 import unittest
 
 import ./utils
-import nim_rustcrypto/algorithm/ed25519
+import rustcrypto/algorithm/ed25519
 
 suite "ed25519":
   test "public key derivation matches the RFC 8032 vector":
@@ -11,6 +11,18 @@ suite "ed25519":
     let publicKey = ed25519PublicKeyFromSecretKey(secretKey)
     check hexOf(publicKey) ==
       "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
+    check $publicKey == hexOf(publicKey)
+
+  test "random secret key can derive public key and sign":
+    let secretKey = randomSecretKey()
+    let publicKey = ed25519PublicKeyFromSecretKey(secretKey)
+    let signature = ed25519Sign("abc", secretKey)
+
+    check secretKey.len == Ed25519PrivateKeyLen
+    check publicKey.len == Ed25519PublicKeyLen
+    check $publicKey == hexOf(publicKey)
+    check $signature == hexOf(signature)
+    check ed25519Verify("abc", publicKey, signature)
 
   test "signing matches the RFC 8032 vector":
     let secretKey = fromHexSecretKey(

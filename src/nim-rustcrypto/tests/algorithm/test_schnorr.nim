@@ -1,7 +1,7 @@
 import unittest
 
 import ./utils
-import nim_rustcrypto/algorithm/schnorr
+import rustcrypto/algorithm/schnorr
 
 proc basePointSchnorrSecretKey(): SchnorrSecretKey =
   result = default(SchnorrSecretKey)
@@ -14,6 +14,18 @@ suite "schnorr":
 
     check hexOf(publicKey) ==
       "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+    check $publicKey == hexOf(publicKey)
+
+  test "random secret key can derive public key and sign":
+    let secretKey = randomSecretKey()
+    let publicKey = schnorrPublicKey(secretKey)
+    let signature = schnorrSign("abc", secretKey)
+
+    check secretKey.len == Secp256k1SecretKeyLen
+    check publicKey.len == SchnorrPublicKeyLen
+    check $publicKey == hexOf(publicKey)
+    check $signature == hexOf(signature)
+    check schnorrVerify("abc", publicKey, signature)
 
   test "sign and verify accept the message text":
     let secretKey = basePointSchnorrSecretKey()

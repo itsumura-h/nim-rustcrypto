@@ -7,6 +7,9 @@ type
   RsaSignature* = seq[byte]
   RsaCiphertext* = seq[byte]
 
+proc `$`*(value: RsaPublicKeyDer): string =
+  bytesToHexString(value)
+
 proc raiseIfError(status: cint; operation: string) =
   case status
   of RustCryptoOk:

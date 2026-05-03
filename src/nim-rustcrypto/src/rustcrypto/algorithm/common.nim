@@ -1,3 +1,5 @@
+import std/posix
+
 import ./ffi
 
 proc bytesPtr*(data: string): ptr uint8 =
@@ -14,6 +16,25 @@ proc bytesPtr*(data: openArray[byte]): ptr uint8 =
   else:
     cast[ptr uint8](unsafeAddr data[0])
 
+proc urandomBytes*[N: static[int]](): array[N, byte] =
+  ## Read exactly `N` bytes from `/dev/urandom`.
+  let fd = open("/dev/urandom", O_RDONLY)
+  if fd < 0:
+    raise newException(OSError, "failed to open /dev/urandom: " & $strerror(errno))
+  defer:
+    discard close(fd)
+
+  var offset = 0
+  while offset < N:
+    let bytesRead = read(fd, addr result[offset], N - offset)
+    if bytesRead < 0:
+      if errno == EINTR:
+        continue
+      raise newException(OSError, "failed to read /dev/urandom: " & $strerror(errno))
+    if bytesRead == 0:
+      raise newException(OSError, "unexpected EOF while reading /dev/urandom")
+    offset += bytesRead
+
 proc digestToHex*[T](_: typedesc[T], digest: openArray[byte]): string =
   ## Convert a byte slice to a hexadecimal string.
   const hexDigits = "0123456789abcdef"
@@ -23,6 +44,10 @@ proc digestToHex*[T](_: typedesc[T], digest: openArray[byte]): string =
     let byteValue = int(value)
     result[2 * i] = hexDigits[byteValue shr 4]
     result[2 * i + 1] = hexDigits[byteValue and 0x0F]
+
+proc bytesToHexString*(bytes: openArray[byte]): string =
+  ## Convert an arbitrary byte slice to a lowercase hexadecimal string.
+  digestToHex(byte, bytes)
 
 proc hexNibble(ch: char): int =
   ## Convert a single hexadecimal character to an integer.

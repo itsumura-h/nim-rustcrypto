@@ -1,8 +1,8 @@
 import unittest
 
 import ./utils
-import nim_rustcrypto/algorithm/sha256
-import nim_rustcrypto/algorithm/secp256k1
+import rustcrypto/algorithm/sha256
+import rustcrypto/algorithm/secp256k1
 
 suite "secp256k1":
   test "raw compressed public key derivation matches the known vector":
@@ -114,6 +114,18 @@ suite "secp256k1":
     let publicKey = secp256k1PublicKeyUncompressed(secretKey)
 
     check hexOf(publicKey) == "0479be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8"
+    check $publicKey == hexOf(publicKey)
+
+  test "random secret key can derive a public key and sign":
+    let secretKey = randomSecretKey()
+    let publicKey = secp256k1PublicKeyCompressed(secretKey)
+    let signature = secp256k1EcdsaSignSha256("abc", secretKey)
+
+    check secretKey.len == Secp256k1SecretKeyLen
+    check publicKey.len == Secp256k1PublicKeyCompressedLen
+    check $publicKey == hexOf(publicKey)
+    check $signature == hexOf(signature)
+    check secp256k1EcdsaVerifySha256("abc", publicKey, signature)
 
   test "raw ECDSA sign produces the known deterministic signature":
     let messageDigest = sha256("abc")
@@ -140,8 +152,16 @@ suite "secp256k1":
     let signature = secp256k1EcdsaSign(messageDigest, secretKey)
 
     check hexOf(signature) == "75601b1385909ea698e3fd6e26e5fa5105127bd2299d3ab0b9d9f93df5b8b99c28ae7cc8f969e6b6fb1feac477818a75a46e8c364e88dfdc9880e1a5175c4bd1"
+    check $signature == hexOf(signature)
     check secp256k1EcdsaVerify(messageDigest, compressedPublicKey, signature)
     check secp256k1EcdsaVerify(messageDigest, uncompressedPublicKey, signature)
+
+  test "recoverable signature stringifies as hex":
+    let messageDigest = sha256("abc")
+    let secretKey = basePointSecretKey()
+    let signature = secp256k1EcdsaSignRecoverable(messageDigest, secretKey)
+
+    check $signature == hexOf(signature)
 
   test "raw ECDSA verify rejects tampered signatures":
     let messageDigest = sha256("abc")

@@ -1,7 +1,7 @@
 import unittest
 
 import ./utils
-import nim_rustcrypto/algorithm/rsa
+import rustcrypto/algorithm/rsa
 
 suite "rsa":
   test "private and public key DER normalize from the fixtures":
@@ -12,6 +12,7 @@ suite "rsa":
     check rsaPrivateKeyFromPkcs8Der(privateKeyDer) == privateKeyDer
     check rsaPublicKeyToSpkiDer(publicKeyDer) == publicKeyDer
     check rsaPublicKeyFromSpkiDer(publicKeyDer) == publicKeyDer
+    check $publicKeyDer == hexOf(publicKeyDer)
 
   test "PSS signing and verification round-trip with the fixture key":
     let privateKeyDer = bytesFromString(Rsa2048PrivateKeyDerFixture)
@@ -19,6 +20,7 @@ suite "rsa":
     let signature = rsaPssSignSha256("test", privateKeyDer)
 
     check signature.len == 256
+    check $signature == hexOf(signature)
     check rsaPssVerifySha256("test", publicKeyDer, signature)
     check not rsaPssVerifySha256("test!", publicKeyDer, signature)
 
@@ -32,6 +34,7 @@ suite "rsa":
     let signature = rsaPkcs1v15SignSha256("test", privateKeyDer)
 
     check signature.len == 256
+    check $signature == hexOf(signature)
     check rsaPkcs1v15VerifySha256("test", publicKeyDer, signature)
     check not rsaPkcs1v15VerifySha256("test!", publicKeyDer, signature)
 

@@ -7,6 +7,35 @@ type
   SchnorrPublicKey* = array[SchnorrPublicKeyLen, byte]
   SchnorrSignature* = array[SchnorrSignatureLen, byte]
 
+proc `$`*(value: SchnorrPublicKey): string =
+  bytesToHexString(value)
+
+proc `$`*(value: SchnorrSignature): string =
+  bytesToHexString(value)
+
+proc randomSecretKey*(): SchnorrSecretKey =
+  while true:
+    result = urandomBytes[Secp256k1SecretKeyLen]()
+    var publicKey: SchnorrPublicKey
+    let status = schnorrPublicKeyFromSecretKeyRaw(
+      bytesPtr(result),
+      csize_t(result.len),
+      cast[ptr uint8](addr publicKey[0]),
+      csize_t(publicKey.len),
+    )
+    case status
+    of RustCryptoOk:
+      return result
+    of RustCryptoErrInvalidSecretKey:
+      discard
+    of RustCryptoErrPanic:
+      raise newException(ValueError, "rustcrypto_secp256k1_random_secret_key failed: panic")
+    else:
+      raise newException(
+        ValueError,
+        "rustcrypto_secp256k1_random_secret_key failed: unexpected status " & $status,
+      )
+
 proc schnorrPublicKey*(secretKey: SchnorrSecretKey): SchnorrPublicKey =
   var output: SchnorrPublicKey
   let status = schnorrPublicKeyFromSecretKeyRaw(

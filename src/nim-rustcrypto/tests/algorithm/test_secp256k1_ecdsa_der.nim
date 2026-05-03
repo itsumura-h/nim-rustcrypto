@@ -1,9 +1,9 @@
 import unittest
 
 import ./utils
-import nim_rustcrypto/algorithm/sha256
-import nim_rustcrypto/algorithm/secp256k1
-import nim_rustcrypto/algorithm/secp256k1_ecdsa_der
+import rustcrypto/algorithm/sha256
+import rustcrypto/algorithm/secp256k1
+import rustcrypto/algorithm/secp256k1_ecdsa_der
 
 suite "secp256k1 ecdsa der":
   test "raw sign produces the known deterministic signature":
@@ -22,6 +22,7 @@ suite "secp256k1 ecdsa der":
 
     check status == RustCryptoOk
     check hexOf(signature) == "75601b1385909ea698e3fd6e26e5fa5105127bd2299d3ab0b9d9f93df5b8b99c28ae7cc8f969e6b6fb1feac477818a75a46e8c364e88dfdc9880e1a5175c4bd1"
+    check $signature == hexOf(signature)
 
   test "high-level sign and verify accept the known vector":
     let messageDigest = sha256("abc")
@@ -93,6 +94,7 @@ suite "secp256k1 ecdsa der":
     let der = secp256k1EcdsaSignatureToDer(signature)
     check hexOf(der) ==
       "3044022075601b1385909ea698e3fd6e26e5fa5105127bd2299d3ab0b9d9f93df5b8b99c022028ae7cc8f969e6b6fb1feac477818a75a46e8c364e88dfdc9880e1a5175c4bd1"
+    check $der == hexOf(der)
     check secp256k1EcdsaSignatureFromDer(der) == signature
 
   test "raw DER conversion rejects short output buffers":
