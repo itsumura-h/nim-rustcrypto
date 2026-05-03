@@ -1,4 +1,4 @@
-const rustCryptoStaticLib* = "../rustcrypto-ffi/target/release/librust_crypto_ffi.a"
+const rustCryptoStaticLib* = "/application/src/rustcrypto-ffi/target/release/librust_crypto_ffi.a"
 
 {.passL: rustCryptoStaticLib.}
 
