@@ -1,32 +1,7 @@
 import unittest
 
-import nim_rustcrypto
-
-proc hexOf(bytes: openArray[byte]): string =
-  const hexDigits = "0123456789abcdef"
-  result = newString(bytes.len * 2)
-  for i, value in bytes:
-    let byteValue = int(value)
-    result[2 * i] = hexDigits[byteValue shr 4]
-    result[2 * i + 1] = hexDigits[byteValue and 0x0F]
-
-proc bytesFromHex(hex: string): seq[byte] =
-  doAssert hex.len mod 2 == 0
-
-  proc nibble(ch: char): byte =
-    case ch
-    of '0'..'9':
-      byte(ord(ch) - ord('0'))
-    of 'a'..'f':
-      byte(ord(ch) - ord('a') + 10)
-    of 'A'..'F':
-      byte(ord(ch) - ord('A') + 10)
-    else:
-      raise newException(ValueError, "invalid hex digit")
-
-  result = newSeq[byte](hex.len div 2)
-  for i in 0 ..< result.len:
-    result[i] = byte((nibble(hex[2 * i]) shl 4) or nibble(hex[2 * i + 1]))
+import ./utils
+import nim_rustcrypto/algorithm/ed25519
 
 suite "ed25519":
   test "public key derivation matches the RFC 8032 vector":
@@ -56,6 +31,23 @@ suite "ed25519":
       "5fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b"
     )
     check ed25519Verify("", publicKey, signature)
+
+  test "high-level string scenario creates keys, signs, and verifies":
+    let secretKey = fromHexSecretKey(
+      "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
+    )
+    let publicKey = ed25519PublicKeyFromSecretKey(secretKey)
+    let message = "abc"
+    let signature = ed25519Sign(message, secretKey)
+
+    check hexOf(publicKey) ==
+      "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
+    check ed25519Verify(message, publicKey, signature)
+    check not ed25519Verify("abd", publicKey, signature)
+
+    var tamperedSignature = signature
+    tamperedSignature[0] = tamperedSignature[0] xor 0x01
+    check not ed25519Verify(message, publicKey, tamperedSignature)
 
   test "verify rejects a tampered signature":
     let secretKey = fromHexSecretKey(

@@ -1,5 +1,5 @@
 import ./ffi
-import ./utils
+import ./common
 
 type
   ChaCha20Poly1305Key* = array[ChaCha20Poly1305KeyLen, byte]

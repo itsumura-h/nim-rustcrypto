@@ -1,8 +1,8 @@
 import ./ffi
-import ./utils
+import ./common
 
 type
-  ScryptOkm* = seq[byte]
+  Pbkdf2HmacSha256Okm* = seq[byte]
 
 proc raiseIfError(status: cint; operation: string) =
   case status
@@ -14,8 +14,6 @@ proc raiseIfError(status: cint; operation: string) =
     raise newException(ValueError, operation & " failed: output too short")
   of RustCryptoErrNullInputWithData:
     raise newException(ValueError, operation & " failed: null input with data")
-  of RustCryptoErrInvalidLength:
-    raise newException(ValueError, operation & " failed: invalid length")
   of RustCryptoErrInvalidParameter:
     raise newException(ValueError, operation & " failed: invalid parameter")
   of RustCryptoErrPanic:
@@ -23,38 +21,28 @@ proc raiseIfError(status: cint; operation: string) =
   else:
     raise newException(ValueError, operation & " failed: unexpected status " & $status)
 
-proc scrypt*(
+proc pbkdf2HmacSha256*(
     password, salt: string,
-    n: int,
-    r: int,
-    p: int,
+    iterations: int,
     okmLen: int,
-  ): ScryptOkm =
-  if n < 2:
-    raise newException(ValueError, "scrypt failed: invalid parameter")
-  if (n and (n - 1)) != 0:
-    raise newException(ValueError, "scrypt failed: invalid parameter")
-  if r <= 0 or p <= 0:
-    raise newException(ValueError, "scrypt failed: invalid parameter")
+  ): Pbkdf2HmacSha256Okm =
+  if iterations <= 0:
+    raise newException(ValueError, "pbkdf2HmacSha256 failed: invalid parameter")
   if okmLen < 0:
-    raise newException(ValueError, "scrypt failed: invalid length")
-  if okmLen > ScryptMaxOkmLen:
-    raise newException(ValueError, "scrypt failed: invalid length")
+    raise newException(ValueError, "pbkdf2HmacSha256 failed: negative output length")
 
   result = newSeq[byte](okmLen)
   if okmLen == 0:
     return
 
-  let status = scryptRaw(
+  let status = pbkdf2HmacSha256Raw(
     bytesPtr(password),
     csize_t(password.len),
     bytesPtr(salt),
     csize_t(salt.len),
-    csize_t(n),
-    csize_t(r),
-    csize_t(p),
+    cuint(iterations),
     bytesPtr(result),
     csize_t(result.len),
     csize_t(okmLen),
   )
-  raiseIfError(status, "rustcrypto_scrypt")
+  raiseIfError(status, "rustcrypto_pbkdf2_hmac_sha256")

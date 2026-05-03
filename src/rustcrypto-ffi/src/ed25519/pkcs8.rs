@@ -7,6 +7,7 @@ use ed25519::pkcs8::{
     DecodePrivateKey, DecodePublicKey, Document, EncodePrivateKey, EncodePublicKey, KeypairBytes,
     PublicKeyBytes,
 };
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 fn raw_key<const N: usize>(
     input: *const u8,
@@ -147,6 +148,66 @@ pub(crate) fn public_key_from_spki_der_impl(
 
     output.copy_from_slice(&public_key.to_bytes());
     RUSTCRYPTO_OK
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_ed25519_private_key_to_pkcs8_der(
+    private_key: *const u8,
+    private_key_len: usize,
+    output: *mut u8,
+    output_len: usize,
+    written_len: *mut usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        private_key_to_pkcs8_der_impl(
+            private_key,
+            private_key_len,
+            output,
+            output_len,
+            written_len,
+        )
+    }))
+    .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_ed25519_private_key_from_pkcs8_der(
+    der: *const u8,
+    der_len: usize,
+    output: *mut u8,
+    output_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        private_key_from_pkcs8_der_impl(der, der_len, output, output_len)
+    }))
+    .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_ed25519_public_key_to_spki_der(
+    public_key: *const u8,
+    public_key_len: usize,
+    output: *mut u8,
+    output_len: usize,
+    written_len: *mut usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        public_key_to_spki_der_impl(public_key, public_key_len, output, output_len, written_len)
+    }))
+    .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_ed25519_public_key_from_spki_der(
+    der: *const u8,
+    der_len: usize,
+    output: *mut u8,
+    output_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        public_key_from_spki_der_impl(der, der_len, output, output_len)
+    }))
+    .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
 }
 
 #[cfg(test)]

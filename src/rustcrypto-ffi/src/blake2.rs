@@ -1,8 +1,7 @@
+use crate::{BLAKE2B_512_DIGEST_LEN, BLAKE2S_256_DIGEST_LEN, RUSTCRYPTO_OK, aead_common};
 use ::blake2::{Blake2b512, Blake2s256, Digest as Blake2Digest};
-use crate::{
-    BLAKE2B_512_DIGEST_LEN, BLAKE2S_256_DIGEST_LEN, RUSTCRYPTO_OK, aead_common,
-};
 use core::ffi::c_int;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 pub(crate) fn blake2b_512_impl(
     input: *const u8,
@@ -50,8 +49,35 @@ pub(crate) fn blake2s_256_impl(
     RUSTCRYPTO_OK
 }
 
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_blake2b_512(
+    input: *const u8,
+    input_len: usize,
+    output: *mut u8,
+    output_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        blake2b_512_impl(input, input_len, output, output_len)
+    }))
+    .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_blake2s_256(
+    input: *const u8,
+    input_len: usize,
+    output: *mut u8,
+    output_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        blake2s_256_impl(input, input_len, output, output_len)
+    }))
+    .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
+}
+
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::{
         BLAKE2B_512_DIGEST_LEN, BLAKE2S_256_DIGEST_LEN, RUSTCRYPTO_ERR_NULL_INPUT_WITH_DATA,
         RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT, RUSTCRYPTO_OK,
@@ -72,7 +98,7 @@ mod tests {
         let input = b"abc";
         let mut output = [0u8; BLAKE2B_512_DIGEST_LEN];
 
-        let status = crate::rustcrypto_blake2b_512(
+        let status = rustcrypto_blake2b_512(
             input.as_ptr(),
             input.len(),
             output.as_mut_ptr(),
@@ -91,7 +117,7 @@ mod tests {
         let input = b"abc";
         let mut output = [0u8; BLAKE2S_256_DIGEST_LEN];
 
-        let status = crate::rustcrypto_blake2s_256(
+        let status = rustcrypto_blake2s_256(
             input.as_ptr(),
             input.len(),
             output.as_mut_ptr(),
@@ -110,7 +136,7 @@ mod tests {
         let input = b"abc";
         let mut output = [0u8; BLAKE2B_512_DIGEST_LEN - 1];
 
-        let status = crate::rustcrypto_blake2b_512(
+        let status = rustcrypto_blake2b_512(
             input.as_ptr(),
             input.len(),
             output.as_mut_ptr(),
@@ -125,7 +151,7 @@ mod tests {
         let mut output = [0u8; BLAKE2S_256_DIGEST_LEN];
 
         let status =
-            crate::rustcrypto_blake2s_256(core::ptr::null(), 1, output.as_mut_ptr(), output.len());
+            rustcrypto_blake2s_256(core::ptr::null(), 1, output.as_mut_ptr(), output.len());
 
         assert_eq!(status, RUSTCRYPTO_ERR_NULL_INPUT_WITH_DATA);
     }

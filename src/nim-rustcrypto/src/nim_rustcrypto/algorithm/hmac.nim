@@ -1,5 +1,5 @@
 import ./ffi
-import ./utils
+import ./common
 
 type
   HmacSha256Mac* = array[HmacSha256MacLen, byte]

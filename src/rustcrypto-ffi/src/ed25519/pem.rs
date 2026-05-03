@@ -4,6 +4,7 @@ use crate::{
 };
 use core::ffi::c_int;
 use pem_rfc7468::{Error, LineEnding, decode, encode, encoded_len};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 const PRIVATE_KEY_LABEL: &str = "PRIVATE KEY";
 const PUBLIC_KEY_LABEL: &str = "PUBLIC KEY";
@@ -163,6 +164,66 @@ pub(crate) fn public_key_from_spki_pem_impl(
     }
 
     super::pkcs8::public_key_from_spki_der_impl(der.as_ptr(), der.len(), output, output_len)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_ed25519_private_key_to_pkcs8_pem(
+    private_key: *const u8,
+    private_key_len: usize,
+    output: *mut u8,
+    output_len: usize,
+    written_len: *mut usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        private_key_to_pkcs8_pem_impl(
+            private_key,
+            private_key_len,
+            output,
+            output_len,
+            written_len,
+        )
+    }))
+    .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_ed25519_private_key_from_pkcs8_pem(
+    pem: *const u8,
+    pem_len: usize,
+    output: *mut u8,
+    output_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        private_key_from_pkcs8_pem_impl(pem, pem_len, output, output_len)
+    }))
+    .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_ed25519_public_key_to_spki_pem(
+    public_key: *const u8,
+    public_key_len: usize,
+    output: *mut u8,
+    output_len: usize,
+    written_len: *mut usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        public_key_to_spki_pem_impl(public_key, public_key_len, output, output_len, written_len)
+    }))
+    .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_ed25519_public_key_from_spki_pem(
+    pem: *const u8,
+    pem_len: usize,
+    output: *mut u8,
+    output_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        public_key_from_spki_pem_impl(pem, pem_len, output, output_len)
+    }))
+    .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
 }
 
 #[cfg(test)]

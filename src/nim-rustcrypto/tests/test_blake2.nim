@@ -1,15 +1,7 @@
 import unittest
 
-import nim_rustcrypto
-import nim_rustcrypto/blake2
-
-proc hexOf(bytes: openArray[byte]): string =
-  const hexDigits = "0123456789abcdef"
-  result = newString(bytes.len * 2)
-  for i, value in bytes:
-    let byteValue = int(value)
-    result[2 * i] = hexDigits[byteValue shr 4]
-    result[2 * i + 1] = hexDigits[byteValue and 0x0F]
+import ./utils
+import nim_rustcrypto/algorithm/blake2
 
 suite "blake2":
   test "raw blake2b-512 matches the RFC 7693 vector":

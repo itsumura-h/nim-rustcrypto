@@ -308,6 +308,33 @@ proc secp256k1EcdsaSignRaw*(
     outputLen: csize_t,
   ): cint {.cdecl, importc: "rustcrypto_secp256k1_ecdsa_sign_prehash".}
 
+proc secp256k1EcdsaSignSha256Raw*(
+    message: ptr uint8,
+    messageLen: csize_t,
+    secretKey: ptr uint8,
+    secretKeyLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_secp256k1_ecdsa_sign_sha256".}
+
+proc secp256k1EcdsaSignSha3_256Raw*(
+    message: ptr uint8,
+    messageLen: csize_t,
+    secretKey: ptr uint8,
+    secretKeyLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_secp256k1_ecdsa_sign_sha3_256".}
+
+proc secp256k1EcdsaSignKeccak256Raw*(
+    message: ptr uint8,
+    messageLen: csize_t,
+    secretKey: ptr uint8,
+    secretKeyLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_secp256k1_ecdsa_sign_keccak_256".}
+
 proc secp256k1EcdsaVerifyRaw*(
     messageDigest: ptr uint8,
     messageDigestLen: csize_t,
@@ -317,6 +344,36 @@ proc secp256k1EcdsaVerifyRaw*(
     signature: ptr uint8,
     signatureLen: csize_t,
   ): cint {.cdecl, importc: "rustcrypto_secp256k1_ecdsa_verify_prehash".}
+
+proc secp256k1EcdsaVerifySha256Raw*(
+    message: ptr uint8,
+    messageLen: csize_t,
+    publicKey: ptr uint8,
+    publicKeyLen: csize_t,
+    publicKeyFormat: cint,
+    signature: ptr uint8,
+    signatureLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_secp256k1_ecdsa_verify_sha256".}
+
+proc secp256k1EcdsaVerifySha3_256Raw*(
+    message: ptr uint8,
+    messageLen: csize_t,
+    publicKey: ptr uint8,
+    publicKeyLen: csize_t,
+    publicKeyFormat: cint,
+    signature: ptr uint8,
+    signatureLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_secp256k1_ecdsa_verify_sha3_256".}
+
+proc secp256k1EcdsaVerifyKeccak256Raw*(
+    message: ptr uint8,
+    messageLen: csize_t,
+    publicKey: ptr uint8,
+    publicKeyLen: csize_t,
+    publicKeyFormat: cint,
+    signature: ptr uint8,
+    signatureLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_secp256k1_ecdsa_verify_keccak_256".}
 
 proc secp256k1EcdsaSignatureToDerRaw*(
     signature: ptr uint8,

@@ -7,6 +7,7 @@ use crate::{
 use core::convert::TryInto;
 use core::ffi::c_int;
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 fn secret_key_bytes(
     secret_key: *const u8,
@@ -151,6 +152,63 @@ pub(crate) fn verify_impl(
         Ok(()) => RUSTCRYPTO_OK,
         Err(_) => RUSTCRYPTO_ERR_VERIFICATION_FAILED,
     }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_ed25519_public_key_from_secret_key(
+    secret_key: *const u8,
+    secret_key_len: usize,
+    output: *mut u8,
+    output_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        public_key_from_secret_key_impl(secret_key, secret_key_len, output, output_len)
+    }))
+    .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_ed25519_sign(
+    message: *const u8,
+    message_len: usize,
+    secret_key: *const u8,
+    secret_key_len: usize,
+    output: *mut u8,
+    output_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        sign_impl(
+            message,
+            message_len,
+            secret_key,
+            secret_key_len,
+            output,
+            output_len,
+        )
+    }))
+    .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_ed25519_verify(
+    message: *const u8,
+    message_len: usize,
+    public_key: *const u8,
+    public_key_len: usize,
+    signature: *const u8,
+    signature_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        verify_impl(
+            message,
+            message_len,
+            public_key,
+            public_key_len,
+            signature,
+            signature_len,
+        )
+    }))
+    .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
 }
 
 #[cfg(test)]

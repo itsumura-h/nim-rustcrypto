@@ -1,5 +1,5 @@
 import ./ffi
-import ./utils
+import ./common
 
 type
   Blake2b512Digest* = array[Blake2b512DigestLen, byte]

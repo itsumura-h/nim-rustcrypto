@@ -1,5 +1,5 @@
 import ./ffi
-import ./utils
+import ./common
 
 type
   Ed25519PrivateKey* = array[Ed25519PrivateKeyLen, byte]

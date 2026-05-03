@@ -1,30 +1,30 @@
 import ./ffi
-import ./utils
+import ./common
 
 type
-  Aes256GcmKey* = array[Aes256GcmKeyLen, byte]
-  Aes256GcmNonce* = array[Aes256GcmNonceLen, byte]
-  Aes256GcmTag* = array[Aes256GcmTagLen, byte]
-  Aes256GcmCiphertext* = seq[byte]
-  Aes256GcmPlaintext* = seq[byte]
+  Aes256GcmSivKey* = array[Aes256GcmSivKeyLen, byte]
+  Aes256GcmSivNonce* = array[Aes256GcmSivNonceLen, byte]
+  Aes256GcmSivTag* = array[Aes256GcmSivTagLen, byte]
+  Aes256GcmSivCiphertext* = seq[byte]
+  Aes256GcmSivPlaintext* = seq[byte]
 
-proc fromHex*(_: type Aes256GcmKey, hex: string): Aes256GcmKey =
-  fromHexDigest[Aes256GcmKey](hex, Aes256GcmKeyLen)
+proc fromHex*(_: type Aes256GcmSivKey, hex: string): Aes256GcmSivKey =
+  fromHexDigest[Aes256GcmSivKey](hex, Aes256GcmSivKeyLen)
 
-proc fromHex*(_: type Aes256GcmNonce, hex: string): Aes256GcmNonce =
-  fromHexDigest[Aes256GcmNonce](hex, Aes256GcmNonceLen)
+proc fromHex*(_: type Aes256GcmSivNonce, hex: string): Aes256GcmSivNonce =
+  fromHexDigest[Aes256GcmSivNonce](hex, Aes256GcmSivNonceLen)
 
-proc fromHex*(_: type Aes256GcmTag, hex: string): Aes256GcmTag =
-  fromHexDigest[Aes256GcmTag](hex, Aes256GcmTagLen)
+proc fromHex*(_: type Aes256GcmSivTag, hex: string): Aes256GcmSivTag =
+  fromHexDigest[Aes256GcmSivTag](hex, Aes256GcmSivTagLen)
 
-proc fromHexKey*(hex: string): Aes256GcmKey =
-  fromHexDigest[Aes256GcmKey](hex, Aes256GcmKeyLen)
+proc fromHexKey*(hex: string): Aes256GcmSivKey =
+  fromHexDigest[Aes256GcmSivKey](hex, Aes256GcmSivKeyLen)
 
-proc fromHexNonce*(hex: string): Aes256GcmNonce =
-  fromHexDigest[Aes256GcmNonce](hex, Aes256GcmNonceLen)
+proc fromHexNonce*(hex: string): Aes256GcmSivNonce =
+  fromHexDigest[Aes256GcmSivNonce](hex, Aes256GcmSivNonceLen)
 
-proc fromHexTag*(hex: string): Aes256GcmTag =
-  fromHexDigest[Aes256GcmTag](hex, Aes256GcmTagLen)
+proc fromHexTag*(hex: string): Aes256GcmSivTag =
+  fromHexDigest[Aes256GcmSivTag](hex, Aes256GcmSivTagLen)
 
 proc raiseIfError(status: cint; operation: string) =
   case status
@@ -51,15 +51,15 @@ proc raiseIfError(status: cint; operation: string) =
   else:
     raise newException(ValueError, operation & " failed: unexpected status " & $status)
 
-proc aes256gcmEncrypt*(
-    key: Aes256GcmKey,
-    nonce: Aes256GcmNonce,
+proc aes256gcmsivEncrypt*(
+    key: Aes256GcmSivKey,
+    nonce: Aes256GcmSivNonce,
     plaintext: openArray[byte],
     aad: openArray[byte],
-  ): tuple[ciphertext: Aes256GcmCiphertext, tag: Aes256GcmTag] =
+  ): tuple[ciphertext: Aes256GcmSivCiphertext, tag: Aes256GcmSivTag] =
   var ciphertext = newSeq[byte](plaintext.len)
-  var tag: Aes256GcmTag
-  let status = aes256GcmEncryptRaw(
+  var tag: Aes256GcmSivTag
+  let status = aes256GcmSivEncryptRaw(
     bytesPtr(key),
     csize_t(key.len),
     bytesPtr(nonce),
@@ -73,18 +73,18 @@ proc aes256gcmEncrypt*(
     cast[ptr uint8](addr tag[0]),
     csize_t(tag.len),
   )
-  raiseIfError(status, "rustcrypto_aes256gcm_encrypt")
+  raiseIfError(status, "rustcrypto_aes256gcmsiv_encrypt")
   (ciphertext, tag)
 
-proc aes256gcmDecrypt*(
-    key: Aes256GcmKey,
-    nonce: Aes256GcmNonce,
+proc aes256gcmsivDecrypt*(
+    key: Aes256GcmSivKey,
+    nonce: Aes256GcmSivNonce,
     ciphertext: openArray[byte],
-    tag: Aes256GcmTag,
+    tag: Aes256GcmSivTag,
     aad: openArray[byte],
-  ): Aes256GcmPlaintext =
+  ): Aes256GcmSivPlaintext =
   var plaintext = newSeq[byte](ciphertext.len)
-  let status = aes256GcmDecryptRaw(
+  let status = aes256GcmSivDecryptRaw(
     bytesPtr(key),
     csize_t(key.len),
     bytesPtr(nonce),
@@ -98,5 +98,5 @@ proc aes256gcmDecrypt*(
     bytesPtr(plaintext),
     csize_t(plaintext.len),
   )
-  raiseIfError(status, "rustcrypto_aes256gcm_decrypt")
+  raiseIfError(status, "rustcrypto_aes256gcmsiv_decrypt")
   plaintext

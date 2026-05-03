@@ -1,6 +1,6 @@
 import ./ffi
 import ./pkcs8
-import ./utils
+import ./common
 
 type
   Ed25519SecretKey* = pkcs8.Ed25519PrivateKey

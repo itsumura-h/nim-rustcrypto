@@ -7,6 +7,7 @@ use crate::{
 use ::aes_gcm_siv::aead::{AeadInPlace, KeyInit as AeadKeyInit};
 use ::aes_gcm_siv::{Aes256GcmSiv, Key, Nonce, Tag};
 use core::ffi::c_int;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 type Aes256GcmSivKey = Key<Aes256GcmSiv>;
 type Aes256GcmSivNonce = Nonce;
@@ -163,6 +164,74 @@ pub(crate) fn decrypt_impl(
     }
 }
 
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_aes256gcmsiv_encrypt(
+    key: *const u8,
+    key_len: usize,
+    nonce: *const u8,
+    nonce_len: usize,
+    aad: *const u8,
+    aad_len: usize,
+    plaintext: *const u8,
+    plaintext_len: usize,
+    ciphertext: *mut u8,
+    ciphertext_len: usize,
+    tag: *mut u8,
+    tag_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        encrypt_impl(
+            key,
+            key_len,
+            nonce,
+            nonce_len,
+            aad,
+            aad_len,
+            plaintext,
+            plaintext_len,
+            ciphertext,
+            ciphertext_len,
+            tag,
+            tag_len,
+        )
+    }))
+    .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_aes256gcmsiv_decrypt(
+    key: *const u8,
+    key_len: usize,
+    nonce: *const u8,
+    nonce_len: usize,
+    aad: *const u8,
+    aad_len: usize,
+    ciphertext: *const u8,
+    ciphertext_len: usize,
+    tag: *const u8,
+    tag_len: usize,
+    plaintext: *mut u8,
+    plaintext_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        decrypt_impl(
+            key,
+            key_len,
+            nonce,
+            nonce_len,
+            aad,
+            aad_len,
+            ciphertext,
+            ciphertext_len,
+            tag,
+            tag_len,
+            plaintext,
+            plaintext_len,
+        )
+    }))
+    .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -210,7 +279,7 @@ mod tests {
         let mut ciphertext = vec![0u8; plaintext.len()];
         let mut tag = [0u8; AES256GCMSIV_TAG_LEN];
 
-        let status = crate::rustcrypto_aes256gcmsiv_encrypt(
+        let status = rustcrypto_aes256gcmsiv_encrypt(
             key.as_ptr(),
             key.len(),
             nonce.as_ptr(),
@@ -239,7 +308,7 @@ mod tests {
         let tag = hex_bytes("843122130f7364b761e0b97427e3df28");
         let mut plaintext = vec![0u8; ciphertext.len()];
 
-        let status = crate::rustcrypto_aes256gcmsiv_decrypt(
+        let status = rustcrypto_aes256gcmsiv_decrypt(
             key.as_ptr(),
             key.len(),
             nonce.as_ptr(),
@@ -268,7 +337,7 @@ mod tests {
         let mut plaintext = vec![0u8; ciphertext.len()];
         tag[0] ^= 0x01;
 
-        let status = crate::rustcrypto_aes256gcmsiv_decrypt(
+        let status = rustcrypto_aes256gcmsiv_decrypt(
             key.as_ptr(),
             key.len(),
             nonce.as_ptr(),
@@ -295,7 +364,7 @@ mod tests {
         let mut ciphertext = vec![0u8; plaintext.len() - 1];
         let mut tag = [0u8; AES256GCMSIV_TAG_LEN];
 
-        let status = crate::rustcrypto_aes256gcmsiv_encrypt(
+        let status = rustcrypto_aes256gcmsiv_encrypt(
             key.as_ptr(),
             key.len(),
             nonce.as_ptr(),

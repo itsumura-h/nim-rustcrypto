@@ -6,6 +6,7 @@ use core::ffi::c_int;
 use pbkdf2::pbkdf2_hmac;
 use sha2::Sha256;
 use std::slice;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 pub(crate) fn pbkdf2_hmac_sha256_impl(
     password: *const u8,
@@ -42,6 +43,32 @@ pub(crate) fn pbkdf2_hmac_sha256_impl(
     let output = unsafe { slice::from_raw_parts_mut(output, derived_len) };
     pbkdf2_hmac::<Sha256>(password, salt, iterations, output);
     RUSTCRYPTO_OK
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_pbkdf2_hmac_sha256(
+    password: *const u8,
+    password_len: usize,
+    salt: *const u8,
+    salt_len: usize,
+    iterations: u32,
+    output: *mut u8,
+    output_len: usize,
+    derived_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        pbkdf2_hmac_sha256_impl(
+            password,
+            password_len,
+            salt,
+            salt_len,
+            iterations,
+            output,
+            output_len,
+            derived_len,
+        )
+    }))
+    .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
 }
 
 #[cfg(test)]
