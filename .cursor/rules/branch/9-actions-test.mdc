@@ -1,0 +1,93 @@
+---
+description: 9-actions-testブランチでの開発時に読み込む
+alwaysApply: false
+---
+9-actions-testブランチルール
+===
+
+このブランチで実装することは以下の通りです。
+- GitHub ActionsでDocker Composeを使って開発用コンテナを起動する
+- 起動したComposeサービス内でRust側テストを実行し、`src/rustcrypto-ffi` の `cargo test` が通ることを確認する
+- Rust側の静的アーカイブをビルドし、Nim側テストからリンクできる状態にする
+- 起動したComposeサービス内でNim側テストを実行し、`src/nim-rustcrypto` の `nimble test -y` が通ることを確認する
+- CIの失敗理由がRust、Nim、Docker Composeのどこにあるか分かるように、Workflowのステップを分離する
+- READMEには、必要な場合のみCIの実行内容を短く追記する
+
+このブランチでは、暗号API、Rust FFI、Nimラッパー、テストベクトルの仕様変更は対象外とする。目的は、既存のRust/NimテストをGitHub Actions上のDocker Compose環境で再現可能に実行し、PRごとに回帰を検出できるようにすることである。
+
+## 進捗
+- [x] `.cursor/rules/project.mdc` を読み、Rust/Nimのビルドディレクトリ、テスト順、Ubuntu優先のルールを確認する
+- [x] `.cursor/rules/branch.mdc` を読み、ブランチルールの形式と記録方針を確認する
+- [x] 現在ブランチ `9-actions-test` に対応する既存ブランチルールがないことを確認する
+- [x] `compose.yaml` と `docker/app/develop.Dockerfile` を読み、既存の開発用Compose構成を確認する
+- [x] READMEを読み、Rust/Nimのローカル実行コマンドを確認する
+- [x] `.github` 配下に既存Workflowがないことを確認する
+- [x] GitHub ActionsとDocker Composeの公式ドキュメントを確認し、CI上での実行方針を整理する
+- [x] 実装方針と設計をこのブランチルールに記録する
+- [x] `.github/workflows/test.yml` を追加する
+- [x] Workflowのトリガーを `push` と `pull_request` に設定する
+- [x] `actions/checkout` でリポジトリを取得する
+- [x] `docker compose build app` で開発用イメージをビルドする
+- [x] `docker compose up -d app` でComposeサービスを起動する
+- [x] `docker compose exec -T app bash -lc 'cd /application/src/rustcrypto-ffi && cargo test'` を実行する
+- [x] `docker compose exec -T app bash -lc 'cd /application/src/rustcrypto-ffi && cargo build --release --lib'` を実行する
+- [x] `docker compose exec -T app bash -lc 'cd /application/src/nim-rustcrypto && nimble test -y'` を実行する
+- [x] `if: always()` の後片付けステップで `docker compose down --remove-orphans` を実行する
+- [ ] CIログでRustテスト、Rustビルド、Nimテストの失敗箇所が分かることを確認する
+- [ ] 必要に応じてREADMEにCIで実行される検証内容を追記する
+
+## 参考資料
+- GitHub Actions service containers: https://docs.github.com/actions/tutorials/use-containerized-services/use-docker-service-containers
+- GitHub Actions running jobs in a container: https://docs.github.com/en/actions/writing-workflows/choosing-where-your-workflow-runs/running-jobs-in-a-container
+- Docker CI: https://docs.docker.com/build/ci/
+- Docker Compose `up`: https://docs.docker.com/reference/cli/docker/compose/up/
+- Docker Compose `build`: https://docs.docker.com/reference/cli/docker/compose/build/
+- Docker Compose `down`: https://docs.docker.com/reference/cli/docker/compose/down/
+- Rust Cargo test: https://doc.rust-lang.org/cargo/commands/cargo-test.html
+- Nimble: https://github.com/nim-lang/nimble
+
+## 調査結果・設計まとめ
+- 2026-05-03時点の調査では、GitHub-hosted runnerの `ubuntu-latest` ではDockerを使ったWorkflow実行が一般的に可能であり、このプロジェクトの対象環境もUbuntu優先であるため、Workflowのrunnerは `ubuntu-latest` を使う。
+- 既存の `compose.yaml` は `app` サービスのみを定義し、`docker/app/develop.Dockerfile` からUbuntu 24.04ベースのRust/Nim開発環境をビルドする。CIでもこのComposeサービスをそのまま使い、ローカル開発環境との差分を小さくする。
+- `docker/app/develop.Dockerfile` は `build-essential`、`curl`、`git`、Rust、Nimをインストールし、`/application` を作業ディレクトリにしている。CIではCheckout済みのリポジトリをCompose volumeで `/application` にマウントしてテストする。
+- GitHub Actionsのservice containers機能はDBやRedisのような補助サービス向けであり、このブランチの主目的である「リポジトリ内の `compose.yaml` を使って開発コンテナを立て、その中でテストする」用途では、Workflowステップから `docker compose` CLIを直接実行する方針が分かりやすい。
+- Docker Composeの `up --build` はサービスをビルドして起動できる。`--wait` はサービスがrunningまたはhealthyになるまで待つが、既存 `app` サービスにはhealthcheckがないため、初期実装では `docker compose up -d app` のあとに `docker compose exec -T app ...` を実行する形で十分とする。
+- 将来、DBなど起動完了待ちが必要なサービスを追加した場合は、Compose側にhealthcheckを定義して `docker compose up --build --wait app` を使う。現時点ではTTY待機用の `app` サービスだけなので、CIの複雑化を避ける。
+- `docker compose exec` は通常TTYを割り当てるため、GitHub Actionsでは `-T` を付ける。これにより非対話CIでもRust/Nimのコマンドを安定して実行できる。
+- Rustテストはプロジェクトルール `SYW-BUILD-002` に従い、必ず `/application/src/rustcrypto-ffi` で実行する。Workflowでは `cd /application/src/rustcrypto-ffi && cargo test` を独立ステップにする。
+- Nimテストはプロジェクトルール `SYW-BUILD-003` に従い、必ず `/application/src/nim-rustcrypto` で実行する。Workflowでは `cd /application/src/nim-rustcrypto && nimble test -y` を独立ステップにする。
+- Nim側テストはRustの静的アーカイブ `librust_crypto_ffi.a` をリンクするため、`nimble test -y` の前に `cargo build --release --lib` を実行する。`cargo test` だけではreleaseビルド成果物が保証されないため、RustテストとRust releaseビルドを分ける。
+- Workflowのステップ順は、checkout、Compose build、Compose up、Rust test、Rust release build、Nim test、Compose downとする。Rust test、Rust build、Nim testを分けることで、CI失敗時に原因を読み取りやすくする。
+- 後片付けは `if: always()` を使い、途中のテストが失敗しても `docker compose down --remove-orphans` を実行する。必要になった場合のみ `--volumes` を追加するが、初期実装では依存キャッシュや匿名volumeの扱いを変えないため付けない。
+- 既存Composeサービスはリポジトリ全体を `/application` にマウントするため、GitHub Actions側の作業ディレクトリはリポジトリルートのままでよい。Workflow内で `working-directory` を細かく切り替えるより、コンテナ内コマンドで明示的に `cd` する。
+- 初期WorkflowではCargo/Nimbleのキャッシュ最適化は行わない。まず正しく動く最小CIを優先し、実行時間が問題になった場合に `actions/cache`、Docker layer cache、Cargo registry cache、Nimble package cacheを別タスクで検討する。
+- `docker/app/develop.Dockerfile` の依存インストールは毎回時間がかかる可能性がある。CI時間が長すぎる場合は、base imageの固定化、GitHub Container Registryへの開発イメージpush、またはBuildKit cacheを検討する。ただし、このブランチの初期完了条件には含めない。
+- Workflow名は `test`、ファイル名は `.github/workflows/test.yml` とする。ジョブ名は `docker-compose-test` とし、テスト対象がDocker Compose経由であることを明確にする。
+- トリガーは `push` と `pull_request` を基本にする。ブランチ制限は設けず、main以外の作業ブランチでもCIが走るようにする。
+- Workflowの権限は読み取りのみで足りるため、必要に応じて `permissions: contents: read` を設定する。GitHub Packagesなどへpushしない限り、書き込み権限は不要とする。
+- このブランチでは `git add`、`git commit` は行わない。変更ファイルはユーザーが確認してからステージングする。
+- 2026-05-03時点の実装では、CIは `docker compose build app` でイメージを作成し、`docker compose up -d app` で起動した `app` サービスに対して `cargo test`、`cargo build --release --lib`、`nimble test -y` を分離したステップで実行する。後片付けは `docker compose down --remove-orphans` で行う。
+- この作業環境には `docker` コマンドがないため、Workflow自体のローカル実行確認はできていない。実行確認はGitHub Actions上で行う前提とする。
+
+### 想定Workflow設計
+- ファイル: `.github/workflows/test.yml`
+- Workflow名: `test`
+- Runner: `ubuntu-latest`
+- Job: `docker-compose-test`
+- 手順:
+  1. `actions/checkout` でソースを取得する
+  2. `docker compose build app` で開発用イメージをビルドする
+  3. `docker compose up -d app` でコンテナを起動する
+  4. `docker compose exec -T app bash -lc 'cd /application/src/rustcrypto-ffi && cargo test'` を実行する
+  5. `docker compose exec -T app bash -lc 'cd /application/src/rustcrypto-ffi && cargo build --release --lib'` を実行する
+  6. `docker compose exec -T app bash -lc 'cd /application/src/nim-rustcrypto && nimble test -y'` を実行する
+  7. `if: always()` で `docker compose down --remove-orphans` を実行する
+
+### 完了条件
+- GitHub Actions上でComposeサービスがビルドできる
+- GitHub Actions上でComposeサービスが起動できる
+- GitHub Actions上のComposeサービス内で `cargo test` が成功する
+- GitHub Actions上のComposeサービス内で `cargo build --release --lib` が成功する
+- GitHub Actions上のComposeサービス内で `nimble test -y` が成功する
+- CIが失敗した場合、ログ上でRustテスト、Rustビルド、Nimテストのどこで失敗したか分かる
+- CI終了時にComposeリソースが後片付けされる
