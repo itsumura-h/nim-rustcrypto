@@ -8,28 +8,29 @@ type
   Secp256k1UncompressedPublicKey* = array[Secp256k1PublicKeyUncompressedLen, byte]
   Secp256k1MessageDigest* = ecdsa_common.Secp256k1MessageDigest
   Secp256k1Signature* = ecdsa_common.Secp256k1Signature
+  Secp256k1RecoverableSignature* = array[Secp256k1RecoverableSignatureLen, byte]
   Secp256k1DerSignature* = ecdsa_common.Secp256k1DerSignature
 
-proc raiseIfError(status: cint) =
+proc raiseIfError(status: cint; operation: string) =
   case status
   of RustCryptoOk:
     discard
   of RustCryptoErrNullOutput:
-    raise newException(ValueError, "rustcrypto_secp256k1_public_key_from_secret_key failed: null output")
+    raise newException(ValueError, operation & " failed: null output")
   of RustCryptoErrOutputTooShort:
-    raise newException(ValueError, "rustcrypto_secp256k1_public_key_from_secret_key failed: output too short")
+    raise newException(ValueError, operation & " failed: output too short")
   of RustCryptoErrNullInputWithData:
-    raise newException(ValueError, "rustcrypto_secp256k1_public_key_from_secret_key failed: null input with data")
+    raise newException(ValueError, operation & " failed: null input with data")
   of RustCryptoErrInvalidSecretKey:
-    raise newException(ValueError, "rustcrypto_secp256k1_public_key_from_secret_key failed: invalid secret key")
+    raise newException(ValueError, operation & " failed: invalid secret key")
   of RustCryptoErrInvalidPublicKeyFormat:
-    raise newException(ValueError, "rustcrypto_secp256k1_public_key_from_secret_key failed: invalid public key format")
+    raise newException(ValueError, operation & " failed: invalid public key format")
   of RustCryptoErrPanic:
-    raise newException(ValueError, "rustcrypto_secp256k1_public_key_from_secret_key failed: panic")
+    raise newException(ValueError, operation & " failed: panic")
   else:
     raise newException(
       ValueError,
-      "rustcrypto_secp256k1_public_key_from_secret_key failed: unexpected status " & $status,
+      operation & " failed: unexpected status " & $status,
     )
 
 proc secp256k1PublicKeyCompressed*(secretKey: Secp256k1SecretKey): Secp256k1CompressedPublicKey =
@@ -41,7 +42,7 @@ proc secp256k1PublicKeyCompressed*(secretKey: Secp256k1SecretKey): Secp256k1Comp
     csize_t(output.len),
     Secp256k1PublicKeyFormatCompressed,
   )
-  raiseIfError(status)
+  raiseIfError(status, "rustcrypto_secp256k1_public_key_from_secret_key")
   output
 
 proc secp256k1PublicKeyUncompressed*(secretKey: Secp256k1SecretKey): Secp256k1UncompressedPublicKey =
@@ -53,7 +54,7 @@ proc secp256k1PublicKeyUncompressed*(secretKey: Secp256k1SecretKey): Secp256k1Un
     csize_t(output.len),
     Secp256k1PublicKeyFormatUncompressed,
   )
-  raiseIfError(status)
+  raiseIfError(status, "rustcrypto_secp256k1_public_key_from_secret_key")
   output
 
 proc secp256k1EcdsaSign*(
@@ -94,3 +95,93 @@ proc secp256k1EcdsaVerify*(
     Secp256k1PublicKeyFormatUncompressed,
     "rustcrypto_secp256k1_ecdsa_verify_prehash",
   )
+
+proc secp256k1EcdsaSignRecoverable*(
+    messageDigest: Secp256k1MessageDigest,
+    secretKey: Secp256k1SecretKey,
+  ): Secp256k1RecoverableSignature =
+  var output: Secp256k1RecoverableSignature
+  let status = secp256k1EcdsaSignRecoverablePrehashRaw(
+    bytesPtr(messageDigest),
+    csize_t(messageDigest.len),
+    bytesPtr(secretKey),
+    csize_t(secretKey.len),
+    cast[ptr uint8](addr output[0]),
+    csize_t(output.len),
+  )
+  raiseSignError(status, "rustcrypto_secp256k1_ecdsa_sign_recoverable_prehash")
+  output
+
+proc secp256k1EcdsaRecoverableVerify*(
+    messageDigest: Secp256k1MessageDigest,
+    publicKey: Secp256k1CompressedPublicKey,
+    signature: Secp256k1RecoverableSignature,
+  ): bool =
+  var recovered: Secp256k1CompressedPublicKey
+  let status = secp256k1EcdsaRecoverPublicKeyRaw(
+    bytesPtr(messageDigest),
+    csize_t(messageDigest.len),
+    bytesPtr(signature),
+    csize_t(signature.len),
+    cast[ptr uint8](addr recovered[0]),
+    csize_t(recovered.len),
+    Secp256k1PublicKeyFormatCompressed,
+  )
+  case status
+  of RustCryptoOk:
+    recovered == publicKey
+  of RustCryptoErrVerificationFailed:
+    false
+  of RustCryptoErrNullOutput,
+     RustCryptoErrOutputTooShort,
+     RustCryptoErrNullInputWithData,
+     RustCryptoErrInvalidMessageDigest,
+     RustCryptoErrInvalidSignature,
+     RustCryptoErrInvalidPublicKeyFormat,
+     RustCryptoErrPanic:
+    raise newException(
+      ValueError,
+      "rustcrypto_secp256k1_ecdsa_recover_public_key failed: " & $status,
+    )
+  else:
+    raise newException(
+      ValueError,
+      "rustcrypto_secp256k1_ecdsa_recover_public_key failed: unexpected status " & $status,
+    )
+
+proc secp256k1EcdsaRecoverableVerify*(
+    messageDigest: Secp256k1MessageDigest,
+    publicKey: Secp256k1UncompressedPublicKey,
+    signature: Secp256k1RecoverableSignature,
+  ): bool =
+  var recovered: Secp256k1UncompressedPublicKey
+  let status = secp256k1EcdsaRecoverPublicKeyRaw(
+    bytesPtr(messageDigest),
+    csize_t(messageDigest.len),
+    bytesPtr(signature),
+    csize_t(signature.len),
+    cast[ptr uint8](addr recovered[0]),
+    csize_t(recovered.len),
+    Secp256k1PublicKeyFormatUncompressed,
+  )
+  case status
+  of RustCryptoOk:
+    recovered == publicKey
+  of RustCryptoErrVerificationFailed:
+    false
+  of RustCryptoErrNullOutput,
+     RustCryptoErrOutputTooShort,
+     RustCryptoErrNullInputWithData,
+     RustCryptoErrInvalidMessageDigest,
+     RustCryptoErrInvalidSignature,
+     RustCryptoErrInvalidPublicKeyFormat,
+     RustCryptoErrPanic:
+    raise newException(
+      ValueError,
+      "rustcrypto_secp256k1_ecdsa_recover_public_key failed: " & $status,
+    )
+  else:
+    raise newException(
+      ValueError,
+      "rustcrypto_secp256k1_ecdsa_recover_public_key failed: unexpected status " & $status,
+    )

@@ -11,6 +11,7 @@ const
   Secp256k1PublicKeyCompressedLen* = 33
   Secp256k1PublicKeyUncompressedLen* = 65
   Secp256k1SignatureLen* = 64
+  Secp256k1RecoverableSignatureLen* = 65
   Secp256k1SignatureDerMaxLen* = 72
   Secp256k1MessageDigestLen* = 32
   SchnorrPublicKeyLen* = 32
@@ -339,6 +340,15 @@ proc secp256k1EcdsaSignKeccak256Raw*(
     outputLen: csize_t,
   ): cint {.cdecl, importc: "rustcrypto_secp256k1_ecdsa_sign_keccak_256".}
 
+proc secp256k1EcdsaSignRecoverablePrehashRaw*(
+    messageDigest: ptr uint8,
+    messageDigestLen: csize_t,
+    secretKey: ptr uint8,
+    secretKeyLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_secp256k1_ecdsa_sign_recoverable_prehash".}
+
 proc secp256k1EcdsaVerifyRaw*(
     messageDigest: ptr uint8,
     messageDigestLen: csize_t,
@@ -378,6 +388,16 @@ proc secp256k1EcdsaVerifyKeccak256Raw*(
     signature: ptr uint8,
     signatureLen: csize_t,
   ): cint {.cdecl, importc: "rustcrypto_secp256k1_ecdsa_verify_keccak_256".}
+
+proc secp256k1EcdsaRecoverPublicKeyRaw*(
+    messageDigest: ptr uint8,
+    messageDigestLen: csize_t,
+    recoverableSignature: ptr uint8,
+    recoverableSignatureLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    compressed: cint,
+  ): cint {.cdecl, importc: "rustcrypto_secp256k1_ecdsa_recover_public_key".}
 
 proc secp256k1EcdsaSignatureToDerRaw*(
     signature: ptr uint8,
