@@ -1,6 +1,6 @@
 import ./ecdsa_common
 import ./ffi
-import ./utils
+import ./common
 
 type
   Secp256k1DerSignature* = ecdsa_common.Secp256k1DerSignature

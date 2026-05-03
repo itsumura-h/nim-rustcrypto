@@ -1,7 +1,7 @@
 import ./ffi
 import ./ecdsa_common
 import ./secp256k1
-import ./utils
+import ./common
 
 type
   Sha256Digest* = array[SHA256DigestLen, byte]

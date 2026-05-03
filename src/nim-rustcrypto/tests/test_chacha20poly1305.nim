@@ -1,8 +1,7 @@
 import unittest
 
 import ./utils
-import nim_rustcrypto
-import nim_rustcrypto/chacha20poly1305
+import nim_rustcrypto/algorithm/chacha20poly1305
 
 suite "chacha20poly1305":
   test "raw encrypt matches the RFC 8439 vector":

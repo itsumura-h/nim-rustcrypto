@@ -1,7 +1,7 @@
 import unittest
 
 import ./utils
-import nim_rustcrypto
+import nim_rustcrypto/algorithm/hmac
 
 suite "hmac":
   test "raw accepts empty key and message via null pointers":

@@ -1,4 +1,9 @@
-import nim_rustcrypto
+import nim_rustcrypto/algorithm/ffi
+import nim_rustcrypto/algorithm/common
+import nim_rustcrypto/algorithm/secp256k1
+
+export ffi
+export common
 
 proc hexOf*(bytes: openArray[byte]): string =
   const hexDigits = "0123456789abcdef"

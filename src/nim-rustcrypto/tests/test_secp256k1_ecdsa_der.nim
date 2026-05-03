@@ -1,7 +1,9 @@
 import unittest
 
 import ./utils
-import nim_rustcrypto
+import nim_rustcrypto/algorithm/sha256
+import nim_rustcrypto/algorithm/secp256k1
+import nim_rustcrypto/algorithm/secp256k1_ecdsa_der
 
 suite "secp256k1 ecdsa der":
   test "raw sign produces the known deterministic signature":

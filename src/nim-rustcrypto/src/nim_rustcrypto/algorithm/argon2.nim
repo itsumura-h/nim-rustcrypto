@@ -1,5 +1,5 @@
 import ./ffi
-import ./utils
+import ./common
 
 type
   Argon2idOkm* = seq[byte]

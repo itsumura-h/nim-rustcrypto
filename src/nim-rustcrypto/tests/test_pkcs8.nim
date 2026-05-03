@@ -1,7 +1,7 @@
 import unittest
 
 import ./utils
-import nim_rustcrypto
+import nim_rustcrypto/algorithm/pkcs8
 
 suite "pkcs8":
   test "raw private key encodes to the RFC 8410 example":

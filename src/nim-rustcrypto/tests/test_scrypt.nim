@@ -1,7 +1,7 @@
 import unittest
 
 import ./utils
-import nim_rustcrypto
+import nim_rustcrypto/algorithm/scrypt
 
 suite "scrypt":
   test "high-level derive matches the empty-input RFC vector":

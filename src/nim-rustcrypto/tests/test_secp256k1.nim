@@ -1,7 +1,8 @@
 import unittest
 
 import ./utils
-import nim_rustcrypto
+import nim_rustcrypto/algorithm/sha256
+import nim_rustcrypto/algorithm/secp256k1
 
 suite "secp256k1":
   test "raw compressed public key derivation matches the known vector":

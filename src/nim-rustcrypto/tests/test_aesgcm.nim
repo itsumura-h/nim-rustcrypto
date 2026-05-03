@@ -1,8 +1,7 @@
 import unittest
 
 import ./utils
-import nim_rustcrypto
-import nim_rustcrypto/aesgcm
+import nim_rustcrypto/algorithm/aesgcm
 
 suite "aes-gcm":
   test "raw encrypt matches the NIST vector":

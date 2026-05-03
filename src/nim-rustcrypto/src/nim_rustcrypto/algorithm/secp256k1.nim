@@ -1,6 +1,6 @@
 import ./ecdsa_common
 import ./ffi
-import ./utils
+import ./common
 
 type
   Secp256k1SecretKey* = array[Secp256k1SecretKeyLen, byte]

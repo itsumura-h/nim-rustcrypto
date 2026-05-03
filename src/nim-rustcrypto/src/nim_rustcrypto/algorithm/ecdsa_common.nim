@@ -1,5 +1,5 @@
 import ./ffi
-import ./utils
+import ./common
 
 type
   Secp256k1MessageDigest* = array[Secp256k1MessageDigestLen, byte]

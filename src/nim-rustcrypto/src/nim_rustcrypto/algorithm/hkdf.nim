@@ -1,5 +1,5 @@
 import ./ffi
-import ./utils
+import ./common
 
 type
   HkdfSha256Prk* = array[HkdfSha256PrkLen, byte]
