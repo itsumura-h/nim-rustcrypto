@@ -25,32 +25,32 @@ alwaysApply: false
 - [x] 既存のsecp256k1、Ed25519、PKCS#8/SPKI/PEM実装の構成を確認する
 - [x] RustCryptoの `p256`、`p384`、`x509-cert`、`rsa` の安定系列とfeature構成を調査する
 - [x] 実装方針と設計をこのブランチルールに記録する
-- [ ] 依存追加が必要なcrateを `cargo add` で追加する
-- [ ] Rust側でP-256秘密鍵、公開鍵、ECDSA署名の長さ定数を追加する
-- [ ] Rust側でP-384秘密鍵、公開鍵、ECDSA署名の長さ定数を追加する
-- [ ] Rust側にP-256公開鍵導出APIを実装する
-- [ ] Rust側にP-256 ECDSA SHA-256署名・検証APIを実装する
-- [ ] Rust側にP-256 PKCS#8/SPKI DER変換APIを実装する
-- [ ] Rust側にP-384公開鍵導出APIを実装する
-- [ ] Rust側にP-384 ECDSA SHA-384署名・検証APIを実装する
-- [ ] Rust側にP-384 PKCS#8/SPKI DER変換APIを実装する
-- [ ] Rust側にX.509 DER/PEM証明書の最小読み取りAPIを実装する
-- [ ] Rust側にRSA PKCS#8/SPKI DER変換APIを実装する
-- [ ] Rust側にRSA-PSS SHA-256署名・検証APIを実装する
-- [ ] Rust側にRSA PKCS#1 v1.5 SHA-256署名・検証APIを実装する
-- [ ] Rust側にRSA-OAEP SHA-256暗号化・復号APIを実装する
-- [ ] 必要な互換用途に限ってRSA PKCS#1 v1.5暗号化・復号APIを追加する
-- [ ] Rust側でNULLポインタ、不正長、不正鍵、不正署名、不正証明書、短い出力バッファ、検証失敗、復号失敗を整数エラーコードで返す
-- [ ] Rust側のpanicをFFI境界の外へ漏らさない
-- [ ] Rust側テストで公式または標準的な既知ベクトル、round-trip、改ざん失敗を確認する
-- [ ] Rustでビルドし、`librust_crypto_ffi.a` を出力する
-- [ ] Nim側にP-256用の低水準FFI proc、型、高水準API、テストを追加する
-- [ ] Nim側にP-384用の低水準FFI proc、型、高水準API、テストを追加する
-- [ ] Nim側にX.509用の低水準FFI proc、型、高水準API、テストを追加する
-- [ ] Nim側にRSA署名用の低水準FFI proc、型、高水準API、テストを追加する
-- [ ] Nim側にRSA暗号化用の低水準FFI proc、型、高水準API、テストを追加する
-- [ ] Nim側verify APIは暗号学的な検証失敗を `false` として返し、呼び出し方の誤りは例外にする
-- [ ] READMEの開発優先順位、提供API、テストベクトルを新規APIに合わせて更新する
+- [x] 依存追加が必要なcrateを `cargo add` で追加する
+- [x] Rust側でP-256秘密鍵、公開鍵、ECDSA署名の長さ定数を追加する
+- [x] Rust側でP-384秘密鍵、公開鍵、ECDSA署名の長さ定数を追加する
+- [x] Rust側にP-256公開鍵導出APIを実装する
+- [x] Rust側にP-256 ECDSA SHA-256署名・検証APIを実装する
+- [x] Rust側にP-256 PKCS#8/SPKI DER変換APIを実装する
+- [x] Rust側にP-384公開鍵導出APIを実装する
+- [x] Rust側にP-384 ECDSA SHA-384署名・検証APIを実装する
+- [x] Rust側にP-384 PKCS#8/SPKI DER変換APIを実装する
+- [x] Rust側にX.509 DER/PEM証明書の最小読み取りAPIを実装する
+- [x] Rust側にRSA PKCS#8/SPKI DER変換APIを実装する
+- [x] Rust側にRSA-PSS SHA-256署名・検証APIを実装する
+- [x] Rust側にRSA PKCS#1 v1.5 SHA-256署名・検証APIを実装する
+- [x] Rust側にRSA-OAEP SHA-256暗号化・復号APIを実装する
+- [x] 必要な互換用途に限ってRSA PKCS#1 v1.5暗号化・復号APIを追加する
+- [x] Rust側でNULLポインタ、不正長、不正鍵、不正署名、不正証明書、短い出力バッファ、検証失敗、復号失敗を整数エラーコードで返す
+- [x] Rust側のpanicをFFI境界の外へ漏らさない
+- [x] Rust側テストで公式または標準的な既知ベクトル、round-trip、改ざん失敗を確認する
+- [x] Rustでビルドし、`librust_crypto_ffi.a` を出力する
+- [x] Nim側にP-256用の低水準FFI proc、型、高水準API、テストを追加する
+- [x] Nim側にP-384用の低水準FFI proc、型、高水準API、テストを追加する
+- [x] Nim側にX.509用の低水準FFI proc、型、高水準API、テストを追加する
+- [x] Nim側にRSA署名用の低水準FFI proc、型、高水準API、テストを追加する
+- [x] Nim側にRSA暗号化用の低水準FFI proc、型、高水準API、テストを追加する
+- [x] Nim側verify APIは暗号学的な検証失敗を `false` として返し、呼び出し方の誤りは例外にする
+- [x] READMEの開発優先順位、提供API、テストベクトルを新規APIに合わせて更新する
 
 ## 参考資料
 - RustCrypto: https://github.com/RustCrypto
@@ -93,6 +93,8 @@ alwaysApply: false
 - DER、PEM、証明書、RSA暗号文のような可変長出力は、呼び出し元が出力バッファを渡し、Rust側が `written_len` に実際の書き込み長を返す設計にする。短い出力バッファは `RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT` を返す。
 - 空入力は、本文メッセージやlabelなど意味的に空を許容できるものだけ `ptr == NULL && len == 0` を許容する。鍵、署名、証明書、暗号文で長さ0が不正なものは `RUSTCRYPTO_ERR_INVALID_LENGTH` または用途別エラーにする。
 - エラーコードは既存定数を優先して再利用する。NULL出力は `RUSTCRYPTO_ERR_NULL_OUTPUT`、短い出力バッファは `RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT`、長さ付きNULL入力は `RUSTCRYPTO_ERR_NULL_INPUT_WITH_DATA`、不正秘密鍵は `RUSTCRYPTO_ERR_INVALID_SECRET_KEY`、不正公開鍵は `RUSTCRYPTO_ERR_INVALID_PUBLIC_KEY_FORMAT`、不正署名は `RUSTCRYPTO_ERR_INVALID_SIGNATURE`、検証失敗は `RUSTCRYPTO_ERR_VERIFICATION_FAILED`、一般的なDER/PEM/証明書/パディング不正は `RUSTCRYPTO_ERR_INVALID_PARAMETER` または `RUSTCRYPTO_ERR_INVALID_LENGTH` とする。
+- RSA のテスト fixture は、証明書 fixture と秘密鍵 fixture が別ペアである場合があるため、X.509 の抽出テストと RSA の署名・暗号化テストでは使う fixture を分ける。
+- P-384 の公開 API 名は `sha384` を使い、`sha256` にはしない。Nim 側の FFI 宣言名と Rust 側の export 名を一致させる。
 - 既存エラーコードで意味が曖昧になる場合だけ、追加エラーコードを検討する。候補は `RUSTCRYPTO_ERR_DECRYPTION_FAILED`、`RUSTCRYPTO_ERR_INVALID_CERTIFICATE`、`RUSTCRYPTO_ERR_UNSUPPORTED_ALGORITHM` だが、追加前に既存Nimエラーマッピングへの影響を確認する。
 - Rust側実装ファイルは、P-256を `src/rustcrypto-ffi/src/p256.rs`、P-384を `src/rustcrypto-ffi/src/p384.rs`、X.509を `src/rustcrypto-ffi/src/x509.rs`、RSAを `src/rustcrypto-ffi/src/rsa.rs` に分離する方針とする。`lib.rs` には定数、エラーコード、`mod` 宣言だけを追加する。
 - Nim側実装ファイルは、P-256を `src/nim-rustcrypto/src/nim_rustcrypto/algorithm/p256.nim`、P-384を `src/nim-rustcrypto/src/nim_rustcrypto/algorithm/p384.nim`、X.509を `src/nim-rustcrypto/src/nim_rustcrypto/algorithm/x509.nim`、RSAを `src/nim-rustcrypto/src/nim_rustcrypto/algorithm/rsa.nim` に分離する方針とする。低水準FFI procは既存方針に合わせて `algorithm/ffi.nim` に集約する。

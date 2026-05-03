@@ -31,6 +31,17 @@ proc bytesFromHex*(hex: string): seq[byte] =
   for i in 0 ..< result.len:
     result[i] = byte((nibble(hex[2 * i]) shl 4) or nibble(hex[2 * i + 1]))
 
+proc bytesFromString*(text: string): seq[byte] =
+  result = newSeq[byte](text.len)
+  for i, ch in text:
+    result[i] = byte(ord(ch))
+
 proc basePointSecretKey*(): Secp256k1SecretKey =
   result = default(Secp256k1SecretKey)
   result[Secp256k1SecretKeyLen - 1] = 1
+
+const
+  Rsa2048PrivateKeyDerFixture* = staticRead("../../rustcrypto-ffi/tests/fixtures/rsa2048-private-key.der")
+  Rsa2048PublicKeyDerFixture* = staticRead("../../rustcrypto-ffi/tests/fixtures/rsa2048-public-key.der")
+  Rsa2048CertDerFixture* = staticRead("../../rustcrypto-ffi/tests/fixtures/rsa2048-cert.der")
+  Rsa2048CertPemFixture* = staticRead("../../rustcrypto-ffi/tests/fixtures/rsa2048-cert.pem")
