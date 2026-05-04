@@ -124,6 +124,9 @@ proc octJwkFromSecret(secret: openArray[byte]): Jwk =
   result.kty = "oct"
   result.k = base64UrlEncode(secret)
 
+proc octJwkFromSecret(secret: string): Jwk =
+  octJwkFromSecret(stringToBytes(secret))
+
 proc ecJwkFromSecret(secretKey: P256SecretKey): Jwk =
   let publicKey = P256.publicKeyUncompressed(secretKey)
   result.kty = "EC"
@@ -198,6 +201,9 @@ proc generateSecretKey*(T: type Jwt, algorithm: JwtAlgorithm): Jwk =
     okpJwkFromSecret(Ed25519.generateSecretKey())
   of jwtRS256, jwtPS256:
     raise newException(ValueError, "JWT RSA key generation is not supported yet")
+
+proc secretKey*(T: type Jwt, secret: string): Jwk =
+  octJwkFromSecret(secret)
 
 proc publicKey*(T: type Jwt, secretKey: Jwk): Jwk =
   case secretKey.kty

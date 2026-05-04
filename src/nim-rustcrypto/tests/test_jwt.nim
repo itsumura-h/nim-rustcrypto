@@ -1,6 +1,7 @@
 import std/base64
 import std/json
 import std/strutils
+import std/random
 import unittest
 
 import ./utils
@@ -12,7 +13,31 @@ proc toBase64Url(data: string): string =
   while result.len > 0 and result[^1] == '=':
     result.setLen(result.len - 1)
 
+proc randomString(maxLen: int): string =
+  let length = rand(maxLen)
+  result = newString(length)
+  for i in 0 ..< length:
+    result[i] = char(rand(255))
+
 suite "jwt":
+  test "random string secret can be converted to an oct JWK":
+    randomize(0)
+
+    let payload = %*{
+      "sub": 1234567890,
+      "name": "John Doe",
+      "admin": true
+    }
+    let secret = randomString(100)
+    let secretKey = Jwt.secretKey(secret)
+    let secretJwk = parseJson($secretKey)
+    let token = Jwt.sign(jwtHS256, payload, secretKey)
+
+    check secretJwk["kty"].getStr() == "oct"
+    check secretJwk["k"].getStr() == toBase64Url(secret)
+    check Jwt.verify(jwtHS256, Jwt.publicKey(secretKey), token)
+    check Jwt.decode(token) == payload
+
   test "marker type API round-trips with JWKs":
     let payload = %*{
       "sub": 1234567890,
