@@ -25,17 +25,24 @@ proc versionFromNimble*(packageRoot: string): string =
         return trimmed[firstQuote + 1 ..< lastQuote]
   raise newException(ValueError, "failed to parse version from " & nimblePath)
 
-proc vendorArchivePath*(packageRoot: string): string =
-  let rootVendor = packageRoot / "vendor" / "rustcrypto-ffi" / RustCryptoTargetId / RustCryptoArchiveName
-  if fileExists(rootVendor):
-    return rootVendor
-
+proc moduleVendorArchivePath*(packageRoot: string): string =
   let moduleRoot =
     if dirExists(packageRoot / "src" / "rustcrypto"):
       packageRoot / "src" / "rustcrypto"
     else:
       packageRoot / "rustcrypto"
   moduleRoot / "vendor" / "rustcrypto-ffi" / RustCryptoTargetId / RustCryptoArchiveName
+
+proc vendorArchivePath*(packageRoot: string): string =
+  let moduleVendor = moduleVendorArchivePath(packageRoot)
+  if fileExists(moduleVendor):
+    return moduleVendor
+
+  let rootVendor = packageRoot / "vendor" / "rustcrypto-ffi" / RustCryptoTargetId / RustCryptoArchiveName
+  if fileExists(rootVendor):
+    return rootVendor
+
+  moduleVendor
 
 proc cacheRoot*(version: string): string =
   let base =
@@ -85,11 +92,10 @@ proc releaseBaseUrl*(repositorySlug: string; version: string): string =
   "https://github.com/" & repositorySlug & "/releases/download/v" & version
 
 proc resolveWritableArchivePath*(packageRoot: string; version: string): string =
-  let vendorPath = vendorArchivePath(packageRoot)
-  let vendorParent = vendorPath.parentDir
+  let modulePath = moduleVendorArchivePath(packageRoot)
   try:
-    createDir(vendorParent)
-    return vendorPath
+    createDir(modulePath.parentDir)
+    return modulePath
   except CatchableError:
     discard
 

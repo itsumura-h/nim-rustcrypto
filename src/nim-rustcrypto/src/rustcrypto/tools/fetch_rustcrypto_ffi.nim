@@ -22,8 +22,6 @@ else:
   let checksumName = archiveName & ".sha256"
   let archiveUrl = baseUrl & "/" & archiveName
   let checksumUrl = baseUrl & "/" & checksumName
-  let destinationArchive = resolveWritableArchivePath(packageRoot, version)
-  let destinationDir = destinationArchive.parentDir
   let moduleRoot =
     if dirExists(packageRoot / "src" / "rustcrypto"):
       packageRoot / "src" / "rustcrypto"
@@ -31,30 +29,54 @@ else:
       packageRoot / "rustcrypto"
   let moduleDestinationArchive = moduleRoot / "vendor" / "rustcrypto-ffi" / RustCryptoTargetId / RustCryptoArchiveName
   let moduleDestinationDir = moduleDestinationArchive.parentDir
+  let destinationArchive = resolveWritableArchivePath(packageRoot, version)
+  let destinationDir = destinationArchive.parentDir.parentDir
+  let tempRoot = getTempDir() / "rustcrypto-ffi" / version / RustCryptoTargetId
 
-  if fileExists(destinationArchive):
-    echo destinationArchive
+  if fileExists(moduleDestinationArchive):
+    echo moduleDestinationArchive
     quit(QuitSuccess)
 
-  let tempRoot = getTempDir() / "rustcrypto-ffi" / version / RustCryptoTargetId
-  if dirExists(tempRoot):
-    removeDir(tempRoot)
-  createDir(tempRoot)
+  if fileExists(destinationArchive) and destinationArchive != moduleDestinationArchive:
+    createDir(moduleDestinationDir)
+    copyFile(destinationArchive, moduleDestinationArchive)
+    echo moduleDestinationArchive
+    quit(QuitSuccess)
 
-  let archivePath = tempRoot / archiveName
-  let checksumPath = tempRoot / checksumName
+  try:
+    if dirExists(tempRoot):
+      removeDir(tempRoot)
+    createDir(tempRoot)
 
-  runChecked("curl -fsSL -o " & quoteShell(archivePath) & " " & quoteShell(archiveUrl))
-  runChecked("curl -fsSL -o " & quoteShell(checksumPath) & " " & quoteShell(checksumUrl))
-  runChecked("sha256sum -c " & quoteShell(checksumName), tempRoot)
+    let archivePath = tempRoot / archiveName
+    let checksumPath = tempRoot / checksumName
 
-  createDir(destinationDir)
-  runChecked(
-    "tar -xzf " & quoteShell(archivePath) & " -C " & quoteShell(destinationDir) &
-      " --strip-components=1"
-  )
+    runChecked("curl -fsSL -o " & quoteShell(archivePath) & " " & quoteShell(archiveUrl))
+    runChecked("curl -fsSL -o " & quoteShell(checksumPath) & " " & quoteShell(checksumUrl))
+    runChecked("sha256sum -c " & quoteShell(checksumName), tempRoot)
 
-  createDir(moduleDestinationDir)
-  copyFile(destinationArchive, moduleDestinationArchive)
+    createDir(destinationDir)
+    runChecked(
+      "tar -xzf " & quoteShell(archivePath) & " -C " & quoteShell(destinationDir) &
+        " --strip-components=1"
+    )
+  except CatchableError:
+    let sourceCloneDir = tempRoot / "source"
+    let sourceRepoUrl = "https://github.com/" & repoSlug & ".git"
+    if dirExists(sourceCloneDir):
+      removeDir(sourceCloneDir)
+    createDir(tempRoot)
+    runChecked(
+      "git clone --depth 1 " & quoteShell(sourceRepoUrl) & " " & quoteShell(sourceCloneDir)
+    )
+    let clonedRustFfiDir = sourceCloneDir / "src" / "rustcrypto-ffi"
+    runChecked(
+      "cd " & quoteShell(clonedRustFfiDir) & " && cargo build --release --lib"
+    )
+    let builtArchive = clonedRustFfiDir / "target" / "release" / RustCryptoArchiveName
+    if not fileExists(builtArchive):
+      raise newException(OSError, "rustcrypto FFI archive was not built at " & builtArchive)
+    createDir(moduleDestinationDir)
+    copyFile(builtArchive, moduleDestinationArchive)
 
-  echo destinationArchive
+  echo moduleDestinationArchive

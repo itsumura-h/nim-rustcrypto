@@ -10,7 +10,6 @@ installDirs   = @[
 ]
 installFiles  = @[
   "../src/rustcrypto.nim",
-  "../src/rustcrypto/vendor/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi.a",
 ]
 
 

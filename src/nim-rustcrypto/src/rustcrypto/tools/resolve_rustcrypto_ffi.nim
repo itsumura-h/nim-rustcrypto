@@ -1,4 +1,4 @@
-import std/[os, strutils]
+import std/[os, osproc, strutils]
 
 import ./rustcrypto_ffi_paths
 
@@ -13,13 +13,16 @@ when defined(linux) and defined(amd64):
   elif fileExists(cachePath):
     echo cachePath
   else:
-    let sourceRoot = packageRoot.parentDir / "rustcrypto-ffi"
-    let localRelease = sourceRoot / "target" / "release" / RustCryptoArchiveName
-    let localDebug = sourceRoot / "target" / "debug" / RustCryptoArchiveName
-    if fileExists(localRelease):
-      echo localRelease
-    elif fileExists(localDebug):
-      echo localDebug
+    let fetchScript = currentSourcePath.parentDir / "fetch_rustcrypto_ffi.nim"
+    let fetchResult = execCmdEx(
+      "nim r --hints:off --warnings:off " & quoteShell(fetchScript),
+      workingDir = packageRoot,
+      options = {poUsePath, poStdErrToStdOut},
+    )
+    if fetchResult.exitCode == 0 and fileExists(vendorPath):
+      echo vendorPath
+    elif fetchResult.exitCode == 0 and fileExists(cachePath):
+      echo cachePath
     else:
       echo ""
 else:

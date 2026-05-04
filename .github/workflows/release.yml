@@ -19,14 +19,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # ソースと履歴を取得し、タグ由来のリリース作成に必要な情報を揃える。
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      # Rust FFI をビルドするための toolchain を入れる。
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      # タグ push と workflow_dispatch の両方で使える version を決める。
       - name: Resolve version
         id: version
         shell: bash
@@ -40,21 +43,25 @@ jobs:
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
+      # まず Rust 側のユニットテストを回して、リリース前提の健全性を確認する。
       - name: Run Rust tests
         run: |
           cd src/rustcrypto-ffi
           cargo test
 
+      # release 用の静的ライブラリを生成する。
       - name: Build Rust static library
         run: |
           cd src/rustcrypto-ffi
           cargo build --release --lib
 
+      # 追加で必要になるネイティブ静的ライブラリをログに残す。
       - name: Print native static libs
         run: |
           cd src/rustcrypto-ffi
           cargo rustc --release --lib -- --print native-static-libs | tee native-static-libs.txt
 
+      # 配布用の tar.gz に入れるディレクトリ構造を作り、checksum も生成する。
       - name: Stage release archive
         shell: bash
         run: |
@@ -67,6 +74,7 @@ jobs:
           tar -C "src/rustcrypto-ffi/dist" -czf "$archive_dir/$archive_name" rustcrypto-ffi
           (cd "$archive_dir" && sha256sum "$archive_name" > "$archive_name.sha256")
 
+      # 生成した tar.gz と sha256 を GitHub Release asset として公開する。
       - name: Upload GitHub Release asset
         uses: softprops/action-gh-release@v2
         with:
