@@ -41,7 +41,7 @@ discard P256.verify(digest, pkComp, sig)
 
 ## PKCS#8 / SPKI
 
-See [key-encoding-pkcs8-pem.md](./key-encoding-pkcs8-pem.md) for `p256PrivateKeyToPkcs8Der` and related symbols.
+See [key-encoding-pkcs8-pem.md](./key-encoding-pkcs8-pem.md) for `P256.privateKeyToPkcs8Der` and related symbols.
 
 ## JWT
 

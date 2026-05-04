@@ -35,19 +35,19 @@ proc packFiveBitWords(words: openArray[byte]): string =
   if bits > 0 and buffer != 0:
     result.add(char((buffer shl (8 - bits)) and 0xff))
 
-proc lightningPaymentHash*(preimage: LightningPaymentPreimage): LightningPaymentHash =
+proc lightningPaymentHash(preimage: LightningPaymentPreimage): LightningPaymentHash =
   sha256(bytesToString(preimage))
 
 proc paymentHash*(T: type Lightning, preimage: LightningPaymentPreimage): LightningPaymentHash =
   lightningPaymentHash(preimage)
 
-proc lightningNodeId*(secretKey: Secp256k1SecretKey): LightningNodeId =
-  secp256k1PublicKeyCompressed(secretKey)
+proc lightningNodeId(secretKey: Secp256k1SecretKey): LightningNodeId =
+  Secp256k1.publicKeyCompressed(secretKey)
 
 proc nodeId*(T: type Lightning, secretKey: Secp256k1SecretKey): LightningNodeId =
   lightningNodeId(secretKey)
 
-proc lightningInvoiceSigningHash*(
+proc lightningInvoiceSigningHash(
     hrp: string,
     dataPartWithoutSignature: openArray[byte],
   ): Sha256Digest =
@@ -60,13 +60,13 @@ proc invoiceSigningHash*(
   ): Sha256Digest =
   lightningInvoiceSigningHash(hrp, dataPartWithoutSignature)
 
-proc lightningSignInvoice*(
+proc lightningSignInvoice(
     hrp: string,
     dataPartWithoutSignature: openArray[byte],
     secretKey: Secp256k1SecretKey,
   ): LightningInvoiceSignature =
   let digest = lightningInvoiceSigningHash(hrp, dataPartWithoutSignature)
-  secp256k1EcdsaSignRecoverable(digest, secretKey)
+  Secp256k1.signRecoverable(digest, secretKey)
 
 proc signInvoice*(
     T: type Lightning,
@@ -76,14 +76,14 @@ proc signInvoice*(
   ): LightningInvoiceSignature =
   lightningSignInvoice(hrp, dataPartWithoutSignature, secretKey)
 
-proc lightningVerifyInvoice*(
+proc lightningVerifyInvoice(
     hrp: string,
     dataPartWithoutSignature: openArray[byte],
     nodeId: LightningNodeId,
     signature: LightningInvoiceSignature,
   ): bool =
   let digest = lightningInvoiceSigningHash(hrp, dataPartWithoutSignature)
-  secp256k1EcdsaRecoverableVerify(digest, nodeId, signature)
+  Secp256k1.verifyRecoverable(digest, nodeId, signature)
 
 proc verifyInvoice*(
     T: type Lightning,
@@ -94,12 +94,12 @@ proc verifyInvoice*(
   ): bool =
   lightningVerifyInvoice(hrp, dataPartWithoutSignature, nodeId, signature)
 
-proc lightningVerifyInvoiceHash*(
+proc lightningVerifyInvoiceHash(
     signingHash: Sha256Digest,
     nodeId: LightningNodeId,
     signature: LightningInvoiceSignature,
   ): bool =
-  secp256k1EcdsaRecoverableVerify(signingHash, nodeId, signature)
+  Secp256k1.verifyRecoverable(signingHash, nodeId, signature)
 
 proc verifyInvoiceHash*(
     T: type Lightning,

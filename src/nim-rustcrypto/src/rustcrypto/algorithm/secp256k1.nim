@@ -24,6 +24,20 @@ proc `$`*(value: Secp256k1UncompressedPublicKey |
 
 proc randomSecretKey*(): Secp256k1SecretKey
 proc raiseIfError(status: cint; operation: string)
+proc secp256k1EcdsaSignRecoverable(
+    messageDigest: Secp256k1MessageDigest,
+    secretKey: Secp256k1SecretKey,
+  ): Secp256k1RecoverableSignature
+proc secp256k1EcdsaRecoverableVerify(
+    messageDigest: Secp256k1MessageDigest,
+    publicKey: Secp256k1CompressedPublicKey,
+    signature: Secp256k1RecoverableSignature,
+  ): bool
+proc secp256k1EcdsaRecoverableVerify(
+    messageDigest: Secp256k1MessageDigest,
+    publicKey: Secp256k1UncompressedPublicKey,
+    signature: Secp256k1RecoverableSignature,
+  ): bool
 
 proc cptr(data: string): ptr uint8 =
   if data.len == 0:
@@ -125,7 +139,7 @@ proc raiseIfError(status: cint; operation: string) =
       operation & " failed: unexpected status " & $status,
     )
 
-proc secp256k1PublicKeyCompressed*(secretKey: Secp256k1SecretKey): Secp256k1CompressedPublicKey =
+proc secp256k1PublicKeyCompressed(secretKey: Secp256k1SecretKey): Secp256k1CompressedPublicKey =
   var output: Secp256k1CompressedPublicKey
   let status = secp256k1PublicKeyFromSecretKeyRaw(
     cast[ptr uint8](unsafeAddr secretKey[0]),
@@ -137,7 +151,7 @@ proc secp256k1PublicKeyCompressed*(secretKey: Secp256k1SecretKey): Secp256k1Comp
   raiseIfError(status, "rustcrypto_secp256k1_public_key_from_secret_key")
   output
 
-proc secp256k1PublicKeyUncompressed*(secretKey: Secp256k1SecretKey): Secp256k1UncompressedPublicKey =
+proc secp256k1PublicKeyUncompressed(secretKey: Secp256k1SecretKey): Secp256k1UncompressedPublicKey =
   var output: Secp256k1UncompressedPublicKey
   let status = secp256k1PublicKeyFromSecretKeyRaw(
     cast[ptr uint8](unsafeAddr secretKey[0]),
@@ -251,7 +265,30 @@ proc verify*(
   )
   verifyStatus(status, "rustcrypto_secp256k1_ecdsa_verify_prehash")
 
-proc secp256k1EcdsaSign*(
+proc signRecoverable*(
+    T: type Secp256k1,
+    messageDigest: Secp256k1MessageDigest,
+    secretKey: Secp256k1SecretKey,
+  ): Secp256k1RecoverableSignature =
+  secp256k1EcdsaSignRecoverable(messageDigest, secretKey)
+
+proc verifyRecoverable*(
+    T: type Secp256k1,
+    messageDigest: Secp256k1MessageDigest,
+    publicKey: Secp256k1CompressedPublicKey,
+    signature: Secp256k1RecoverableSignature,
+  ): bool =
+  secp256k1EcdsaRecoverableVerify(messageDigest, publicKey, signature)
+
+proc verifyRecoverable*(
+    T: type Secp256k1,
+    messageDigest: Secp256k1MessageDigest,
+    publicKey: Secp256k1UncompressedPublicKey,
+    signature: Secp256k1RecoverableSignature,
+  ): bool =
+  secp256k1EcdsaRecoverableVerify(messageDigest, publicKey, signature)
+
+proc secp256k1EcdsaSign(
     messageDigest: Secp256k1MessageDigest,
     secretKey: Secp256k1SecretKey,
   ): Secp256k1Signature =
@@ -262,7 +299,7 @@ proc secp256k1EcdsaSign*(
     "rustcrypto_secp256k1_ecdsa_sign_prehash",
   )
 
-proc secp256k1EcdsaVerify*(
+proc secp256k1EcdsaVerify(
     messageDigest: Secp256k1MessageDigest,
     publicKey: Secp256k1CompressedPublicKey,
     signature: Secp256k1Signature,
@@ -276,7 +313,7 @@ proc secp256k1EcdsaVerify*(
     "rustcrypto_secp256k1_ecdsa_verify_prehash",
   )
 
-proc secp256k1EcdsaVerify*(
+proc secp256k1EcdsaVerify(
     messageDigest: Secp256k1MessageDigest,
     publicKey: Secp256k1UncompressedPublicKey,
     signature: Secp256k1Signature,
@@ -290,7 +327,7 @@ proc secp256k1EcdsaVerify*(
     "rustcrypto_secp256k1_ecdsa_verify_prehash",
   )
 
-proc secp256k1EcdsaSignRecoverable*(
+proc secp256k1EcdsaSignRecoverable(
     messageDigest: Secp256k1MessageDigest,
     secretKey: Secp256k1SecretKey,
   ): Secp256k1RecoverableSignature =
@@ -306,7 +343,7 @@ proc secp256k1EcdsaSignRecoverable*(
   raiseSignError(status, "rustcrypto_secp256k1_ecdsa_sign_recoverable_prehash")
   output
 
-proc secp256k1EcdsaRecoverableVerify*(
+proc secp256k1EcdsaRecoverableVerify(
     messageDigest: Secp256k1MessageDigest,
     publicKey: Secp256k1CompressedPublicKey,
     signature: Secp256k1RecoverableSignature,
@@ -343,7 +380,7 @@ proc secp256k1EcdsaRecoverableVerify*(
       "rustcrypto_secp256k1_ecdsa_recover_public_key failed: unexpected status " & $status,
     )
 
-proc secp256k1EcdsaRecoverableVerify*(
+proc secp256k1EcdsaRecoverableVerify(
     messageDigest: Secp256k1MessageDigest,
     publicKey: Secp256k1UncompressedPublicKey,
     signature: Secp256k1RecoverableSignature,

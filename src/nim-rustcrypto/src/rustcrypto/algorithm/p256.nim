@@ -26,6 +26,16 @@ proc `$`*(value: P256PublicKeySpkiDer): string =
 
 proc randomSecretKey*(): P256SecretKey
 proc raiseIfError(status: cint; operation: string)
+proc p256PrivateKeyToPkcs8Der(privateKey: P256SecretKey): P256PrivateKeyPkcs8Der
+proc p256PrivateKeyFromPkcs8Der(privateKeyDer: openArray[byte]): P256SecretKey
+proc p256PublicKeyToSpkiDer(
+    publicKey: openArray[byte],
+    publicKeyFormat: cint,
+  ): P256PublicKeySpkiDer
+proc p256PublicKeyFromSpkiDer(
+    publicKeyDer: openArray[byte],
+    outputFormat: cint,
+  ): seq[byte]
 
 proc cptr(data: string): ptr uint8 =
   if data.len == 0:
@@ -109,6 +119,53 @@ proc basePointSecretKey*(): P256SecretKey =
   result = default(P256SecretKey)
   result[P256SecretKeyLen - 1] = 1
 
+proc fixedArrayFromBytes[T](data: openArray[byte]): T =
+  doAssert data.len == result.len
+  for i in 0 ..< data.len:
+    result[i] = data[i]
+
+proc privateKeyToPkcs8Der*(
+    T: type P256,
+    privateKey: P256SecretKey,
+  ): P256PrivateKeyPkcs8Der =
+  p256PrivateKeyToPkcs8Der(privateKey)
+
+proc privateKeyFromPkcs8Der*(
+    T: type P256,
+    privateKeyDer: openArray[byte],
+  ): P256SecretKey =
+  p256PrivateKeyFromPkcs8Der(privateKeyDer)
+
+proc publicKeyToSpkiDer*(
+    T: type P256,
+    publicKey: P256CompressedPublicKey,
+  ): P256PublicKeySpkiDer =
+  p256PublicKeyToSpkiDer(publicKey, P256PublicKeyFormatCompressed)
+
+proc publicKeyToSpkiDer*(
+    T: type P256,
+    publicKey: P256UncompressedPublicKey,
+  ): P256PublicKeySpkiDer =
+  p256PublicKeyToSpkiDer(publicKey, P256PublicKeyFormatUncompressed)
+
+proc publicKeyFromSpkiDer*(
+    T: type P256,
+    publicKeyDer: openArray[byte],
+    _: typedesc[P256CompressedPublicKey],
+  ): P256CompressedPublicKey =
+  fixedArrayFromBytes[P256CompressedPublicKey](
+    p256PublicKeyFromSpkiDer(publicKeyDer, P256PublicKeyFormatCompressed)
+  )
+
+proc publicKeyFromSpkiDer*(
+    T: type P256,
+    publicKeyDer: openArray[byte],
+    _: typedesc[P256UncompressedPublicKey],
+  ): P256UncompressedPublicKey =
+  fixedArrayFromBytes[P256UncompressedPublicKey](
+    p256PublicKeyFromSpkiDer(publicKeyDer, P256PublicKeyFormatUncompressed)
+  )
+
 proc raiseIfError(status: cint; operation: string) =
   case status
   of RustCryptoOk:
@@ -136,7 +193,7 @@ proc raiseIfError(status: cint; operation: string) =
   else:
     raise newException(ValueError, operation & " failed: unexpected status " & $status)
 
-proc p256PublicKeyCompressed*(secretKey: P256SecretKey): P256CompressedPublicKey =
+proc p256PublicKeyCompressed(secretKey: P256SecretKey): P256CompressedPublicKey =
   var output: P256CompressedPublicKey
   let status = p256PublicKeyFromSecretKeyRaw(
     bytesPtr(secretKey),
@@ -148,7 +205,7 @@ proc p256PublicKeyCompressed*(secretKey: P256SecretKey): P256CompressedPublicKey
   raiseIfError(status, "rustcrypto_p256_public_key_from_secret_key")
   output
 
-proc p256PublicKeyUncompressed*(secretKey: P256SecretKey): P256UncompressedPublicKey =
+proc p256PublicKeyUncompressed(secretKey: P256SecretKey): P256UncompressedPublicKey =
   var output: P256UncompressedPublicKey
   let status = p256PublicKeyFromSecretKeyRaw(
     bytesPtr(secretKey),
@@ -254,7 +311,7 @@ proc verify*(
   )
   verifyStatus(status, "rustcrypto_p256_ecdsa_verify_prehash")
 
-proc p256EcdsaSignSha256*(message: string; secretKey: P256SecretKey): P256Signature =
+proc p256EcdsaSignSha256(message: string; secretKey: P256SecretKey): P256Signature =
   var output: P256Signature
   let status = p256EcdsaSignSha256Raw(
     bytesPtr(message),
@@ -267,7 +324,7 @@ proc p256EcdsaSignSha256*(message: string; secretKey: P256SecretKey): P256Signat
   raiseSignError(status, "rustcrypto_p256_ecdsa_sign_sha256")
   output
 
-proc p256EcdsaVerifySha256*(
+proc p256EcdsaVerifySha256(
     message: string,
     publicKey: openArray[byte],
     publicKeyFormat: cint,
@@ -284,7 +341,7 @@ proc p256EcdsaVerifySha256*(
   )
   verifyStatus(status, "rustcrypto_p256_ecdsa_verify_sha256")
 
-proc p256EcdsaSignPrehash*(
+proc p256EcdsaSignPrehash(
     messageDigest: P256MessageDigest,
     secretKey: P256SecretKey,
 ): P256Signature =
@@ -300,7 +357,7 @@ proc p256EcdsaSignPrehash*(
   raiseSignError(status, "rustcrypto_p256_ecdsa_sign_prehash")
   output
 
-proc p256EcdsaVerifyPrehash*(
+proc p256EcdsaVerifyPrehash(
     messageDigest: P256MessageDigest,
     publicKey: openArray[byte],
     publicKeyFormat: cint,
@@ -317,7 +374,7 @@ proc p256EcdsaVerifyPrehash*(
   )
   verifyStatus(status, "rustcrypto_p256_ecdsa_verify_prehash")
 
-proc p256PrivateKeyToPkcs8Der*(privateKey: P256SecretKey): P256PrivateKeyPkcs8Der =
+proc p256PrivateKeyToPkcs8Der(privateKey: P256SecretKey): P256PrivateKeyPkcs8Der =
   var output = newSeq[byte](P256PrivateKeyDerMaxLen)
   var writtenLen: csize_t
   let status = p256PrivateKeyToPkcs8DerRaw(
@@ -331,7 +388,7 @@ proc p256PrivateKeyToPkcs8Der*(privateKey: P256SecretKey): P256PrivateKeyPkcs8De
   output.setLen(int(writtenLen))
   output
 
-proc p256PrivateKeyFromPkcs8Der*(privateKeyDer: openArray[byte]): P256SecretKey =
+proc p256PrivateKeyFromPkcs8Der(privateKeyDer: openArray[byte]): P256SecretKey =
   var output: P256SecretKey
   let status = p256PrivateKeyFromPkcs8DerRaw(
     bytesPtr(privateKeyDer),
@@ -342,7 +399,7 @@ proc p256PrivateKeyFromPkcs8Der*(privateKeyDer: openArray[byte]): P256SecretKey 
   raiseIfError(status, "rustcrypto_p256_private_key_from_pkcs8_der")
   output
 
-proc p256PublicKeyToSpkiDer*(
+proc p256PublicKeyToSpkiDer(
     publicKey: openArray[byte],
     publicKeyFormat: cint,
   ): P256PublicKeySpkiDer =
@@ -360,7 +417,7 @@ proc p256PublicKeyToSpkiDer*(
   output.setLen(int(writtenLen))
   output
 
-proc p256PublicKeyFromSpkiDer*(
+proc p256PublicKeyFromSpkiDer(
     publicKeyDer: openArray[byte],
     outputFormat: cint,
 ): seq[byte] =

@@ -8,34 +8,34 @@ type
   RsaSignature* = seq[byte]
   RsaCiphertext* = seq[byte]
 
-proc rsaPrivateKeyToPkcs8Der*(privateKeyDer: openArray[byte]): RsaPrivateKeyDer
-proc rsaPrivateKeyFromPkcs8Der*(privateKeyDer: openArray[byte]): RsaPrivateKeyDer
-proc rsaPublicKeyToSpkiDer*(publicKeyDer: openArray[byte]): RsaPublicKeyDer
-proc rsaPublicKeyFromSpkiDer*(publicKeyDer: openArray[byte]): RsaPublicKeyDer
-proc rsaPssSignSha256*(message: string; privateKeyDer: openArray[byte]): RsaSignature
-proc rsaPssVerifySha256*(
+proc rsaPrivateKeyToPkcs8Der(privateKeyDer: openArray[byte]): RsaPrivateKeyDer
+proc rsaPrivateKeyFromPkcs8Der(privateKeyDer: openArray[byte]): RsaPrivateKeyDer
+proc rsaPublicKeyToSpkiDer(publicKeyDer: openArray[byte]): RsaPublicKeyDer
+proc rsaPublicKeyFromSpkiDer(publicKeyDer: openArray[byte]): RsaPublicKeyDer
+proc rsaPssSignSha256(message: string; privateKeyDer: openArray[byte]): RsaSignature
+proc rsaPssVerifySha256(
     message: string,
     publicKeyDer: openArray[byte],
     signature: openArray[byte],
   ): bool
-proc rsaPkcs1v15SignSha256*(message: string; privateKeyDer: openArray[byte]): RsaSignature
-proc rsaPkcs1v15VerifySha256*(
+proc rsaPkcs1v15SignSha256(message: string; privateKeyDer: openArray[byte]): RsaSignature
+proc rsaPkcs1v15VerifySha256(
     message: string,
     publicKeyDer: openArray[byte],
     signature: openArray[byte],
   ): bool
-proc rsaOaepSha256Encrypt*(
+proc rsaOaepSha256Encrypt(
     plaintext: openArray[byte],
     publicKeyDer: openArray[byte],
     label: string = "",
   ): RsaCiphertext
-proc rsaOaepSha256Decrypt*(
+proc rsaOaepSha256Decrypt(
     ciphertext: openArray[byte],
     privateKeyDer: openArray[byte],
     label: string = "",
   ): seq[byte]
-proc rsaPkcs1v15Encrypt*(plaintext: openArray[byte], publicKeyDer: openArray[byte]): RsaCiphertext
-proc rsaPkcs1v15Decrypt*(ciphertext: openArray[byte], privateKeyDer: openArray[byte]): seq[byte]
+proc rsaPkcs1v15Encrypt(plaintext: openArray[byte], publicKeyDer: openArray[byte]): RsaCiphertext
+proc rsaPkcs1v15Decrypt(ciphertext: openArray[byte], privateKeyDer: openArray[byte]): seq[byte]
 
 proc `$`*(value: RsaPublicKeyDer): string =
   bytesToHexString(value)
@@ -119,7 +119,7 @@ proc normalizeDer(
   output.setLen(int(writtenLen))
   output
 
-proc rsaPrivateKeyToPkcs8Der*(privateKeyDer: openArray[byte]): RsaPrivateKeyDer =
+proc rsaPrivateKeyToPkcs8Der(privateKeyDer: openArray[byte]): RsaPrivateKeyDer =
   normalizeDer(
     rsaPrivateKeyToPkcs8DerRaw,
     privateKeyDer,
@@ -127,7 +127,7 @@ proc rsaPrivateKeyToPkcs8Der*(privateKeyDer: openArray[byte]): RsaPrivateKeyDer 
     "rustcrypto_rsa_private_key_to_pkcs8_der",
   )
 
-proc rsaPrivateKeyFromPkcs8Der*(privateKeyDer: openArray[byte]): RsaPrivateKeyDer =
+proc rsaPrivateKeyFromPkcs8Der(privateKeyDer: openArray[byte]): RsaPrivateKeyDer =
   normalizeDer(
     rsaPrivateKeyFromPkcs8DerRaw,
     privateKeyDer,
@@ -135,7 +135,7 @@ proc rsaPrivateKeyFromPkcs8Der*(privateKeyDer: openArray[byte]): RsaPrivateKeyDe
     "rustcrypto_rsa_private_key_from_pkcs8_der",
   )
 
-proc rsaPublicKeyToSpkiDer*(publicKeyDer: openArray[byte]): RsaPublicKeyDer =
+proc rsaPublicKeyToSpkiDer(publicKeyDer: openArray[byte]): RsaPublicKeyDer =
   normalizeDer(
     rsaPublicKeyToSpkiDerRaw,
     publicKeyDer,
@@ -143,7 +143,7 @@ proc rsaPublicKeyToSpkiDer*(publicKeyDer: openArray[byte]): RsaPublicKeyDer =
     "rustcrypto_rsa_public_key_to_spki_der",
   )
 
-proc rsaPublicKeyFromSpkiDer*(publicKeyDer: openArray[byte]): RsaPublicKeyDer =
+proc rsaPublicKeyFromSpkiDer(publicKeyDer: openArray[byte]): RsaPublicKeyDer =
   normalizeDer(
     rsaPublicKeyFromSpkiDerRaw,
     publicKeyDer,
@@ -272,7 +272,7 @@ proc decryptWithRaw(
   output.setLen(int(writtenLen))
   output
 
-proc rsaPssSignSha256*(message: string; privateKeyDer: openArray[byte]): RsaSignature =
+proc rsaPssSignSha256(message: string; privateKeyDer: openArray[byte]): RsaSignature =
   signWithRaw(
     rsaPssSignSha256Raw,
     message,
@@ -280,7 +280,7 @@ proc rsaPssSignSha256*(message: string; privateKeyDer: openArray[byte]): RsaSign
     "rustcrypto_rsa_pss_sign_sha256",
   )
 
-proc rsaPssVerifySha256*(
+proc rsaPssVerifySha256(
     message: string,
     publicKeyDer: openArray[byte],
     signature: openArray[byte],
@@ -293,7 +293,7 @@ proc rsaPssVerifySha256*(
     "rustcrypto_rsa_pss_verify_sha256",
   )
 
-proc rsaPkcs1v15SignSha256*(
+proc rsaPkcs1v15SignSha256(
     message: string,
     privateKeyDer: openArray[byte],
 ): RsaSignature =
@@ -304,7 +304,7 @@ proc rsaPkcs1v15SignSha256*(
     "rustcrypto_rsa_pkcs1v15_sign_sha256",
   )
 
-proc rsaPkcs1v15VerifySha256*(
+proc rsaPkcs1v15VerifySha256(
     message: string,
     publicKeyDer: openArray[byte],
     signature: openArray[byte],
@@ -317,7 +317,7 @@ proc rsaPkcs1v15VerifySha256*(
     "rustcrypto_rsa_pkcs1v15_verify_sha256",
   )
 
-proc rsaOaepSha256Encrypt*(
+proc rsaOaepSha256Encrypt(
     plaintext: openArray[byte],
     publicKeyDer: openArray[byte],
     label: string = "",
@@ -330,7 +330,7 @@ proc rsaOaepSha256Encrypt*(
     "rustcrypto_rsa_oaep_sha256_encrypt",
   )
 
-proc rsaOaepSha256Decrypt*(
+proc rsaOaepSha256Decrypt(
     ciphertext: openArray[byte],
     privateKeyDer: openArray[byte],
     label: string = "",
@@ -343,7 +343,7 @@ proc rsaOaepSha256Decrypt*(
     "rustcrypto_rsa_oaep_sha256_decrypt",
   )
 
-proc rsaPkcs1v15Encrypt*(
+proc rsaPkcs1v15Encrypt(
     plaintext: openArray[byte],
     publicKeyDer: openArray[byte],
 ): RsaCiphertext =
@@ -418,7 +418,7 @@ proc pkcs1v15Decrypt*(
   ): seq[byte] =
   rsaPkcs1v15Decrypt(ciphertext, privateKeyDer)
 
-proc rsaPkcs1v15Decrypt*(
+proc rsaPkcs1v15Decrypt(
     ciphertext: openArray[byte],
     privateKeyDer: openArray[byte],
 ): seq[byte] =

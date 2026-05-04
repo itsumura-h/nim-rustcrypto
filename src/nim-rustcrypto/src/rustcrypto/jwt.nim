@@ -38,23 +38,23 @@ const
   JwtP256PublicKeyFormatUncompressed = 0.cint
   JwtP256PublicKeyFormatCompressed = 1.cint
 
-proc toJsonNode*(jwk: Jwk): JsonNode
+proc toJsonNode(jwk: Jwk): JsonNode
 
 proc `$`*(jwk: Jwk): string =
   let node = toJsonNode(jwk)
   $node
 
-proc jwtBase64UrlEncode*(data: openArray[byte]): string
-proc jwtBase64UrlEncode*(data: string): string
-proc jwtBase64UrlDecode*(data: string): seq[byte]
-proc jwtSigningInput*(headerJson: string; claimsJson: string): string
+proc jwtBase64UrlEncode(data: openArray[byte]): string
+proc jwtBase64UrlEncode(data: string): string
+proc jwtBase64UrlDecode(data: string): seq[byte]
+proc jwtSigningInput(headerJson: string; claimsJson: string): string
 proc jwtSignedToken(signingInput: string; signature: openArray[byte]): JwtCompact
 proc jwtCompactParts(token: string): tuple[header, claims, signature: string]
 proc jwtCompactSignatureBytes(tokenSignature: string): seq[byte]
 proc jwtVerifyAlg(tokenHeaderPart: string; expectedAlg: string; operation: string): bool
 proc sameBytes(actual: seq[byte]; expected: openArray[byte]): bool
 
-proc toJsonNode*(jwk: Jwk): JsonNode =
+proc toJsonNode(jwk: Jwk): JsonNode =
   result = newJObject()
   if jwk.kty.len > 0:
     result["kty"] = %jwk.kty
@@ -127,7 +127,7 @@ proc octJwkFromSecret(secret: openArray[byte]): Jwk =
   result.k = jwtBase64UrlEncode(secret)
 
 proc ecJwkFromSecret(secretKey: P256SecretKey): Jwk =
-  let publicKey = p256PublicKeyUncompressed(secretKey)
+  let publicKey = P256.publicKeyUncompressed(secretKey)
   result.kty = "EC"
   result.crv = "P-256"
   result.x = jwtBase64UrlEncode(publicKey[1 .. 32])
@@ -163,7 +163,7 @@ proc ecPublicKeyFromJwk(jwk: Jwk): P256UncompressedPublicKey =
     result[33 + i] = y[i]
 
 proc okpJwkFromSecret(secretKey: Ed25519SecretKey): Jwk =
-  let publicKey = ed25519PublicKeyFromSecretKey(secretKey)
+  let publicKey = Ed25519.publicKey(secretKey)
   result.kty = "OKP"
   result.crv = "Ed25519"
   result.x = jwtBase64UrlEncode(publicKey)
@@ -250,21 +250,21 @@ proc sign*(
     jwtSignedToken(signingInput, mac)
   of jwtES256:
     let secret = ecSecretKeyFromJwk(secretKey)
-    let signature = p256EcdsaSignSha256(signingInput, secret)
+    let signature = P256.sign(signingInput, secret)
     jwtSignedToken(signingInput, signature)
   of jwtEdDSA:
     let secret = okpSecretKeyFromJwk(secretKey)
-    let signature = ed25519Sign(signingInput, secret)
+    let signature = Ed25519.sign(signingInput, secret)
     jwtSignedToken(signingInput, signature)
   of jwtRS256:
     if secretKey.privateDer.len == 0:
       raise newException(ValueError, "JWT RS256 requires a private_der JWK field")
-    let signature = rsaPkcs1v15SignSha256(signingInput, bytesFromBase64Url(secretKey.privateDer))
+    let signature = Rsa.pkcs1v15SignSha256(signingInput, bytesFromBase64Url(secretKey.privateDer))
     jwtSignedToken(signingInput, signature)
   of jwtPS256:
     if secretKey.privateDer.len == 0:
       raise newException(ValueError, "JWT PS256 requires a private_der JWK field")
-    let signature = rsaPssSignSha256(signingInput, bytesFromBase64Url(secretKey.privateDer))
+    let signature = Rsa.pssSignSha256(signingInput, bytesFromBase64Url(secretKey.privateDer))
     jwtSignedToken(signingInput, signature)
 
 proc verify*(
@@ -290,12 +290,8 @@ proc verify*(
     let public = ecPublicKeyFromJwk(publicKey)
     if signature.len != JwtEcdsaSignatureLen:
       raise newException(ValueError, "Jwt.verify failed: invalid signature length")
-    return p256EcdsaVerifySha256(
-      signingInput,
-      public,
-      JwtP256PublicKeyFormatUncompressed,
-      signature,
-    )
+    let fixedSignature = fixedArrayFromBytes[P256Signature](signature)
+    return P256.verify(signingInput, public, fixedSignature)
   of jwtEdDSA:
     let public = okpPublicKeyFromJwk(publicKey)
     if signature.len != JwtEd25519SignatureLen:
@@ -303,15 +299,15 @@ proc verify*(
     var fixedSignature: Ed25519Signature
     for i in 0 ..< JwtEd25519SignatureLen:
       fixedSignature[i] = signature[i]
-    return ed25519Verify(signingInput, public, fixedSignature)
+    return Ed25519.verify(signingInput, public, fixedSignature)
   of jwtRS256:
     if publicKey.publicDer.len == 0:
       raise newException(ValueError, "JWT RS256 requires a public_der JWK field")
-    return rsaPkcs1v15VerifySha256(signingInput, bytesFromBase64Url(publicKey.publicDer), signature)
+    return Rsa.pkcs1v15VerifySha256(signingInput, bytesFromBase64Url(publicKey.publicDer), signature)
   of jwtPS256:
     if publicKey.publicDer.len == 0:
       raise newException(ValueError, "JWT PS256 requires a public_der JWK field")
-    return rsaPssVerifySha256(signingInput, bytesFromBase64Url(publicKey.publicDer), signature)
+    return Rsa.pssVerifySha256(signingInput, bytesFromBase64Url(publicKey.publicDer), signature)
 
 proc decode*(T: type Jwt, token: JwtCompact): JsonNode =
   let parts = jwtCompactParts(token)
@@ -354,7 +350,7 @@ proc base64UrlValue(ch: char): int =
   else:
     -1
 
-proc jwtBase64UrlEncode*(data: openArray[byte]): string =
+proc jwtBase64UrlEncode(data: openArray[byte]): string =
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
   result = newStringOfCap((data.len * 4 + 2) div 3)
   var i = 0
@@ -373,10 +369,10 @@ proc jwtBase64UrlEncode*(data: openArray[byte]): string =
 
     i += 3
 
-proc jwtBase64UrlEncode*(data: string): string =
+proc jwtBase64UrlEncode(data: string): string =
   jwtBase64UrlEncode(stringToBytes(data))
 
-proc jwtBase64UrlDecode*(data: string): seq[byte] =
+proc jwtBase64UrlDecode(data: string): seq[byte] =
   if data.len mod 4 == 1:
     raise newException(ValueError, "invalid base64url length")
 
@@ -403,7 +399,7 @@ proc jwtBase64UrlDecode*(data: string): seq[byte] =
   if bits > 0 and buffer != 0:
     raise newException(ValueError, "invalid base64url padding")
 
-proc jwtSigningInput*(headerJson: string; claimsJson: string): string =
+proc jwtSigningInput(headerJson: string; claimsJson: string): string =
   jwtBase64UrlEncode(headerJson) & "." & jwtBase64UrlEncode(claimsJson)
 
 proc jwtCompactParts(token: string): tuple[header, claims, signature: string] =
@@ -433,99 +429,3 @@ proc sameBytes(actual: seq[byte]; expected: openArray[byte]): bool =
     if actual[i] != expected[i]:
       return false
   true
-
-proc jwtSignHS256*(headerJson: string; claimsJson: string; secret: openArray[byte]): JwtCompact =
-  requireHeaderAlg(headerJson, jwtAlgorithmName(jwtHS256), "jwtSignHS256")
-  let signingInput = jwtSigningInput(headerJson, claimsJson)
-  let mac = hmacSha256(bytesToString(secret), signingInput)
-  jwtSignedToken(signingInput, mac)
-
-proc jwtVerifyHS256*(token: JwtCompact; secret: openArray[byte]): bool =
-  let parts = jwtCompactParts(token)
-  if not jwtVerifyAlg(parts.header, jwtAlgorithmName(jwtHS256), "jwtVerifyHS256"):
-    return false
-
-  let signingInput = parts.header & "." & parts.claims
-  let expected = hmacSha256(bytesToString(secret), signingInput)
-  let actual = jwtCompactSignatureBytes(parts.signature)
-  if actual.len != expected.len:
-    raise newException(ValueError, "jwtVerifyHS256 failed: invalid signature length")
-  sameBytes(actual, expected)
-
-proc jwtSignES256*(headerJson: string; claimsJson: string; secretKey: P256SecretKey): JwtCompact =
-  requireHeaderAlg(headerJson, jwtAlgorithmName(jwtES256), "jwtSignES256")
-  let signingInput = jwtSigningInput(headerJson, claimsJson)
-  let signature = p256EcdsaSignSha256(signingInput, secretKey)
-  jwtSignedToken(signingInput, signature)
-
-proc jwtVerifyES256*(token: JwtCompact; publicKey: P256CompressedPublicKey): bool =
-  let parts = jwtCompactParts(token)
-  if not jwtVerifyAlg(parts.header, jwtAlgorithmName(jwtES256), "jwtVerifyES256"):
-    return false
-
-  let signingInput = parts.header & "." & parts.claims
-  let signature = jwtCompactSignatureBytes(parts.signature)
-  if signature.len != JwtEcdsaSignatureLen:
-    raise newException(ValueError, "jwtVerifyES256 failed: invalid signature length")
-  p256EcdsaVerifySha256(signingInput, publicKey, JwtP256PublicKeyFormatCompressed, signature)
-
-proc jwtVerifyES256*(token: JwtCompact; publicKey: P256UncompressedPublicKey): bool =
-  let parts = jwtCompactParts(token)
-  if not jwtVerifyAlg(parts.header, jwtAlgorithmName(jwtES256), "jwtVerifyES256"):
-    return false
-
-  let signingInput = parts.header & "." & parts.claims
-  let signature = jwtCompactSignatureBytes(parts.signature)
-  if signature.len != JwtEcdsaSignatureLen:
-    raise newException(ValueError, "jwtVerifyES256 failed: invalid signature length")
-  p256EcdsaVerifySha256(signingInput, publicKey, JwtP256PublicKeyFormatUncompressed, signature)
-
-proc jwtSignEdDSA*(headerJson: string; claimsJson: string; secretKey: Ed25519SecretKey): JwtCompact =
-  requireHeaderAlg(headerJson, jwtAlgorithmName(jwtEdDSA), "jwtSignEdDSA")
-  let signingInput = jwtSigningInput(headerJson, claimsJson)
-  let signature = ed25519Sign(signingInput, secretKey)
-  jwtSignedToken(signingInput, signature)
-
-proc jwtVerifyEdDSA*(token: JwtCompact; publicKey: Ed25519PublicKey): bool =
-  let parts = jwtCompactParts(token)
-  if not jwtVerifyAlg(parts.header, jwtAlgorithmName(jwtEdDSA), "jwtVerifyEdDSA"):
-    return false
-
-  let signingInput = parts.header & "." & parts.claims
-  let signature = jwtCompactSignatureBytes(parts.signature)
-  if signature.len != JwtEd25519SignatureLen:
-    raise newException(ValueError, "jwtVerifyEdDSA failed: invalid signature length")
-  var fixedSignature: Ed25519Signature
-  for i in 0 ..< JwtEd25519SignatureLen:
-    fixedSignature[i] = signature[i]
-  ed25519Verify(signingInput, publicKey, fixedSignature)
-
-proc jwtSignRS256*(headerJson: string; claimsJson: string; privateKeyDer: openArray[byte]): JwtCompact =
-  requireHeaderAlg(headerJson, jwtAlgorithmName(jwtRS256), "jwtSignRS256")
-  let signingInput = jwtSigningInput(headerJson, claimsJson)
-  let signature = rsaPkcs1v15SignSha256(signingInput, privateKeyDer)
-  jwtSignedToken(signingInput, signature)
-
-proc jwtVerifyRS256*(token: JwtCompact; publicKeyDer: openArray[byte]): bool =
-  let parts = jwtCompactParts(token)
-  if not jwtVerifyAlg(parts.header, jwtAlgorithmName(jwtRS256), "jwtVerifyRS256"):
-    return false
-
-  let signingInput = parts.header & "." & parts.claims
-  let signature = jwtCompactSignatureBytes(parts.signature)
-  rsaPkcs1v15VerifySha256(signingInput, publicKeyDer, signature)
-
-proc jwtSignPS256*(headerJson: string; claimsJson: string; privateKeyDer: openArray[byte]): JwtCompact =
-  requireHeaderAlg(headerJson, jwtAlgorithmName(jwtPS256), "jwtSignPS256")
-  let signingInput = jwtSigningInput(headerJson, claimsJson)
-  let signature = rsaPssSignSha256(signingInput, privateKeyDer)
-  jwtSignedToken(signingInput, signature)
-
-proc jwtVerifyPS256*(token: JwtCompact; publicKeyDer: openArray[byte]): bool =
-  let parts = jwtCompactParts(token)
-  if not jwtVerifyAlg(parts.header, jwtAlgorithmName(jwtPS256), "jwtVerifyPS256"):
-    return false
-
-  let signingInput = parts.header & "." & parts.claims
-  let signature = jwtCompactSignatureBytes(parts.signature)
-  rsaPssVerifySha256(signingInput, publicKeyDer, signature)

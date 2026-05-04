@@ -15,14 +15,6 @@ Sign and verify JSON Web Tokens in **JWS Compact Serialization** form for:
 - Header JSON must be valid JSON with a string `"alg"` field matching the function you call.
 - **`alg: none` is rejected** with `ValueError`.
 
-## Build signing input
-
-```nim
-import rustcrypto/jwt
-
-let signingInput = jwtSigningInput(headerJson, claimsJson)
-```
-
 ## HS256
 
 ```nim
@@ -64,19 +56,24 @@ discard Jwt.verify(jwtEdDSA, Jwt.publicKey(secretKey), token)
 
 ## RS256 / PS256
 
-The legacy DER-based helpers remain available:
+Provide an RSA `Jwk` with `privateDer` and `publicDer` fields encoded as base64url DER strings:
 
 ```nim
-let token = jwtSignRS256(headerJson, claimsJson, rsaPrivateKeyDer)
-discard jwtVerifyRS256(token, rsaPublicKeyDer)
-
-let tokenPs = jwtSignPS256(headerJson, claimsJson, rsaPrivateKeyDer)
-discard jwtVerifyPS256(tokenPs, rsaPublicKeyDer)
+let secretKey = Jwk(
+  kty: "RSA",
+  privateDer: privateDerBase64Url,
+  publicDer: publicDerBase64Url,
+)
+let publicKey = Jwt.publicKey(secretKey)
+let token = Jwt.sign(jwtRS256, payload, secretKey)
+discard Jwt.verify(jwtRS256, publicKey, token)
+let tokenPs = Jwt.sign(jwtPS256, payload, secretKey)
+discard Jwt.verify(jwtPS256, publicKey, tokenPs)
 ```
 
 ## Base64url helpers
 
-`jwtBase64UrlEncode`, `jwtBase64UrlDecode`, and `jwtSigningInput` are exported for advanced callers.
+Base64url encoding and signing-input assembly are internal helpers. Use `Jwt.sign`, `Jwt.verify`, and `Jwt.decode`.
 
 ## Out of scope
 

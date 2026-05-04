@@ -65,7 +65,7 @@ proc randomSecretKey*(): SchnorrSecretKey =
         "rustcrypto_secp256k1_random_secret_key failed: unexpected status " & $status,
       )
 
-proc schnorrPublicKey*(secretKey: SchnorrSecretKey): SchnorrPublicKey =
+proc schnorrPublicKey(secretKey: SchnorrSecretKey): SchnorrPublicKey =
   var output: SchnorrPublicKey
   let status = schnorrPublicKeyFromSecretKeyRaw(
     bytesPtr(secretKey),
@@ -134,7 +134,7 @@ proc verify*(
   )
   verifyStatus(status, "rustcrypto_secp256k1_schnorr_verify")
 
-proc schnorrSign*(message: string, secretKey: SchnorrSecretKey): SchnorrSignature =
+proc schnorrSign(message: string, secretKey: SchnorrSecretKey): SchnorrSignature =
   var output: SchnorrSignature
   let status = schnorrSignRaw(
     bytesPtr(message),
@@ -147,7 +147,7 @@ proc schnorrSign*(message: string, secretKey: SchnorrSecretKey): SchnorrSignatur
   raiseSignError(status, "rustcrypto_secp256k1_schnorr_sign")
   output
 
-proc schnorrSign*(message: openArray[byte], secretKey: SchnorrSecretKey): SchnorrSignature =
+proc schnorrSign(message: openArray[byte], secretKey: SchnorrSecretKey): SchnorrSignature =
   var output: SchnorrSignature
   let status = schnorrSignRaw(
     bytesPtr(message),
@@ -160,7 +160,7 @@ proc schnorrSign*(message: openArray[byte], secretKey: SchnorrSecretKey): Schnor
   raiseSignError(status, "rustcrypto_secp256k1_schnorr_sign")
   output
 
-proc schnorrVerify*(message: string, publicKey: SchnorrPublicKey, signature: SchnorrSignature): bool =
+proc schnorrVerify(message: string, publicKey: SchnorrPublicKey, signature: SchnorrSignature): bool =
   let status = schnorrVerifyRaw(
     bytesPtr(message),
     csize_t(message.len),
@@ -171,7 +171,7 @@ proc schnorrVerify*(message: string, publicKey: SchnorrPublicKey, signature: Sch
   )
   verifyStatus(status, "rustcrypto_secp256k1_schnorr_verify")
 
-proc schnorrVerify*(message: openArray[byte], publicKey: SchnorrPublicKey, signature: SchnorrSignature): bool =
+proc schnorrVerify(message: openArray[byte], publicKey: SchnorrPublicKey, signature: SchnorrSignature): bool =
   let status = schnorrVerifyRaw(
     bytesPtr(message),
     csize_t(message.len),

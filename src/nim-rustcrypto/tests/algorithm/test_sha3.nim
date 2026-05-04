@@ -135,7 +135,7 @@ suite "sha3 and keccak":
     let message = "abc"
     let secretKey = basePointSecretKey()
     let messageDigest = sha3_256(message)
-    let prehashSignature = secp256k1EcdsaSign(messageDigest, secretKey)
+    let prehashSignature = Secp256k1.sign(messageDigest, secretKey)
     var signature: Secp256k1Signature
 
     let status = secp256k1EcdsaSignSha3_256Raw(
@@ -150,28 +150,11 @@ suite "sha3 and keccak":
     check status == RustCryptoOk
     check signature == prehashSignature
 
-  test "high-level SHA3-256 verify rejects Keccak signatures and tampering":
-    let message = "abc"
-    let secretKey = basePointSecretKey()
-    let compressedPublicKey = secp256k1PublicKeyCompressed(secretKey)
-    let uncompressedPublicKey = secp256k1PublicKeyUncompressed(secretKey)
-    let signature = secp256k1EcdsaSignSha3_256(message, secretKey)
-
-    check secp256k1EcdsaVerifySha3_256(message, compressedPublicKey, signature)
-    check secp256k1EcdsaVerifySha3_256(message, uncompressedPublicKey, signature)
-    check not secp256k1EcdsaVerifyKeccak256(message, compressedPublicKey, signature)
-    check not secp256k1EcdsaVerifyKeccak256(message, uncompressedPublicKey, signature)
-
-    var tamperedSignature = signature
-    tamperedSignature[0] = tamperedSignature[0] xor 0x01
-    check not secp256k1EcdsaVerifySha3_256(message, compressedPublicKey, tamperedSignature)
-    check not secp256k1EcdsaVerifySha3_256(message, uncompressedPublicKey, tamperedSignature)
-
   test "raw Keccak-256 sign matches the prehash signature":
     let message = "abc"
     let secretKey = basePointSecretKey()
     let messageDigest = keccak256(message)
-    let prehashSignature = secp256k1EcdsaSign(messageDigest, secretKey)
+    let prehashSignature = Secp256k1.sign(messageDigest, secretKey)
     var signature: Secp256k1Signature
 
     let status = secp256k1EcdsaSignKeccak256Raw(
@@ -185,20 +168,3 @@ suite "sha3 and keccak":
 
     check status == RustCryptoOk
     check signature == prehashSignature
-
-  test "high-level Keccak-256 verify rejects SHA3 signatures and tampering":
-    let message = "abc"
-    let secretKey = basePointSecretKey()
-    let compressedPublicKey = secp256k1PublicKeyCompressed(secretKey)
-    let uncompressedPublicKey = secp256k1PublicKeyUncompressed(secretKey)
-    let signature = secp256k1EcdsaSignKeccak256(message, secretKey)
-
-    check secp256k1EcdsaVerifyKeccak256(message, compressedPublicKey, signature)
-    check secp256k1EcdsaVerifyKeccak256(message, uncompressedPublicKey, signature)
-    check not secp256k1EcdsaVerifySha3_256(message, compressedPublicKey, signature)
-    check not secp256k1EcdsaVerifySha3_256(message, uncompressedPublicKey, signature)
-
-    var tamperedSignature = signature
-    tamperedSignature[0] = tamperedSignature[0] xor 0x01
-    check not secp256k1EcdsaVerifyKeccak256(message, compressedPublicKey, tamperedSignature)
-    check not secp256k1EcdsaVerifyKeccak256(message, uncompressedPublicKey, tamperedSignature)

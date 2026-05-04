@@ -28,4 +28,4 @@ discard P384.verify(digest, pk, sig)
 
 ## PKCS#8 / SPKI
 
-See [key-encoding-pkcs8-pem.md](./key-encoding-pkcs8-pem.md).
+See [key-encoding-pkcs8-pem.md](./key-encoding-pkcs8-pem.md) for `P384.privateKeyToPkcs8Der` and related symbols.

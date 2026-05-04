@@ -128,7 +128,7 @@ proc verify*(
   )
   verifyStatus(status)
 
-proc ed25519PublicKeyFromSecretKey*(
+proc ed25519PublicKeyFromSecretKey(
     secretKey: Ed25519SecretKey,
   ): Ed25519PublicKey =
   var output: Ed25519PublicKey
@@ -141,7 +141,7 @@ proc ed25519PublicKeyFromSecretKey*(
   raiseIfError(status, "rustcrypto_ed25519_public_key_from_secret_key")
   output
 
-proc ed25519Sign*(
+proc ed25519Sign(
     message: string,
     secretKey: Ed25519SecretKey,
   ): Ed25519Signature =
@@ -157,7 +157,7 @@ proc ed25519Sign*(
   raiseIfError(status, "rustcrypto_ed25519_sign")
   output
 
-proc ed25519Verify*(
+proc ed25519Verify(
     message: string,
     publicKey: Ed25519PublicKey,
     signature: Ed25519Signature,
