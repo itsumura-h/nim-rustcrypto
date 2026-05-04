@@ -35,8 +35,6 @@ type
 const
   JwtEcdsaSignatureLen = 64
   JwtEd25519SignatureLen = 64
-  JwtP256PublicKeyFormatUncompressed = 0.cint
-  JwtP256PublicKeyFormatCompressed = 1.cint
 
 proc toJsonNode(jwk: Jwk): JsonNode
 
@@ -44,14 +42,14 @@ proc `$`*(jwk: Jwk): string =
   let node = toJsonNode(jwk)
   $node
 
-proc jwtBase64UrlEncode(data: openArray[byte]): string
-proc jwtBase64UrlEncode(data: string): string
-proc jwtBase64UrlDecode(data: string): seq[byte]
-proc jwtSigningInput(headerJson: string; claimsJson: string): string
-proc jwtSignedToken(signingInput: string; signature: openArray[byte]): JwtCompact
-proc jwtCompactParts(token: string): tuple[header, claims, signature: string]
-proc jwtCompactSignatureBytes(tokenSignature: string): seq[byte]
-proc jwtVerifyAlg(tokenHeaderPart: string; expectedAlg: string; operation: string): bool
+proc base64UrlEncode(data: openArray[byte]): string
+proc base64UrlEncode(data: string): string
+proc base64UrlDecode(data: string): seq[byte]
+proc buildSigningInput(headerJson: string; claimsJson: string): string
+proc buildCompactToken(signingInput: string; signature: openArray[byte]): JwtCompact
+proc splitCompactToken(token: string): tuple[header, claims, signature: string]
+proc compactSignatureBytes(tokenSignature: string): seq[byte]
+proc verifyCompactAlg(tokenHeaderPart: string; expectedAlg: string; operation: string): bool
 proc sameBytes(actual: seq[byte]; expected: openArray[byte]): bool
 
 proc toJsonNode(jwk: Jwk): JsonNode =
@@ -120,27 +118,27 @@ proc fixedArrayFromBytes*[T](data: openArray[byte]): T =
 proc bytesFromBase64Url(value: string): seq[byte] =
   if value.len == 0:
     return @[]
-  jwtBase64UrlDecode(value)
+  base64UrlDecode(value)
 
 proc octJwkFromSecret(secret: openArray[byte]): Jwk =
   result.kty = "oct"
-  result.k = jwtBase64UrlEncode(secret)
+  result.k = base64UrlEncode(secret)
 
 proc ecJwkFromSecret(secretKey: P256SecretKey): Jwk =
   let publicKey = P256.publicKeyUncompressed(secretKey)
   result.kty = "EC"
   result.crv = "P-256"
-  result.x = jwtBase64UrlEncode(publicKey[1 .. 32])
-  result.y = jwtBase64UrlEncode(publicKey[33 .. 64])
-  result.d = jwtBase64UrlEncode(secretKey)
+  result.x = base64UrlEncode(publicKey[1 .. 32])
+  result.y = base64UrlEncode(publicKey[33 .. 64])
+  result.d = base64UrlEncode(secretKey)
 
 proc ecJwkFromPublicKey(publicKey: openArray[byte]): Jwk =
   if publicKey.len != 65 or publicKey[0] != 0x04:
     raise newException(ValueError, "EC JWK requires an uncompressed SEC1 public key")
   result.kty = "EC"
   result.crv = "P-256"
-  result.x = jwtBase64UrlEncode(publicKey[1 .. 32])
-  result.y = jwtBase64UrlEncode(publicKey[33 .. 64])
+  result.x = base64UrlEncode(publicKey[1 .. 32])
+  result.y = base64UrlEncode(publicKey[33 .. 64])
 
 proc ecSecretKeyFromJwk(jwk: Jwk): P256SecretKey =
   if jwk.kty != "EC" or jwk.crv != "P-256":
@@ -166,13 +164,13 @@ proc okpJwkFromSecret(secretKey: Ed25519SecretKey): Jwk =
   let publicKey = Ed25519.publicKey(secretKey)
   result.kty = "OKP"
   result.crv = "Ed25519"
-  result.x = jwtBase64UrlEncode(publicKey)
-  result.d = jwtBase64UrlEncode(secretKey)
+  result.x = base64UrlEncode(publicKey)
+  result.d = base64UrlEncode(secretKey)
 
 proc okpJwkFromPublicKey(publicKey: Ed25519PublicKey): Jwk =
   result.kty = "OKP"
   result.crv = "Ed25519"
-  result.x = jwtBase64UrlEncode(publicKey)
+  result.x = base64UrlEncode(publicKey)
 
 proc okpSecretKeyFromJwk(jwk: Jwk): Ed25519SecretKey =
   if jwk.kty != "OKP" or jwk.crv != "Ed25519":
@@ -241,31 +239,31 @@ proc sign*(
     raise newException(ValueError, "JWT header must contain a string alg field")
   if parsedHeader["alg"].getStr() != expectedAlg:
     raise newException(ValueError, "JWT header alg does not match the selected algorithm")
-  let signingInput = jwtSigningInput(headerJson, jwtPayloadJson(payload))
+  let signingInput = buildSigningInput(headerJson, jwtPayloadJson(payload))
   case algorithm
   of jwtHS256:
     if secretKey.kty != "oct":
       raise newException(ValueError, "JWT HS256 requires an oct JWK")
     let mac = hmacSha256(bytesToString(bytesFromBase64Url(secretKey.k)), signingInput)
-    jwtSignedToken(signingInput, mac)
+    buildCompactToken(signingInput, mac)
   of jwtES256:
     let secret = ecSecretKeyFromJwk(secretKey)
     let signature = P256.sign(signingInput, secret)
-    jwtSignedToken(signingInput, signature)
+    buildCompactToken(signingInput, signature)
   of jwtEdDSA:
     let secret = okpSecretKeyFromJwk(secretKey)
     let signature = Ed25519.sign(signingInput, secret)
-    jwtSignedToken(signingInput, signature)
+    buildCompactToken(signingInput, signature)
   of jwtRS256:
     if secretKey.privateDer.len == 0:
       raise newException(ValueError, "JWT RS256 requires a private_der JWK field")
     let signature = Rsa.pkcs1v15SignSha256(signingInput, bytesFromBase64Url(secretKey.privateDer))
-    jwtSignedToken(signingInput, signature)
+    buildCompactToken(signingInput, signature)
   of jwtPS256:
     if secretKey.privateDer.len == 0:
       raise newException(ValueError, "JWT PS256 requires a private_der JWK field")
     let signature = Rsa.pssSignSha256(signingInput, bytesFromBase64Url(secretKey.privateDer))
-    jwtSignedToken(signingInput, signature)
+    buildCompactToken(signingInput, signature)
 
 proc verify*(
     T: type Jwt,
@@ -273,13 +271,13 @@ proc verify*(
     publicKey: Jwk,
     token: JwtCompact,
   ): bool =
-  let parts = jwtCompactParts(token)
+  let parts = splitCompactToken(token)
   let expectedAlg = jwtAlgorithmName(algorithm)
-  if not jwtVerifyAlg(parts.header, expectedAlg, "Jwt.verify"):
+  if not verifyCompactAlg(parts.header, expectedAlg, "Jwt.verify"):
     return false
 
   let signingInput = parts.header & "." & parts.claims
-  let signature = jwtCompactSignatureBytes(parts.signature)
+  let signature = compactSignatureBytes(parts.signature)
   case algorithm
   of jwtHS256:
     if publicKey.kty != "oct":
@@ -310,27 +308,17 @@ proc verify*(
     return Rsa.pssVerifySha256(signingInput, bytesFromBase64Url(publicKey.publicDer), signature)
 
 proc decode*(T: type Jwt, token: JwtCompact): JsonNode =
-  let parts = jwtCompactParts(token)
-  parseJson(bytesToString(jwtBase64UrlDecode(parts.claims)))
+  let parts = splitCompactToken(token)
+  parseJson(bytesToString(base64UrlDecode(parts.claims)))
 
-proc jwtHeaderAlg(headerJson: string): string =
+proc headerAlgFromJson(headerJson: string): string =
   let node = parseJson(headerJson)
   if node.kind != JObject or not node.hasKey("alg") or node["alg"].kind != JString:
     raise newException(ValueError, "JWT header must contain a string alg field")
   node["alg"].getStr()
 
-proc requireHeaderAlg(headerJson: string; expectedAlg: string; operation: string) =
-  let headerAlg = jwtHeaderAlg(headerJson)
-  if headerAlg == "none":
-    raise newException(ValueError, operation & " failed: alg none is not supported")
-  if headerAlg != expectedAlg:
-    raise newException(
-      ValueError,
-      operation & " failed: header alg " & headerAlg & " does not match " & expectedAlg,
-    )
-
-proc tokenAlgMatches(tokenHeaderJson: string; expectedAlg: string; operation: string): bool =
-  let headerAlg = jwtHeaderAlg(tokenHeaderJson)
+proc headerAlgMatches(tokenHeaderJson: string; expectedAlg: string; operation: string): bool =
+  let headerAlg = headerAlgFromJson(tokenHeaderJson)
   if headerAlg == "none":
     raise newException(ValueError, operation & " failed: alg none is not supported")
   headerAlg == expectedAlg
@@ -350,7 +338,7 @@ proc base64UrlValue(ch: char): int =
   else:
     -1
 
-proc jwtBase64UrlEncode(data: openArray[byte]): string =
+proc base64UrlEncode(data: openArray[byte]): string =
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
   result = newStringOfCap((data.len * 4 + 2) div 3)
   var i = 0
@@ -369,10 +357,10 @@ proc jwtBase64UrlEncode(data: openArray[byte]): string =
 
     i += 3
 
-proc jwtBase64UrlEncode(data: string): string =
-  jwtBase64UrlEncode(stringToBytes(data))
+proc base64UrlEncode(data: string): string =
+  base64UrlEncode(stringToBytes(data))
 
-proc jwtBase64UrlDecode(data: string): seq[byte] =
+proc base64UrlDecode(data: string): seq[byte] =
   if data.len mod 4 == 1:
     raise newException(ValueError, "invalid base64url length")
 
@@ -399,10 +387,10 @@ proc jwtBase64UrlDecode(data: string): seq[byte] =
   if bits > 0 and buffer != 0:
     raise newException(ValueError, "invalid base64url padding")
 
-proc jwtSigningInput(headerJson: string; claimsJson: string): string =
-  jwtBase64UrlEncode(headerJson) & "." & jwtBase64UrlEncode(claimsJson)
+proc buildSigningInput(headerJson: string; claimsJson: string): string =
+  base64UrlEncode(headerJson) & "." & base64UrlEncode(claimsJson)
 
-proc jwtCompactParts(token: string): tuple[header, claims, signature: string] =
+proc splitCompactToken(token: string): tuple[header, claims, signature: string] =
   let first = token.find('.')
   let last = token.rfind('.')
   if first <= 0 or last <= first or last == token.len - 1:
@@ -412,15 +400,15 @@ proc jwtCompactParts(token: string): tuple[header, claims, signature: string] =
   result.claims = token[first + 1 ..< last]
   result.signature = token[last + 1 ..< token.len]
 
-proc jwtSignedToken(signingInput: string; signature: openArray[byte]): JwtCompact =
-  signingInput & "." & jwtBase64UrlEncode(signature)
+proc buildCompactToken(signingInput: string; signature: openArray[byte]): JwtCompact =
+  signingInput & "." & base64UrlEncode(signature)
 
-proc jwtCompactSignatureBytes(tokenSignature: string): seq[byte] =
-  jwtBase64UrlDecode(tokenSignature)
+proc compactSignatureBytes(tokenSignature: string): seq[byte] =
+  base64UrlDecode(tokenSignature)
 
-proc jwtVerifyAlg(tokenHeaderPart: string; expectedAlg: string; operation: string): bool =
-  let headerJson = bytesToString(jwtBase64UrlDecode(tokenHeaderPart))
-  tokenAlgMatches(headerJson, expectedAlg, operation)
+proc verifyCompactAlg(tokenHeaderPart: string; expectedAlg: string; operation: string): bool =
+  let headerJson = bytesToString(base64UrlDecode(tokenHeaderPart))
+  headerAlgMatches(headerJson, expectedAlg, operation)
 
 proc sameBytes(actual: seq[byte]; expected: openArray[byte]): bool =
   if actual.len != expected.len:

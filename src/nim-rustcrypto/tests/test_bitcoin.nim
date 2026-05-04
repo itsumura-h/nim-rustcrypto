@@ -22,30 +22,30 @@ suite "bitcoin":
   test "message signing and verification round-trip":
     let secretKey = basePointSecretKey()
     let publicKey = Secp256k1.publicKeyCompressed(secretKey)
-    let signature = bitcoinSignMessage("abc", secretKey)
+    let signature = Bitcoin.signMessage("abc", secretKey)
 
     check signature.len == 65
-    check bitcoinVerifyMessage("abc", publicKey, signature)
-    check not bitcoinVerifyMessage("abd", publicKey, signature)
+    check Bitcoin.verifyMessage("abc", publicKey, signature)
+    check not Bitcoin.verifyMessage("abd", publicKey, signature)
 
   test "ECDSA digest signing and verification round-trip":
     let secretKey = basePointSecretKey()
     let publicKey = Secp256k1.publicKeyCompressed(secretKey)
     let digest = sha256("abc")
-    let signature = bitcoinSignDigestEcdsa(digest, secretKey)
+    let signature = Bitcoin.signDigestEcdsa(digest, secretKey)
 
-    check bitcoinVerifyDigestEcdsa(digest, publicKey, signature)
+    check Bitcoin.verifyDigestEcdsa(digest, publicKey, signature)
 
   test "Taproot digest signing and verification round-trip":
     let secretKey = basePointSchnorrSecretKey()
     let publicKey = Schnorr.publicKey(secretKey)
     let digest = sha256("abc")
-    let signature = bitcoinSignTaprootDigest(digest, secretKey)
+    let signature = Bitcoin.signTaprootDigest(digest, secretKey)
 
-    check bitcoinVerifyTaprootDigest(digest, publicKey, signature)
+    check Bitcoin.verifyTaprootDigest(digest, publicKey, signature)
     var tampered = signature
     tampered[0] = tampered[0] xor 0x01
-    check not bitcoinVerifyTaprootDigest(digest, publicKey, tampered)
+    check not Bitcoin.verifyTaprootDigest(digest, publicKey, tampered)
 
   test "marker type API round-trips":
     let secretKey = Secp256k1.generateSecretKey()

@@ -2,7 +2,7 @@
 
 Module: `rustcrypto/ethereum`
 
-Keccak-256, address derivation from an uncompressed secp256k1 key, EIP-191 personal message hashing, EIP-712 digest hashing, and **recoverable ECDSA** signatures with Ethereum `v` encoding.
+Keccak-256, address derivation from an uncompressed secp256k1 key, EIP-191 personal message hashing, EIP-712 digest hashing, and **recoverable ECDSA** signatures with Ethereum `v` encoding. Verification uses the wallet address, not the raw public key.
 
 ## Types
 
@@ -33,20 +33,23 @@ The public key must be a 65-byte SEC1 uncompressed point (`0x04 || X || Y`).
 ```nim
 let secretKey = Secp256k1.generateSecretKey()
 let uncompressedPubKey = Secp256k1.publicKeyUncompressed(secretKey)
-let digest = Ethereum.personalMessageHash("Hello")
+let walletAddress = Ethereum.address(uncompressedPubKey)
 let sig = Ethereum.signPersonalMessage("Hello", secretKey, chainId = 1)
-discard Ethereum.verifyPersonalMessage("Hello", uncompressedPubKey, sig)
+discard Ethereum.verifyPersonalMessage("Hello", walletAddress, sig)
 ```
 
-`ethereumVerifyPersonalMessage` tries recovery ids internally; unsupported `v` raises `ValueError`.
+`Ethereum.verifyPersonalMessage` tries recovery ids internally and compares the recovered wallet address; unsupported `v` raises `ValueError`.
 
 ## EIP-712 (precomputed hashes)
 
 When you already have `domainSeparator` and `structHash` as `EthereumHash`:
 
 ```nim
+let secretKey = Secp256k1.generateSecretKey()
+let uncompressedPubKey = Secp256k1.publicKeyUncompressed(secretKey)
+let walletAddress = Ethereum.address(uncompressedPubKey)
 let sig = Ethereum.signTypedDataHash(domainSeparator, structHash, secretKey, chainId = 1)
-discard Ethereum.verifyTypedDataHash(domainSeparator, structHash, uncompressedPubKey, sig)
+discard Ethereum.verifyTypedDataHash(domainSeparator, structHash, walletAddress, sig)
 ```
 
 This module does **not** build EIP-712 structs from JSON or perform JSON canonicalization.
