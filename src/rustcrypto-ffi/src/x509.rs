@@ -358,7 +358,6 @@ mod tests {
 
     const RSA_2048_CERT_DER: &[u8] = include_bytes!("../tests/fixtures/rsa2048-cert.der");
     const RSA_2048_CERT_PEM: &[u8] = include_bytes!("../tests/fixtures/rsa2048-cert.pem");
-    const RSA_2048_PUBLIC_KEY_DER: &[u8] = include_bytes!("../tests/fixtures/rsa2048-public-key.der");
 
     #[test]
     fn validate_der_rejects_empty_input() {

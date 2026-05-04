@@ -1,8 +1,8 @@
 import unittest
 
 import ./utils
-import nim_rustcrypto/algorithm/p256
-import nim_rustcrypto/algorithm/sha256
+import ../../src/rustcrypto/algorithm/p256
+import ../../src/rustcrypto/algorithm/sha256
 
 suite "p256":
   const
@@ -19,8 +19,24 @@ suite "p256":
   test "public key derivation matches the RFC 6979 vector":
     let secretKey = fromHexSecretKey(SecretKeyHex)
 
-    check hexOf(p256PublicKeyCompressed(secretKey)) == PublicKeyCompressedHex
-    check hexOf(p256PublicKeyUncompressed(secretKey)) == PublicKeyUncompressedHex
+    let compressed = p256PublicKeyCompressed(secretKey)
+    let uncompressed = p256PublicKeyUncompressed(secretKey)
+
+    check hexOf(compressed) == PublicKeyCompressedHex
+    check hexOf(uncompressed) == PublicKeyUncompressedHex
+    check $compressed == hexOf(compressed)
+    check $uncompressed == hexOf(uncompressed)
+
+  test "random secret key can derive public key and sign":
+    let secretKey = randomSecretKey()
+    let publicKey = p256PublicKeyCompressed(secretKey)
+    let signature = p256EcdsaSignSha256("test", secretKey)
+
+    check secretKey.len == P256SecretKeyLen
+    check publicKey.len == P256PublicKeyCompressedLen
+    check $publicKey == hexOf(publicKey)
+    check $signature == hexOf(signature)
+    check p256EcdsaVerifySha256("test", publicKey, P256PublicKeyFormatCompressed, signature)
 
   test "signing matches the RFC 6979 vector":
     let secretKey = fromHexSecretKey(SecretKeyHex)
@@ -54,6 +70,8 @@ suite "p256":
     let uncompressedSpki = p256PublicKeyToSpkiDer(uncompressed, P256PublicKeyFormatUncompressed)
 
     check compressedSpki == uncompressedSpki
+    check $compressedSpki == hexOf(compressedSpki)
+    check $uncompressedSpki == hexOf(uncompressedSpki)
     check hexOf(p256PublicKeyFromSpkiDer(compressedSpki, P256PublicKeyFormatCompressed)) == PublicKeyCompressedHex
     check hexOf(p256PublicKeyFromSpkiDer(uncompressedSpki, P256PublicKeyFormatUncompressed)) == PublicKeyUncompressedHex
 

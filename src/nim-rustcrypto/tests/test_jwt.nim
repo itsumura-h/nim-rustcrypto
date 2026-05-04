@@ -2,9 +2,9 @@ import std/strutils
 import unittest
 
 import ./utils
-import nim_rustcrypto/algorithm/ed25519
-import nim_rustcrypto/algorithm/p256
-import nim_rustcrypto/jwt
+import rustcrypto/algorithm/ed25519
+import rustcrypto/algorithm/p256
+import rustcrypto/jwt
 
 const
   Hs256Header = """{"alg":"HS256","typ":"JWT"}"""

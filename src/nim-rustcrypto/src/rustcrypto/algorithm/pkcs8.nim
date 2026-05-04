@@ -7,6 +7,9 @@ type
   Ed25519PrivateKeyPkcs8Der* = seq[byte]
   Ed25519PublicKeySpkiDer* = seq[byte]
 
+proc `$`*(value: Ed25519PublicKeySpkiDer): string =
+  bytesToHexString(value)
+
 proc fromHexPrivateKey*(hex: string): Ed25519PrivateKey =
   fromHexDigest[Ed25519PrivateKey](hex, Ed25519PrivateKeyLen)
 

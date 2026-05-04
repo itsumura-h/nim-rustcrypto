@@ -1,7 +1,7 @@
 import unittest
 
 import ./utils
-import nim_rustcrypto/algorithm/aesgcmsiv
+import ../../src/rustcrypto/algorithm/aesgcmsiv
 
 suite "aes-gcm-siv":
   test "raw encrypt matches the RFC 8452 vector":

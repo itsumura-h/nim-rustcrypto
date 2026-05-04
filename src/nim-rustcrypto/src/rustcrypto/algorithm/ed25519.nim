@@ -7,6 +7,15 @@ type
   Ed25519PublicKey* = pkcs8.Ed25519PublicKey
   Ed25519Signature* = array[Ed25519SignatureLen, byte]
 
+proc `$`*(value: Ed25519PublicKey): string =
+  bytesToHexString(value)
+
+proc `$`*(value: Ed25519Signature): string =
+  bytesToHexString(value)
+
+proc randomSecretKey*(): Ed25519SecretKey =
+  result = urandomBytes[Ed25519PrivateKeyLen]()
+
 proc fromHexSecretKey*(hex: string): Ed25519SecretKey =
   fromHexDigest[Ed25519SecretKey](hex, Ed25519PrivateKeyLen)
 

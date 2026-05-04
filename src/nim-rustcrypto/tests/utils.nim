@@ -1,6 +1,6 @@
-import nim_rustcrypto/algorithm/ffi
-import nim_rustcrypto/algorithm/common
-import nim_rustcrypto/algorithm/secp256k1
+import rustcrypto/algorithm/ffi
+import rustcrypto/algorithm/common
+import rustcrypto/algorithm/secp256k1
 
 export ffi
 export common

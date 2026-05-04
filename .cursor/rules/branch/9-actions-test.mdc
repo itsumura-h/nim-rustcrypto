@@ -1,0 +1,313 @@
+---
+description: 9-actions-testブランチでのGitHub Actionsビルド成果物同梱配信設計
+alwaysApply: false
+---
+GitHub Actionsビルド成果物同梱配信設計
+===
+
+このブランチで行うことは以下の通りです。
+- GitHub ActionsでRust FFIをrelease buildし、`librust_crypto_ffi.a`を生成する設計を固める。
+- 生成したRust静的アーカイブを配信用アーカイブファイルにまとめる設計を固める。
+- Nimパッケージを`nimble install`した時、Rust静的アーカイブがパッケージ内に一緒に配置され、利用側アプリケーションが追加のリンク指定を書かずに`import rustcrypto`できる設計を固める。
+- アプリケーション側の`config.nims`、コンパイルコマンド、環境変数にRust静的ライブラリのリンク指定を漏らさない。
+- Rust/Nimの暗号API、FFI関数シグネチャ、テストベクトル、アルゴリズム実装は変更しない。
+
+このブランチでは実装に進まない。まず配信方式、成果物名、配置先、nimble install時の同梱方針、検証観点を設計書として確定する。
+
+## 進捗
+- [x] `.cursor/rules/project.mdc`を読み、Rust/Nimのビルドディレクトリ、Ubuntu優先、Nim側にリンク指定を閉じ込めるルールを確認した。
+- [x] `.cursor/rules/branch.mdc`を読み、ブランチルールの形式と記録方針を確認した。
+- [x] 現在ブランチ`9-actions-test`に対応するブランチルールとして、このファイルを新規作成した。
+- [x] 現状調査として、`src/nim-rustcrypto/rustcrypto.nimble`、`src/nim-rustcrypto/src/rustcrypto/algorithm/ffi.nim`、`.github/workflows/`配下の存在を確認した。
+- [x] GitHub Actions、GitHub Release asset、Nimbleの`installDirs`/`installFiles`に関する公式資料を確認した。
+- [x] GitHub Actionsのworkflow設計を確定した。
+- [x] Rust静的アーカイブを含む配信用アーカイブのファイル名、内部ディレクトリ構造、チェックサム方式を確定した。
+- [x] `nimble install`時はNimソースのみを入れ、Rust静的アーカイブは`import rustcrypto`時に自動取得する方式へ確定した。
+- [x] `ffi.nim`からのリンク解決順序を確定した。
+- [x] ローカル開発時とCI配布時の成果物生成フローの差分を確定した。
+- [x] 実装着手前の検証観点を確定した。
+- [x] クリーンな`NIMBLE_DIR`で`nimble install`し、`import rustcrypto`時にRust静的アーカイブが自動解決されることを確認した。
+
+## 参考資料
+- GitHub Docs - Workflow artifacts: https://docs.github.com/en/actions/concepts/workflows-and-actions/workflow-artifacts
+- GitHub Docs - REST API release assets: https://docs.github.com/en/rest/releases/assets
+- GitHub CLI - `gh release upload`: https://cli.github.com/manual/gh_release_upload
+- Nimble User Guide - `.nimble` file reference: https://nim-lang.github.io/nimble/nimble-reference.html
+- Nimble User Guide - Package types: https://nim-lang.github.io/nimble/package-types.html
+- Nimble User Guide - Folder structure and packages: https://nim-lang.github.io/nimble/folder-structure.html
+- Rust Reference - Linkage: https://doc.rust-lang.org/reference/linkage.html
+
+## 調査結果・設計まとめ
+
+### 目的
+
+目的は、RustCrypto FFIの静的アーカイブをGitHub Actions上で再現可能にビルドし、その成果物をNimパッケージのインストール結果へ同梱することである。
+
+利用側アプリケーションは以下だけで使える状態を目標にする。
+
+```nim
+import rustcrypto
+```
+
+利用側アプリケーションに以下を要求してはならない。
+
+```text
+--passL:/path/to/librust_crypto_ffi.a
+config.nimsへのリンク指定
+/application/src/rustcrypto-ffi/target/release/librust_crypto_ffi.aへの依存
+```
+
+これはプロジェクトルール`SYW-NIM-001`の「アプリ側にリンク指定を漏らさない」を満たすための設計である。
+
+### 前提
+
+初期対応ターゲットはUbuntu x86_64のみとする。
+
+```text
+target id: linux-x86_64
+Rust staticlib: librust_crypto_ffi.a
+Rust build dir: /application/src/rustcrypto-ffi
+Nim package dir: /application/src/nim-rustcrypto
+```
+
+Windows、macOS、Linux aarch64はこのブランチの対象外とする。ただし成果物名とディレクトリ構造には将来ターゲットを追加できる余地を残す。
+
+### 採用方針
+
+GitHub ActionsでRustをビルドし、`librust_crypto_ffi.a`を含む配信用アーカイブファイルを作る。
+
+配信用アーカイブはGitHub Release assetとして公開する。PRやpushではActions artifactとしてアップロードし、Release assetへは載せない。Release assetはタグに紐づく長期配布物、Actions artifactはworkflow runに紐づく一時成果物として扱う。
+
+Nimパッケージのインストールでは、最終的に以下のような形で静的アーカイブがパッケージ内に存在する状態を目指す。
+
+```text
+$NIMBLE_DIR/pkgs2/rustcrypto-<version>-<hash>/
+  rustcrypto.nimble
+  rustcrypto/
+    algorithm/
+      ffi.nim
+    vendor/
+      rustcrypto-ffi/
+        linux-x86_64/
+          librust_crypto_ffi.a
+```
+
+`$NIMBLE_DIR`はNimbleの設定に従う。標準的なLinux環境では`$HOME/.nimble`配下になるが、`--nimbleDir`や`NIMBLE_DIR`で変わり得るため、設計では絶対パスに依存しない。
+
+### 成果物設計
+
+Release asset名は以下を基本形とする。
+
+```text
+rustcrypto-ffi-v<version>-linux-x86_64.tar.gz
+rustcrypto-ffi-v<version>-linux-x86_64.tar.gz.sha256
+```
+
+例:
+
+```text
+rustcrypto-ffi-v0.1.0-linux-x86_64.tar.gz
+rustcrypto-ffi-v0.1.0-linux-x86_64.tar.gz.sha256
+```
+
+`.tar.gz`の内部構造は以下とする。
+
+```text
+rustcrypto-ffi/
+  linux-x86_64/
+    librust_crypto_ffi.a
+```
+
+この構造にする理由は以下の通り。
+- OS/CPUアーキテクチャごとに成果物を分離できる。
+- 将来`linux-aarch64`などを追加しても同じresolver設計を保てる。
+- Nimパッケージ内の`vendor/rustcrypto-ffi/<target>/`へそのまま展開しやすい。
+- 静的アーカイブ単体より、チェックサム、将来のmetadata、追加ライブラリを同梱しやすい。
+
+静的アーカイブ、`.tar.gz`、`.sha256`はGit管理対象に含めない。Gitに含めるのはソース、workflow、取得/同期スクリプト、設計書、必要な`.gitkeep`までとする。
+
+### GitHub Actions設計
+
+workflowは少なくとも以下のjobを持つ。
+
+```text
+rust-ffi-linux-x86_64
+```
+
+jobの基本手順は以下とする。
+
+1. Ubuntu runnerを使う。
+2. repositoryをcheckoutする。
+3. Rust toolchainを準備する。
+4. `/application/src/rustcrypto-ffi`相当のRust crateディレクトリで`cargo test`を実行する。
+5. 同ディレクトリで`cargo build --release --lib`を実行する。
+6. `target/release/librust_crypto_ffi.a`の存在を検証する。
+7. `cargo rustc --release --lib -- --print native-static-libs`を実行し、追加リンク要件をログに残す。
+8. `dist/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi.a`へコピーする。
+9. `rustcrypto-ffi-v<version>-linux-x86_64.tar.gz`を作成する。
+10. `sha256sum`で`.sha256`を作成する。
+11. PR/pushではActions artifactとしてアップロードする。
+12. tag pushまたは手動release workflowではGitHub Release assetとしてアップロードする。
+
+Release assetのアップロードは`gh release upload`、またはGitHub Releases APIを使う。既存releaseに同名assetが存在する場合の扱いは、実装時に以下のどちらかへ統一する。
+- 推奨: 同名assetがあれば失敗させ、releaseの再作成やasset削除を明示操作にする。
+- 代替: 手動dispatch時のみ上書きを許可する。
+
+初期設計では、配布物の再現性を優先し、同名assetの暗黙上書きは避ける。
+
+### Nimble install同梱設計
+
+Nimble公式資料では、`installDirs`、`installFiles`、`installExt`を指定すると、それらに列挙されたものがinstall対象になる。したがってRust静的アーカイブをNimパッケージに同梱するには、パッケージ内の安定した相対パスへ`.a`を配置し、そのパスを`installFiles`または`installDirs`でinstall対象に含める。
+
+配置先は以下を第一候補とする。
+
+```text
+src/rustcrypto/vendor/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi.a
+```
+
+理由は以下の通り。
+- `ffi.nim`から`currentSourcePath`基準で到達しやすい。
+- `src/rustcrypto`配下に置けば、Nim moduleと一緒にinstallされる配置として扱いやすい。
+- パッケージ利用側から見て、Rust FFIの実体が`rustcrypto` module配下に閉じる。
+
+`rustcrypto.nimble`では、設計上は以下のどちらかを採用する。
+
+```nim
+installDirs = @[
+  "src/rustcrypto",
+]
+```
+
+または、より限定的に以下を採用する。
+
+```nim
+installFiles = @[
+  "src/rustcrypto/vendor/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi.a",
+]
+```
+
+初期方針は`installDirs = @["src/rustcrypto"]`を優先する。Nimソースとvendor配下の静的アーカイブを同じinstall対象として扱えるためである。ただし不要な生成物まで含めないよう、vendor配下の`.tar.gz`や`.sha256`はinstall対象にしない。
+
+### install前の取得方式
+
+`nimble install`時点ではRust静的アーカイブを要求しない。Nimソースのみをinstallし、`ffi.nim`の`staticExec`から`resolve_rustcrypto_ffi.nim`を呼び出して、必要になった時点でRust静的アーカイブを解決する。
+
+GitHub Release assetとして生成した`.tar.gz`を優先取得し、失敗した場合はGitHubのソースをcloneしてローカルビルドする。これにより、`nimble add https://github.com/itsumura-h/nim-rustcrypto` 後の`import rustcrypto`が、release assetの有無に左右されにくくなる。
+
+#### 案A: release用ソース生成時にvendorへ展開する
+
+Release workflowでRust静的アーカイブをビルドした後、Nimパッケージ配信用のソースツリーを作り、その中の`src/rustcrypto/vendor/rustcrypto-ffi/linux-x86_64/`へ`librust_crypto_ffi.a`を配置する。
+
+そのソースツリーをNimble配布用tagまたはrelease assetとして提供する。
+
+利点:
+- `nimble install`後に確実に`.a`がパッケージ内に存在する。
+- 利用者が追加taskを実行しなくてよい。
+- ビルド時の暗黙ネットワークアクセスが不要になる。
+
+欠点:
+- Git tagが指す通常ソースに`.a`を含めない場合、NimbleがGitから直接installする導線とは別に配布導線を設計する必要がある。
+- Nimble公式package indexがGit repositoryを前提にする場合、Release asset由来のソース配布との整合を確認する必要がある。
+
+#### 案B: nimble taskでRelease assetを取得してからinstallする
+
+`rustcrypto.nimble`に`fetchRustFfi` taskを用意し、利用者またはCIが`nimble fetchRustFfi`を実行してから`nimble install`する。
+
+利点:
+- Git repositoryに`.a`を含めずに済む。
+- Release assetを正とするバイナリ配布にできる。
+- ターゲット追加時の取得分岐をtaskへ閉じ込められる。
+
+欠点:
+- `nimble install`だけでは完結しない。
+- ユーザー要件の「nimパッケージをインストールした時に一緒に配信」に対して、事前taskが必要な分だけ体験が弱い。
+
+このブランチでは、`nimble install`の段階ではNimソースだけを配り、Rust静的アーカイブは`import`時に自動解決する方式を採る。Release assetがあればそれを使い、無ければGitHubソースからビルドする。
+
+### 推奨する最終フロー
+
+推奨フローは以下とする。
+
+1. GitHub Actionsがtag pushを検知する。
+2. Rust crateをUbuntu x86_64でtest/buildする。
+3. `librust_crypto_ffi.a`を生成する。
+4. `rustcrypto-ffi-v<version>-linux-x86_64.tar.gz`と`.sha256`を生成する。
+5. Nimパッケージ配信用workspaceを作る。
+6. 配信用workspaceの`src/rustcrypto/vendor/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi.a`へ静的アーカイブを配置する。
+7. 配信用workspaceを検証する。
+8. 配信用workspaceから`nimble install`相当の検証を行う。
+9. 外部サンプルプロジェクトで`import rustcrypto`してリンクできることを確認する。
+10. Release assetとしてRust FFI tarball、checksum、必要ならNimパッケージ配信用tarballを公開する。
+
+この方式では、Git管理上はRust静的アーカイブを含めないまま、Release配布物としてはNimパッケージ内に静的アーカイブを同梱できる。
+
+### `ffi.nim`リンク解決設計
+
+`ffi.nim`はアプリケーション側の作業ディレクトリを基準にしてはならない。`currentSourcePath`を基準に、インストール済みNimパッケージ内のvendorを探す。
+
+解決優先順位は以下とする。
+
+1. `ffi.nim`から見た`../vendor/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi.a`
+2. 開発用fallbackとして、repository内の`src/rustcrypto/vendor/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi.a`
+3. 必要な場合のみ、明示taskで取得したユーザーキャッシュ上の`.a`
+
+通常配布では1だけで成立する状態を目標にする。2と3はローカル開発やトラブルシュート用のfallbackであり、利用者にリンク指定を要求するものではない。
+
+Nim側のリンク指定は`ffi.nim`内の`{.passL.}`に閉じ込める。静的アーカイブのフルパスをリンカへ渡す用途では`{.passL.}`を使い、アプリケーション側には公開しない。
+
+### ローカル開発設計
+
+ローカル開発では、実装時に以下のtaskを用意する方針とする。
+
+```text
+nimble buildRustFfiLocal
+```
+
+このtaskは以下を行う。
+
+1. `/application/src/rustcrypto-ffi`で`cargo build --release --lib`を実行する。
+2. 生成された`target/release/librust_crypto_ffi.a`をNimパッケージ内のvendorへ同期する。
+3. `/application/src/nim-rustcrypto`で`nimble install`した時にvendor配下の`.a`が一緒にinstallされる状態にする。
+
+設計段階では`cargo build`そのものの挙動を隠すwrapperは採用しない。Cargo標準コマンドの意味を変えるより、Nimble taskまたは明示スクリプトで「RustをbuildしてNim packageへ同期する」責務を表す方が安全である。
+
+ただしユーザー要求として「GitHub ActionsでRustをビルドする」ことが主目的なので、ローカルtaskはCI設計の補助導線として扱う。
+
+### 検証設計
+
+実装に進む前に、以下の検証観点を確定する。
+
+- GitHub Actions上で`cargo test`が成功する。
+- GitHub Actions上で`cargo build --release --lib`が成功する。
+- `target/release/librust_crypto_ffi.a`が生成される。
+- `.tar.gz`内に`rustcrypto-ffi/linux-x86_64/librust_crypto_ffi.a`が含まれる。
+- `.sha256`でtarballの検証ができる。
+- 配信用workspace内に`src/rustcrypto/vendor/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi.a`が存在する。
+- 配信用workspaceから`nimble install`した結果、`$NIMBLE_DIR/pkgs2/.../rustcrypto/vendor/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi.a`が存在する。
+- 外部サンプルプロジェクトで`import rustcrypto`したNimコードが、追加`--passL`なしでcompile/linkできる。
+- アプリケーション側に`config.nims`のリンク指定を書かなくても動く。
+- `.a`、`.tar.gz`、`.sha256`がGit差分に含まれない。
+
+### 非対象
+
+このブランチルール作成時点では、以下は行わない。
+
+- workflowファイルの実装変更。
+- Nimble fileの実装変更。
+- `ffi.nim`の実装変更。
+- Rust FFI関数の追加、削除、変更。
+- Nim公開APIの変更。
+- テストコードの変更。
+- `git add`、`git commit`。
+
+### 現時点の判断
+
+「nimパッケージをインストールした時に一緒に配信される」という要件を最も素直に満たすには、GitHub Actionsで生成したRust静的アーカイブを、配信用Nimパッケージツリーの`src/rustcrypto/vendor/...`へ配置してからinstall対象に含める方式がよい。
+
+Git repositoryにはバイナリを含めず、Release配布物にはバイナリを含める。これにより、ソース管理の健全性と利用者のインストール体験を両立する。
+
+### 実測結果
+
+クリーンな`NIMBLE_DIR`に対して`nimble install`を実行すると、インストール先にはNimソースのみが入る。
+
+その後、`import rustcrypto`で`ffi.nim`が評価されると、`resolve_rustcrypto_ffi.nim`がRelease assetの取得を試み、失敗した場合はGitHubソースをcloneしてRust静的アーカイブを生成する。

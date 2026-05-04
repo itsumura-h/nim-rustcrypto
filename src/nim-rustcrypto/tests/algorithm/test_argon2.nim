@@ -1,7 +1,7 @@
 import unittest
 
 import ./utils
-import nim_rustcrypto/algorithm/argon2
+import ../../src/rustcrypto/algorithm/argon2
 
 suite "argon2":
   test "high-level derive matches the known Argon2id vector":

@@ -1,0 +1,104 @@
+import std/[os, osproc, strutils]
+
+const
+  RustCryptoTargetId* = "linux-x86_64"
+  RustCryptoArchiveName* = "librust_crypto_ffi.a"
+
+proc packageRoot*(scriptSourcePath: string): string =
+  var dir = scriptSourcePath.parentDir
+  while true:
+    if fileExists(dir / "rustcrypto.nimble"):
+      return dir
+    let parent = dir.parentDir
+    if parent == dir:
+      return ""
+    dir = parent
+
+proc versionFromNimble*(packageRoot: string): string =
+  let nimblePath = packageRoot / "rustcrypto.nimble"
+  for line in readFile(nimblePath).splitLines:
+    let trimmed = line.strip
+    if trimmed.startsWith("version"):
+      let firstQuote = trimmed.find('"')
+      let lastQuote = trimmed.rfind('"')
+      if firstQuote >= 0 and lastQuote > firstQuote:
+        return trimmed[firstQuote + 1 ..< lastQuote]
+  raise newException(ValueError, "failed to parse version from " & nimblePath)
+
+proc moduleVendorArchivePath*(packageRoot: string): string =
+  let moduleRoot =
+    if dirExists(packageRoot / "src" / "rustcrypto"):
+      packageRoot / "src" / "rustcrypto"
+    else:
+      packageRoot / "rustcrypto"
+  moduleRoot / "vendor" / "rustcrypto-ffi" / RustCryptoTargetId / RustCryptoArchiveName
+
+proc vendorArchivePath*(packageRoot: string): string =
+  let moduleVendor = moduleVendorArchivePath(packageRoot)
+  if fileExists(moduleVendor):
+    return moduleVendor
+
+  let rootVendor = packageRoot / "vendor" / "rustcrypto-ffi" / RustCryptoTargetId / RustCryptoArchiveName
+  if fileExists(rootVendor):
+    return rootVendor
+
+  moduleVendor
+
+proc cacheRoot*(version: string): string =
+  let base =
+    if getEnv("XDG_CACHE_HOME").len > 0:
+      getEnv("XDG_CACHE_HOME")
+    else:
+      getHomeDir() / ".cache"
+  base / "rustcrypto" / "ffi" / ("v" & version)
+
+proc cacheArchivePath*(version: string): string =
+  cacheRoot(version) / RustCryptoTargetId / RustCryptoArchiveName
+
+proc repositorySlug*(packageRoot: string): string =
+  let overrideRepo = getEnv("RUSTCRYPTO_GITHUB_REPOSITORY")
+  if overrideRepo.len > 0:
+    return overrideRepo
+
+  let fallbackRepo = "itsumura-h/nim-rustcrypto"
+  let gitUrl = execCmdEx(
+    "git -C " & packageRoot & " remote get-url origin",
+    options = {poUsePath, poStdErrToStdOut},
+  )
+  if gitUrl.exitCode != 0:
+    return fallbackRepo
+
+  let remote = gitUrl.output.strip
+  if remote.len == 0:
+    return fallbackRepo
+
+  if remote.startsWith("git@github.com:"):
+    result = remote["git@github.com:".len .. ^1]
+    if result.endsWith(".git"):
+      result.setLen(result.len - 4)
+    return result
+
+  let marker = "github.com/"
+  let idx = remote.find(marker)
+  if idx >= 0:
+    result = remote[idx + marker.len .. ^1]
+    if result.endsWith(".git"):
+      result.setLen(result.len - 4)
+    return result
+
+  fallbackRepo
+
+proc releaseBaseUrl*(repositorySlug: string; version: string): string =
+  "https://github.com/" & repositorySlug & "/releases/download/v" & version
+
+proc resolveWritableArchivePath*(packageRoot: string; version: string): string =
+  let modulePath = moduleVendorArchivePath(packageRoot)
+  try:
+    createDir(modulePath.parentDir)
+    return modulePath
+  except CatchableError:
+    discard
+
+  let cachePath = cacheArchivePath(version)
+  createDir(cachePath.parentDir)
+  cachePath

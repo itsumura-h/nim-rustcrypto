@@ -11,6 +11,40 @@ type
   Secp256k1RecoverableSignature* = array[Secp256k1RecoverableSignatureLen, byte]
   Secp256k1DerSignature* = ecdsa_common.Secp256k1DerSignature
 
+proc `$`*(value: Secp256k1CompressedPublicKey): string =
+  bytesToHexString(value)
+
+proc `$`*(value: Secp256k1Signature): string =
+  bytesToHexString(value)
+
+proc `$`*(value: Secp256k1UncompressedPublicKey |
+    Secp256k1RecoverableSignature): string =
+  bytesToHexString(value)
+
+proc randomSecretKey*(): Secp256k1SecretKey =
+  while true:
+    result = urandomBytes[Secp256k1SecretKeyLen]()
+    var publicKey: Secp256k1CompressedPublicKey
+    let status = secp256k1PublicKeyFromSecretKeyRaw(
+      bytesPtr(result),
+      csize_t(result.len),
+      cast[ptr uint8](addr publicKey[0]),
+      csize_t(publicKey.len),
+      Secp256k1PublicKeyFormatCompressed,
+    )
+    case status
+    of RustCryptoOk:
+      return result
+    of RustCryptoErrInvalidSecretKey:
+      discard
+    of RustCryptoErrPanic:
+      raise newException(ValueError, "rustcrypto_secp256k1_random_secret_key failed: panic")
+    else:
+      raise newException(
+        ValueError,
+        "rustcrypto_secp256k1_random_secret_key failed: unexpected status " & $status,
+      )
+
 proc raiseIfError(status: cint; operation: string) =
   case status
   of RustCryptoOk:

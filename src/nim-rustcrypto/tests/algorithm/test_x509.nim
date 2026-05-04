@@ -1,8 +1,8 @@
 import unittest
 
 import ./utils
-import nim_rustcrypto/algorithm/rsa
-import nim_rustcrypto/algorithm/x509
+import ../../src/rustcrypto/algorithm/rsa
+import ../../src/rustcrypto/algorithm/x509
 
 suite "x509":
   test "certificate validates and round-trips between PEM and DER":

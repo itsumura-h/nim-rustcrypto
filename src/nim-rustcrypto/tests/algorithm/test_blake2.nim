@@ -1,7 +1,7 @@
 import unittest
 
 import ./utils
-import nim_rustcrypto/algorithm/blake2
+import ../../src/rustcrypto/algorithm/blake2
 
 suite "blake2":
   test "raw blake2b-512 matches the RFC 7693 vector":
