@@ -1,96 +1,412 @@
 ---
-description: 9-actions-testブランチでの開発時に読み込む
+description: 9-actions-testブランチでのnimble package配信設計
 alwaysApply: false
 ---
-9-actions-testブランチルール
+nimble package配信設計
 ===
 
-このブランチで実装することは以下の通りです。
-- GitHub ActionsでDocker Composeを使って開発用コンテナを起動する
-- 起動したComposeサービス内でRust側テストを実行し、`src/rustcrypto-ffi` の `cargo test` が通ることを確認する
-- Rust側の静的アーカイブをビルドし、Nim側テストからリンクできる状態にする
-- 起動したComposeサービス内でNim側テストを実行し、`src/nim-rustcrypto` の `nimble test -y` が通ることを確認する
-- CIの失敗理由がRust、Nim、Docker Composeのどこにあるか分かるように、Workflowのステップを分離する
-- READMEには、必要な場合のみCIの実行内容を短く追記する
+このブランチで行うことは以下の通りです。
+- `/application/src/nim-rustcrypto` を nimble package として配信できる構成を設計する。
+- アプリケーション側が `rustcrypto` パッケージを利用した時、アプリ側の `config.nims` やコンパイルコマンドに Rust 静的ライブラリのリンク指定を漏らさない。
+- `src/nim-rustcrypto/src/rustcrypto/algorithm/ffi.nim` 内で Rust 静的ライブラリのリンク指定を完結させる。
+- Rust側ビルド成果物 `/application/src/rustcrypto-ffi/target/release/librust_crypto_ffi.a` は Git 管理対象に含めない。
+- Rust側ビルド成果物は GitHub Actions で生成し、GitHub Release asset として公開する。
+- 利用側では GitHub Release asset から静的アーカイブを取得し、ローカルキャッシュ上の `.a` を Nim からリンクする。
+- ローカル環境では、`/application/src/rustcrypto-ffi` で `cargo build` した時に、生成された静的アーカイブを Nim 側の指定ディレクトリへ自動コピーする。
+- ローカル環境で `/application/src/nim-rustcrypto` を `nimble install` した時は、`/root/.nimble/pkgs2` 配下の `rustcrypto` パッケージディレクトリにも静的アーカイブが配置されるようにする。
 
-このブランチでは、暗号API、Rust FFI、Nimラッパー、テストベクトルの仕様変更は対象外とする。目的は、既存のRust/NimテストをGitHub Actions上のDocker Compose環境で再現可能に実行し、PRごとに回帰を検出できるようにすることである。
+このブランチでは、暗号API、Rust FFI、Nimラッパーの公開API、テストベクトルの仕様変更は対象外とする。目的は、nimble package 配信時の Rust 静的アーカイブ配布・取得・リンク方式を明文化し、実装可能な設計へ落とし込むことである。
 
 ## 進捗
-- [x] `.cursor/rules/project.mdc` を読み、Rust/Nimのビルドディレクトリ、テスト順、Ubuntu優先のルールを確認する
-- [x] `.cursor/rules/branch.mdc` を読み、ブランチルールの形式と記録方針を確認する
-- [x] 現在ブランチ `9-actions-test` に対応する既存ブランチルールがないことを確認する
-- [x] `compose.yaml` と `docker/app/develop.Dockerfile` を読み、既存の開発用Compose構成を確認する
-- [x] READMEを読み、Rust/Nimのローカル実行コマンドを確認する
-- [x] `.github` 配下に既存Workflowがないことを確認する
-- [x] GitHub ActionsとDocker Composeの公式ドキュメントを確認し、CI上での実行方針を整理する
-- [x] 実装方針と設計をこのブランチルールに記録する
-- [x] `.github/workflows/test.yml` を追加する
-- [x] Workflowのトリガーを `push` と `pull_request` に設定する
-- [x] `actions/checkout` でリポジトリを取得する
-- [x] `docker compose build app` で開発用イメージをビルドする
-- [x] `docker compose up -d app` でComposeサービスを起動する
-- [x] `docker compose exec -T app bash -lc 'cd /application/src/rustcrypto-ffi && cargo test'` を実行する
-- [x] `docker compose exec -T app bash -lc 'cd /application/src/rustcrypto-ffi && cargo build --release --lib'` を実行する
-- [x] `docker compose exec -T app bash -lc 'cd /application/src/nim-rustcrypto && nimble test -y'` を実行する
-- [x] `if: always()` の後片付けステップで `docker compose down --remove-orphans` を実行する
-- [x] `cargo test` をローカルで実行し、Rustテストの警告4件を確認する
-- [x] `src/rustcrypto-ffi/src/p256.rs`、`src/rustcrypto-ffi/src/p384.rs`、`src/rustcrypto-ffi/src/rsa.rs`、`src/rustcrypto-ffi/src/x509.rs` の未使用コードを整理する
-- [x] `cargo test` を再実行し、警告なしで126件のRustテストが通ることを確認する
-- [ ] CIログでRustテスト、Rustビルド、Nimテストの失敗箇所が分かることを確認する
-- [ ] 必要に応じてREADMEにCIで実行される検証内容を追記する
+- [x] `.cursor/rules/project.mdc` を読み、Rust/Nimのビルドディレクトリ、Ubuntu優先、Nim側にリンク指定を閉じ込めるルールを確認する。
+- [x] `.cursor/rules/branch.mdc` を読み、ブランチルールの形式と記録方針を確認する。
+- [x] 現在ブランチ `9-actions-test` に対応するブランチルールとして、このファイルを整理する。
+- [x] 既存の `ffi.nim` が絶対パス `/application/src/rustcrypto-ffi/target/release/librust_crypto_ffi.a` に依存していることを確認する。
+- [x] nimble package として配信する場合、アプリケーションプロジェクトから `/application/src/rustcrypto-ffi/target/release/` を直接参照する設計は不適切であると整理する。
+- [x] 静的アーカイブを Git 管理対象に含めず、GitHub Release asset として配布する方針へ変更する。
+- [x] 利用側では Release asset をローカルキャッシュへ取得し、`ffi.nim` からそのキャッシュ上の `.a` をリンクする方針を採用する。
+- [x] ローカル開発時は `cargo build` から Nim 側指定ディレクトリへ静的アーカイブを自動コピーする方針を追加する。
+- [x] ローカル `nimble install` 時は `/root/.nimble/pkgs2` 配下のインストール済み `rustcrypto` パッケージにも静的アーカイブを含める方針を追加する。
+- [ ] Rust側のrelease build成果物を GitHub Release asset としてアップロードするWorkflowを追加する。
+- [ ] `rustcrypto.nimble` に静的アーカイブの取得用taskを追加する。
+- [ ] `ffi.nim` の `passL` を絶対パスからローカルキャッシュ上のRelease asset解決へ変更する。
+- [ ] nimble install 後の外部アプリケーションから `import rustcrypto` してリンクできることを検証する。
+- [ ] Rust crate の build hook で、`cargo build` 後に `src/nim-rustcrypto/vendor/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi.a` へコピーできるようにする。
+- [ ] ローカル `nimble install` で `vendor/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi.a` が `/root/.nimble/pkgs2` 配下の `rustcrypto` パッケージディレクトリへコピーされることを検証する。
 
 ## 参考資料
-- GitHub Actions service containers: https://docs.github.com/actions/tutorials/use-containerized-services/use-docker-service-containers
-- GitHub Actions running jobs in a container: https://docs.github.com/en/actions/writing-workflows/choosing-where-your-workflow-runs/running-jobs-in-a-container
-- Docker CI: https://docs.docker.com/build/ci/
-- Docker Compose `up`: https://docs.docker.com/reference/cli/docker/compose/up/
-- Docker Compose `build`: https://docs.docker.com/reference/cli/docker/compose/build/
-- Docker Compose `down`: https://docs.docker.com/reference/cli/docker/compose/down/
+- Rust Reference Linkage: https://doc.rust-lang.org/reference/linkage.html
 - Rust Cargo test: https://doc.rust-lang.org/cargo/commands/cargo-test.html
+- GitHub Actions artifact / release upload: https://docs.github.com/actions
+- GitHub Releases: https://docs.github.com/repositories/releasing-projects-on-github
 - Nimble: https://github.com/nim-lang/nimble
+- Nim Manual: `{.passL.}`、`{.link.}`、`{.compile.}` などのコンパイル・リンク用pragma
+- Nim system module: `currentSourcePath`
 
 ## 調査結果・設計まとめ
-- 2026-05-03時点の調査では、GitHub-hosted runnerの `ubuntu-latest` ではDockerを使ったWorkflow実行が一般的に可能であり、このプロジェクトの対象環境もUbuntu優先であるため、Workflowのrunnerは `ubuntu-latest` を使う。
-- 既存の `compose.yaml` は `app` サービスのみを定義し、`docker/app/develop.Dockerfile` からUbuntu 24.04ベースのRust/Nim開発環境をビルドする。CIでもこのComposeサービスをそのまま使い、ローカル開発環境との差分を小さくする。
-- `docker/app/develop.Dockerfile` は `build-essential`、`curl`、`git`、Rust、Nimをインストールし、`/application` を作業ディレクトリにしている。CIではCheckout済みのリポジトリをCompose volumeで `/application` にマウントしてテストする。
-- GitHub Actionsのservice containers機能はDBやRedisのような補助サービス向けであり、このブランチの主目的である「リポジトリ内の `compose.yaml` を使って開発コンテナを立て、その中でテストする」用途では、Workflowステップから `docker compose` CLIを直接実行する方針が分かりやすい。
-- Docker Composeの `up --build` はサービスをビルドして起動できる。`--wait` はサービスがrunningまたはhealthyになるまで待つが、既存 `app` サービスにはhealthcheckがないため、初期実装では `docker compose up -d app` のあとに `docker compose exec -T app ...` を実行する形で十分とする。
-- 将来、DBなど起動完了待ちが必要なサービスを追加した場合は、Compose側にhealthcheckを定義して `docker compose up --build --wait app` を使う。現時点ではTTY待機用の `app` サービスだけなので、CIの複雑化を避ける。
-- `docker compose exec` は通常TTYを割り当てるため、GitHub Actionsでは `-T` を付ける。これにより非対話CIでもRust/Nimのコマンドを安定して実行できる。
-- Rustテストはプロジェクトルール `SYW-BUILD-002` に従い、必ず `/application/src/rustcrypto-ffi` で実行する。Workflowでは `cd /application/src/rustcrypto-ffi && cargo test` を独立ステップにする。
-- Nimテストはプロジェクトルール `SYW-BUILD-003` に従い、必ず `/application/src/nim-rustcrypto` で実行する。Workflowでは `cd /application/src/nim-rustcrypto && nimble test -y` を独立ステップにする。
-- Nim側テストはRustの静的アーカイブ `librust_crypto_ffi.a` をリンクするため、`nimble test -y` の前に `cargo build --release --lib` を実行する。`cargo test` だけではreleaseビルド成果物が保証されないため、RustテストとRust releaseビルドを分ける。
-- Workflowのステップ順は、checkout、Compose build、Compose up、Rust test、Rust release build、Nim test、Compose downとする。Rust test、Rust build、Nim testを分けることで、CI失敗時に原因を読み取りやすくする。
-- 後片付けは `if: always()` を使い、途中のテストが失敗しても `docker compose down --remove-orphans` を実行する。必要になった場合のみ `--volumes` を追加するが、初期実装では依存キャッシュや匿名volumeの扱いを変えないため付けない。
-- 既存Composeサービスはリポジトリ全体を `/application` にマウントするため、GitHub Actions側の作業ディレクトリはリポジトリルートのままでよい。Workflow内で `working-directory` を細かく切り替えるより、コンテナ内コマンドで明示的に `cd` する。
-- 初期WorkflowではCargo/Nimbleのキャッシュ最適化は行わない。まず正しく動く最小CIを優先し、実行時間が問題になった場合に `actions/cache`、Docker layer cache、Cargo registry cache、Nimble package cacheを別タスクで検討する。
-- `docker/app/develop.Dockerfile` の依存インストールは毎回時間がかかる可能性がある。CI時間が長すぎる場合は、base imageの固定化、GitHub Container Registryへの開発イメージpush、またはBuildKit cacheを検討する。ただし、このブランチの初期完了条件には含めない。
-- Workflow名は `test`、ファイル名は `.github/workflows/test.yml` とする。ジョブ名は `docker-compose-test` とし、テスト対象がDocker Compose経由であることを明確にする。
-- トリガーは `push` と `pull_request` を基本にする。ブランチ制限は設けず、main以外の作業ブランチでもCIが走るようにする。
-- Workflowの権限は読み取りのみで足りるため、必要に応じて `permissions: contents: read` を設定する。GitHub Packagesなどへpushしない限り、書き込み権限は不要とする。
-- このブランチでは `git add`、`git commit` は行わない。変更ファイルはユーザーが確認してからステージングする。
-- 2026-05-03時点の実装では、CIは `docker compose build app` でイメージを作成し、`docker compose up -d app` で起動した `app` サービスに対して `cargo test`、`cargo build --release --lib`、`nimble test -y` を分離したステップで実行する。後片付けは `docker compose down --remove-orphans` で行う。
-- この作業環境には `docker` コマンドがないため、Workflow自体のローカル実行確認はできていない。実行確認はGitHub Actions上で行う前提とする。
 
-### 想定Workflow設計
-- ファイル: `.github/workflows/test.yml`
-- Workflow名: `test`
-- Runner: `ubuntu-latest`
-- Job: `docker-compose-test`
-- 手順:
-  1. `actions/checkout` でソースを取得する
-  2. `docker compose build app` で開発用イメージをビルドする
-  3. `docker compose up -d app` でコンテナを起動する
-  4. `docker compose exec -T app bash -lc 'cd /application/src/rustcrypto-ffi && cargo test'` を実行する
-  5. `docker compose exec -T app bash -lc 'cd /application/src/rustcrypto-ffi && cargo build --release --lib'` を実行する
-  6. `docker compose exec -T app bash -lc 'cd /application/src/nim-rustcrypto && nimble test -y'` を実行する
-  7. `if: always()` で `docker compose down --remove-orphans` を実行する
+### 現状の問題
+
+現在の `src/nim-rustcrypto/src/rustcrypto/algorithm/ffi.nim` は以下のように Rust 側成果物を絶対パスで参照している。
+
+```nim
+const rustCryptoStaticLib* = "/application/src/rustcrypto-ffi/target/release/librust_crypto_ffi.a"
+{.passL: rustCryptoStaticLib.}
+```
+
+この方式はリポジトリ内のローカル開発では動くが、`/application/src/nim-rustcrypto` を nimble package として配信した場合に破綻する。利用者のプロジェクトには `/application/src/rustcrypto-ffi/target/release/librust_crypto_ffi.a` が存在しないため、アプリケーション側で `rustcrypto` を import した時にリンクエラーになる。
+
+また、アプリケーション側に `--passL:/path/to/librust_crypto_ffi.a` や `config.nims` の手書き設定を要求すると、プロジェクトルール `SYW-NIM-001` の「アプリ側にリンク指定を漏らさない」に反する。
+
+### 採用する配布方針
+
+`librust_crypto_ffi.a` は Rust crate の `target/release/` を直接参照せず、Nim パッケージにも同梱しない。GitHub Actions で生成した静的アーカイブを GitHub Release asset として公開し、利用時にローカルキャッシュへダウンロードしてリンクする。
+
+Git 管理対象に含めるのは Nim/Rust のソース、取得スクリプト、Workflow、チェックサム検証ロジック、ローカル生成物の配置先ディレクトリを維持するための `.gitkeep` などまでとする。`librust_crypto_ffi.a`、`.tar.gz`、`.sha256` などの生成物は Git へ載せない。
+
+ただしローカル開発とローカル `nimble install` では、Git 管理外の生成物として Nim パッケージ配下にも静的アーカイブを配置してよい。このローカル配置は GitHub Release 配布とは別の開発者向け導線であり、`.gitignore` で必ず除外する。
+
+Release asset の推奨命名は以下とする。
+
+```text
+rustcrypto-ffi-v0.1.0-linux-x86_64.tar.gz
+rustcrypto-ffi-v0.1.0-linux-x86_64.tar.gz.sha256
+```
+
+Release asset の中身は以下とする。
+
+```text
+rustcrypto-ffi/
+  linux-x86_64/
+    librust_crypto_ffi.a
+```
+
+理由は以下の通り。
+- 静的アーカイブはビルド成果物であり、Git に載せると差分が読めず、リポジトリも肥大化する。
+- GitHub Release はバージョン付きバイナリ配布先として自然であり、nimble package のソース配布と Rust FFI のバイナリ配布を分離できる。
+- `linux-x86_64` のように OS と CPU アーキテクチャで分けておくと、将来 `linux-aarch64` や `macos-aarch64` などを追加する時に衝突しない。
+- 現在のプロジェクトルールではまず Ubuntu 対応が必須なので、初期対応は `linux-x86_64` の 1 種類に限定する。
+
+### ローカルキャッシュ配置
+
+ローカルでダウンロード後に置くディレクトリは、Nim パッケージ配下ではなくユーザーキャッシュ配下とする。
+
+```text
+~/.cache/rustcrypto/ffi/v0.1.0/linux-x86_64/librust_crypto_ffi.a
+```
+
+`XDG_CACHE_HOME` が設定されている場合は、以下を優先する。
+
+```text
+$XDG_CACHE_HOME/rustcrypto/ffi/v0.1.0/linux-x86_64/librust_crypto_ffi.a
+```
+
+理由は以下の通り。
+- nimble install されたパッケージディレクトリは環境によって読み取り専用に近い扱いになる可能性がある。
+- パッケージソースツリーを汚さず、Git 管理対象外の生成物を明確に分離できる。
+- 複数プロジェクトで同じ `rustcrypto` version を使う場合、同じ静的アーカイブを再利用できる。
+- Release asset とローカルキャッシュを version と target で分けることで、パッケージ更新時の ABI 不一致を避けやすい。
+
+### ローカル開発用アーカイブ配置
+
+ローカル開発では、`cargo build` の成果物を Nim 側の指定ディレクトリへ自動コピーする。コピー先は以下とする。
+
+```text
+/application/src/nim-rustcrypto/vendor/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi.a
+```
+
+この `vendor/` 配下の `.a` は Git 管理対象に含めない。`.gitignore` で少なくとも以下を除外する。
+
+```gitignore
+src/nim-rustcrypto/vendor/rustcrypto-ffi/**/librust_crypto_ffi.a
+src/nim-rustcrypto/vendor/rustcrypto-ffi/**/*.tar.gz
+src/nim-rustcrypto/vendor/rustcrypto-ffi/**/*.sha256
+```
+
+ローカル環境で `/application/src/rustcrypto-ffi` から `cargo build` を実行した場合、Rust 側の build hook または Cargo alias / xtask により、以下の流れで自動コピーする。
+
+1. Cargo が `target/debug/librust_crypto_ffi.a` または `target/release/librust_crypto_ffi.a` を生成する。
+2. ビルドプロファイルに応じた生成元を判定する。
+3. Ubuntu x86_64 の場合、`/application/src/nim-rustcrypto/vendor/rustcrypto-ffi/linux-x86_64/` を作成する。
+4. 生成された `.a` を `librust_crypto_ffi.a` としてコピーする。
+
+設計上は `cargo build` と `cargo build --release` の両方でコピーされるようにする。ただし Nim 側テストや配布検証で使う正式な成果物は `cargo build --release` のものとする。
+
+Cargo の `build.rs` は通常「crate をコンパイルする前」に走るため、同じ crate の最終成果物をコピーする用途には向かない。実装時は以下のいずれかを採用する。
+
+- 推奨: `.cargo/config.toml` の alias で通常利用する `cargo build` 相当の開発コマンドを定義し、ビルド後コピーを行う。
+- 推奨: `xtask` または `scripts/build_rustffi_and_copy.*` を用意し、CI と開発手順ではそれを使う。
+- 条件付き: `cargo build` という文字通りの操作で必ずコピーしたい場合は、repository-local wrapper を用意して開発コンテナ内の PATH で優先させる。ただし通常の Cargo 挙動を隠すため、採用する場合は設計理由を残す。
+
+ユーザー要件としては「ローカル環境では `cargo build` をした時に自動的に Nim 側指定ディレクトリへアーカイブファイルがコピーされる」ことを満たす必要がある。実装方式は Cargo の制約を踏まえ、ビルド後に確実にコピーされる手段を選ぶ。
+
+### ローカル `nimble install` 時の配置
+
+ローカル環境で `/application/src/nim-rustcrypto` を `nimble install` した場合、`/root/.nimble/pkgs2` 配下のインストール済み `rustcrypto` パッケージディレクトリにも静的アーカイブが配置されるようにする。
+
+配置イメージは以下とする。
+
+```text
+/root/.nimble/pkgs2/rustcrypto-0.1.0-<hash>/
+  rustcrypto.nimble
+  src/
+    rustcrypto/
+      algorithm/
+        ffi.nim
+  vendor/
+    rustcrypto-ffi/
+      linux-x86_64/
+        librust_crypto_ffi.a
+```
+
+`/root/.nimble/pkgs2` 配下の実際のディレクトリ名は Nimble が version と hash を含めて決めるため、設計上は `rustcrypto-<version>-<hash>` のようなパターンとして扱う。ユーザー記載の `rustcrypti` は `rustcrypto` パッケージディレクトリを指すものとして扱う。
+
+ローカル `nimble install` で静的アーカイブを含めるため、`rustcrypto.nimble` には Git 管理外の生成物であっても、存在する場合に install 対象へ含める設定を追加する。
+
+```nim
+installFiles = @[
+  "vendor/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi.a"
+]
+```
+
+この設定により、ローカルで `cargo build --release` 済みかつ Nim 側 `vendor/` に `.a` が存在する場合、`nimble install` 後の `/root/.nimble/pkgs2/.../vendor/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi.a` も存在する状態にする。
+
+一方で、GitHub からソースだけを取得した状態では `.a` が存在しない可能性がある。その場合は `nimble fetchRustFfi` で GitHub Release asset から取得する。取得先は実装時に以下の優先順位で設計する。
+
+1. 書き込み可能なインストール済みパッケージディレクトリ内の `vendor/rustcrypto-ffi/<target>/librust_crypto_ffi.a`
+2. 書き込み不可の場合、ユーザーキャッシュ `~/.cache/rustcrypto/ffi/v<version>/<target>/librust_crypto_ffi.a`
+
+これにより、ローカル開発ではパッケージ内 `vendor/` を優先し、配布版や書き込み不可環境ではユーザーキャッシュへフォールバックできる。
+
+### `ffi.nim` からの参照方針
+
+`ffi.nim` では、アプリケーションの作業ディレクトリやリポジトリ絶対パスを使わず、resolver スクリプトに version と target に対応する静的アーカイブパスを解決させる。
+
+参照優先順位は以下とする。
+
+1. `ffi.nim` が属する nimble package ディレクトリ内の `vendor/rustcrypto-ffi/<target>/librust_crypto_ffi.a`
+2. ユーザーキャッシュ `~/.cache/rustcrypto/ffi/v<version>/<target>/librust_crypto_ffi.a`
+
+設計上の参照イメージは以下の通り。
+
+```nim
+import std/[os, strutils]
+
+const rustCryptoStaticLib* = staticExec(
+  "nim r " & currentSourcePath.parentDir.parentDir.parentDir.parentDir /
+    "tools" / "resolve_rustcrypto_ffi.nim"
+).strip
+
+when rustCryptoStaticLib.len == 0:
+  {.error: "rustcrypto FFI static archive is not available. Run `nimble fetchRustFfi` first.".}
+
+{.passL: rustCryptoStaticLib.}
+```
+
+この方式にすると、ローカル `nimble install` 後は `/root/.nimble/pkgs2` 配下の package-local archive を優先でき、Release asset から取得した環境ではユーザーキャッシュ上の安定したパスへフォールバックできる。
+
+`tools/resolve_rustcrypto_ffi.nim` の責務は以下とする。
+- `rustcrypto.nimble` の version を読み、Release tag と同じ version として扱う。
+- platform を `linux-x86_64` のような target id に正規化する。
+- package-local の `vendor/rustcrypto-ffi/<target>/librust_crypto_ffi.a` が存在する場合はそれを返す。
+- package-local archive が存在しない場合、`XDG_CACHE_HOME` があれば `$XDG_CACHE_HOME/rustcrypto/ffi/v<version>/<target>/librust_crypto_ffi.a`、なければ `~/.cache/rustcrypto/ffi/v<version>/<target>/librust_crypto_ffi.a` を返す。
+- 対象ファイルが存在しない場合は、空文字または明確なエラーを返し、`nimble fetchRustFfi` の実行を促す。
+
+静的アーカイブが存在しない場合の扱いは、実装時に以下のどちらかを採用する。
+- 推奨: `rustcrypto.nimble` に `fetchRustFfi` task を用意し、利用者または CI が `nimble fetchRustFfi` を明示実行してからビルドする。
+- 代替: `ffi.nim` のコンパイル時に `staticExec` で取得スクリプトを起動し、存在しなければ自動ダウンロードする。
+
+初期設計では、ビルド時に暗黙のネットワークアクセスが発生しないよう `fetchRustFfi` task 方式を優先する。ただしアプリケーション側にリンクパス指定は要求しない。アプリ側に必要なのは「Rust FFI バイナリを取得する task を実行すること」までであり、`passL` の具体値は `ffi.nim` に閉じ込める。
+
+### `{.passL.}` と `{.link.}` の使い分け
+
+静的アーカイブのフルパスを確実にリンカへ渡す目的では、現状どおり `{.passL: rustCryptoStaticLib.}` を使う方針とする。
+
+`{.link.}` は C オブジェクトや外部ファイルをリンク対象に含める用途で使えるが、このプロジェクトでは既に完成済みの Rust `staticlib` を Nim 側の最終リンクへ渡すことが主目的であり、`passL` の方が意図が明確である。
+
+将来、Nim 側で C shim や追加オブジェクトを同梱する必要が出た場合は、`.o` や `.c` には `{.link.}` / `{.compile.}`、Rust 静的アーカイブには `{.passL.}` という責務分離にする。
+
+### Rust側ビルド成果物の扱い
+
+Rust側の正式なビルドコマンドは、プロジェクトルールに従って以下とする。
+
+```sh
+cd /application/src/rustcrypto-ffi
+cargo build --release
+```
+
+このコマンドで生成される一次成果物は以下である。
+
+```text
+/application/src/rustcrypto-ffi/target/release/librust_crypto_ffi.a
+```
+
+このファイルは Cargo のビルドディレクトリにある一時的な成果物として扱い、Git に載せてはならない。タグ付きリリース時に GitHub Actions で以下を行う。
+
+1. `/application/src/rustcrypto-ffi` で `cargo test` を実行する。
+2. `/application/src/rustcrypto-ffi` で `cargo build --release --lib` を実行する。
+3. `cargo rustc --release --lib -- --print native-static-libs` で追加リンク要件をログへ出す。
+4. `target/release/librust_crypto_ffi.a` を `rustcrypto-ffi/linux-x86_64/librust_crypto_ffi.a` というディレクトリ構造に配置する。
+5. `rustcrypto-ffi-vX.Y.Z-linux-x86_64.tar.gz` を作成する。
+6. `.tar.gz.sha256` を作成する。
+7. GitHub Release に `.tar.gz` と `.sha256` を asset としてアップロードする。
+
+PR や通常 push の CI では Release へアップロードせず、必要な場合のみ GitHub Actions artifact として保存する。GitHub Release へのアップロードは tag push、または手動 dispatch のみに限定する。
+
+ローカル開発時は、同じ成果物を `/application/src/nim-rustcrypto/vendor/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi.a` にコピーする。これは GitHub Release asset の代替ではなく、ローカル `nimble install` とローカル検証を簡単にするための開発者向け配置である。
+
+### `rustcrypto.nimble` の設計
+
+`rustcrypto.nimble` には、Git 管理外のローカル生成物である静的アーカイブを、存在する場合に install 対象へ含める設定を追加する。加えて、GitHub Release asset から対象 platform の静的アーカイブを取得する task を追加する。
+
+ローカル `nimble install` で `/root/.nimble/pkgs2` 配下へ `.a` をコピーするため、以下を追加する。
+
+```nim
+installFiles = @[
+  "vendor/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi.a"
+]
+```
+
+設計上は以下のような設定を想定する。
+
+```nim
+task fetchRustFfi, "Download Rust FFI static archive from GitHub Release":
+  exec "nim r tools/fetch_rustcrypto_ffi.nim"
+```
+
+取得スクリプトの責務は以下とする。
+- `rustcrypto.nimble` の version と同じ GitHub Release tag を参照する。
+- platform を `linux-x86_64` のような target id に正規化する。
+- Release asset URL を組み立てる。
+- `.tar.gz` と `.sha256` をダウンロードする。
+- SHA-256 を検証する。
+- 可能であれば package-local の `vendor/rustcrypto-ffi/<target>/` へ展開する。
+- package-local へ書き込めない場合は `~/.cache/rustcrypto/ffi/v<version>/<target>/` へ展開する。
+- 既に同じ version と target の `.a` が存在し、チェックサムが一致する場合は再ダウンロードしない。
+
+Release asset を使わずローカルで開発したい場合のため、開発者向け task は別名にする。
+
+```nim
+task buildRustFfiLocal, "Build Rust FFI static archive locally into user cache":
+  exec "cd ../rustcrypto-ffi && cargo build --release"
+  exec "nim r tools/cache_local_rustcrypto_ffi.nim"
+```
+
+`buildRustFfiLocal` は名前と説明を実装時に見直し、実際にはユーザーキャッシュだけでなく package-local `vendor/` にもコピーする。たとえば `buildRustFfiLocal` の責務は以下とする。
+
+1. `/application/src/rustcrypto-ffi` で `cargo build --release` を実行する。
+2. `/application/src/nim-rustcrypto/vendor/rustcrypto-ffi/linux-x86_64/` を作成する。
+3. `target/release/librust_crypto_ffi.a` を Nim 側 `vendor/` へコピーする。
+4. 必要であれば同じ `.a` をユーザーキャッシュにもコピーする。
+
+ただし実装時は Nimble の `exec` の作業ディレクトリ、`nim r` のパス解決、Windows 未対応時のエラー表示、`nimble install` 時の `installFiles` の存在チェックが意図通りになることを確認してから確定する。
+
+### アプリケーション側の利用イメージ
+
+アプリケーション側は Rust 静的ライブラリのパスを意識しない。
+
+```nim
+import rustcrypto
+```
+
+または必要に応じて以下のように個別モジュールを import する。
+
+```nim
+import rustcrypto/algorithm/sha256
+```
+
+この import によって `sha256.nim` が `ffi.nim` を経由し、`ffi.nim` が以下の優先順位で見つけた `.a` をリンカへ渡す。
+
+1. インストール済み package-local archive: `/root/.nimble/pkgs2/rustcrypto-0.1.0-<hash>/vendor/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi.a`
+2. 開発中 package-local archive: `/application/src/nim-rustcrypto/vendor/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi.a`
+3. ユーザーキャッシュ: `~/.cache/rustcrypto/ffi/v0.1.0/linux-x86_64/librust_crypto_ffi.a`
+
+アプリケーション側の `config.nims` に以下のような設定を書かせてはならない。
+
+```nim
+switch("passL", "/application/src/rustcrypto-ffi/target/release/librust_crypto_ffi.a")
+```
+
+### OS・アーキテクチャ対応
+
+初期対応は Ubuntu x86_64 のみとする。`ffi.nim` ではまず Linux のみを明示的に許可し、それ以外の環境ではコンパイル時に分かりやすいエラーを出す設計にする。
+
+将来対応を広げる場合は、以下のようにディレクトリを増やす。
+
+```text
+~/.cache/rustcrypto/ffi/v0.1.0/
+  linux-x86_64/
+    librust_crypto_ffi.a
+  linux-aarch64/
+    librust_crypto_ffi.a
+  macos-aarch64/
+    librust_crypto_ffi.a
+```
+
+### 追加リンクライブラリの確認
+
+Rust の `staticlib` は Rust crate と依存 crate のコードを静的アーカイブへまとめるが、環境によってはシステムライブラリの追加リンクが必要になる可能性がある。
+
+配布前に以下で必要な native static libs を確認する。
+
+```sh
+cd /application/src/rustcrypto-ffi
+cargo rustc --release --lib -- --print native-static-libs
+```
+
+もし `-lgcc_s`、`-lutil`、`-lrt`、`-lpthread`、`-lm`、`-ldl`、`-lc` など追加指定が必要な場合は、`ffi.nim` に OS 条件付きで `passL` を追加する。ただし Ubuntu で Nim の通常リンク時に暗黙解決されるものは、実測結果に基づいて最小限だけ明示する。
+
+### 実装時の変更対象
+
+実装に進む場合の主な変更対象は以下とする。
+- `src/nim-rustcrypto/src/rustcrypto/algorithm/ffi.nim`
+  - 絶対パス定数を削除する。
+  - package-local `vendor/` とユーザーキャッシュから `librust_crypto_ffi.a` を解決する。
+  - Linux x86_64 以外は明示的な compile error にする。
+- `src/nim-rustcrypto/rustcrypto.nimble`
+  - `installFiles` に `vendor/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi.a` を追加する。
+  - `fetchRustFfi` task を追加する。
+  - 必要なら `buildRustFfiLocal` のような開発用 task を追加する。
+- `src/nim-rustcrypto/tools/fetch_rustcrypto_ffi.nim`
+  - GitHub Release asset をダウンロードし、SHA-256 を検証してキャッシュへ展開する。
+- `src/nim-rustcrypto/tools/resolve_rustcrypto_ffi.nim`
+  - package-local `vendor/`、ユーザーキャッシュの順で静的アーカイブパスを解決する。
+- `src/rustcrypto-ffi` 側のビルド補助設定
+  - ローカル `cargo build` 後に Nim 側 `vendor/` へ `.a` をコピーする仕組みを追加する。
+- `.github/workflows/release.yml`
+  - tag push または workflow dispatch で Rust FFI staticlib を生成し、GitHub Release asset へアップロードする。
+- `.gitignore`
+  - `librust_crypto_ffi.a`、Release 用 `.tar.gz`、`.sha256`、Nim 側 `vendor/` のローカル生成物、ローカルキャッシュ作成時の一時ディレクトリを除外する。
+
+### 検証方針
+
+実装後の検証は以下の順で行う。
+1. `/application/src/rustcrypto-ffi` で `cargo build --release` を実行し、`target/release/librust_crypto_ffi.a` が生成されることを確認する。
+2. ローカル `cargo build --release` 後に `/application/src/nim-rustcrypto/vendor/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi.a` が自動作成されることを確認する。
+3. `/application/src/nim-rustcrypto` で `nimble install` を実行し、`/root/.nimble/pkgs2/rustcrypto-0.1.0-<hash>/vendor/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi.a` が存在することを確認する。
+4. Release workflow で `rustcrypto-ffi-vX.Y.Z-linux-x86_64.tar.gz` と `.sha256` が生成されることを確認する。
+5. GitHub Release asset から `.tar.gz` と `.sha256` をダウンロードできることを確認する。
+6. `/application/src/nim-rustcrypto` で `nimble fetchRustFfi` を実行し、package-local `vendor/` または `~/.cache/rustcrypto/ffi/vX.Y.Z/linux-x86_64/librust_crypto_ffi.a` が作成されることを確認する。
+7. `/application/src/nim-rustcrypto` で Nim 側テストを実行し、解決された `.a` でリンクできることを確認する。
+8. 別アプリケーションプロジェクトから nimble path または nimble install 経由で `rustcrypto` を利用し、アプリ側に `passL` を書かずにビルドできることを確認する。
+9. `sha256("abc")` など既存テストベクトルで、FFI 経由の動作が変わっていないことを確認する。
+
+### 決定事項
+- `ffi.nim` から `/application/src/rustcrypto-ffi/target/release/librust_crypto_ffi.a` を直接参照しない。
+- `librust_crypto_ffi.a` は Git 管理対象に含めない。
+- GitHub Actions で `librust_crypto_ffi.a` を生成し、GitHub Release asset として配布する。
+- Release asset は `rustcrypto-ffi-v<version>-<target>.tar.gz` と `.sha256` を基本単位にする。
+- ローカル `cargo build` では `/application/src/nim-rustcrypto/vendor/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi.a` へ自動コピーする。
+- ローカル `nimble install` では `/root/.nimble/pkgs2` 配下のインストール済み `rustcrypto` パッケージディレクトリへ `.a` もコピーされるようにする。
+- 利用側では Release asset を package-local `vendor/` または `~/.cache/rustcrypto/ffi/v<version>/<target>/librust_crypto_ffi.a` へ展開する。
+- Nim 側では package-local `vendor/` を優先し、なければユーザーキャッシュ上の `.a` を参照する。
+- アプリケーション側には Rust 静的ライブラリのリンク指定を要求しない。
+- 初期対応は Ubuntu x86_64 のみとし、他 OS・他アーキテクチャは明示的に未対応エラーにする。
 
 ### 完了条件
-- GitHub Actions上でComposeサービスがビルドできる
-- GitHub Actions上でComposeサービスが起動できる
-- GitHub Actions上のComposeサービス内で `cargo test` が成功する
-- GitHub Actions上のComposeサービス内で `cargo build --release --lib` が成功する
-- GitHub Actions上のComposeサービス内で `nimble test -y` が成功する
-- CIが失敗した場合、ログ上でRustテスト、Rustビルド、Nimテストのどこで失敗したか分かる
-- CI終了時にComposeリソースが後片付けされる
+- Rust 静的アーカイブを Git に載せず、GitHub Release asset から取得する設計がブランチルール上で明文化されている。
+- nimble package 配信時に、アプリケーション側へ Rust 静的ライブラリのリンク指定を要求しない設計がブランチルール上で明文化されている。
+- `ffi.nim` からローカルキャッシュ上の Rust 静的アーカイブをリンクする方針が明文化されている。
+- `rustcrypto.nimble` に `fetchRustFfi` task を追加する方針が明文化されている。
+- ローカル `cargo build` 後に Nim 側指定ディレクトリへ `.a` を自動コピーする方針が明文化されている。
+- ローカル `nimble install` 後に `/root/.nimble/pkgs2` 配下の `rustcrypto` パッケージディレクトリへ `.a` もコピーされる方針が明文化されている。
