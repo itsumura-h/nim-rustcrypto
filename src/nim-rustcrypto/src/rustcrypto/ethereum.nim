@@ -1,7 +1,10 @@
+import ./algorithm/ffi
+import ./algorithm/common
 import ./algorithm/sha3
 import ./algorithm/secp256k1
 
 type
+  Ethereum* = object
   EthereumAddress* = array[20, byte]
   EthereumHash* = array[32, byte]
   EthereumSignature* = object
@@ -17,25 +20,59 @@ proc bytesToString(data: openArray[byte]): string =
   for i, value in data:
     result[i] = char(value)
 
-proc ethereumKeccak256*(data: openArray[byte]): EthereumHash =
+proc to0xHex(data: openArray[byte]): string =
+  "0x" & bytesToHexString(data)
+
+# proc cptr(data: string): ptr uint8 =
+#   if data.len == 0:
+#     nil
+#   else:
+#     cast[ptr uint8](unsafeAddr data[0])
+
+proc cptr(data: openArray[byte]): ptr uint8 =
+  if data.len == 0:
+    nil
+  else:
+    cast[ptr uint8](unsafeAddr data[0])
+
+proc keccak256Bytes(data: openArray[byte]): EthereumHash =
   keccak256(bytesToString(data))
 
-proc ethereumAddress*(publicKey: Secp256k1UncompressedPublicKey): EthereumAddress =
+proc keccak256*(T: type Ethereum, data: openArray[byte]): EthereumHash =
+  keccak256Bytes(data)
+
+proc addressFromPublicKey(publicKey: Secp256k1UncompressedPublicKey): EthereumAddress =
   if publicKey[0] != 0x04:
     raise newException(ValueError, "ethereum address requires an uncompressed SEC1 public key")
 
-  let digest = ethereumKeccak256(publicKey[1 ..< publicKey.len])
+  let digest = keccak256Bytes(publicKey[1 ..< publicKey.len])
   for i in 0 ..< result.len:
     result[i] = digest[digest.len - result.len + i]
 
-proc ethereumPersonalMessageHash*(message: string): EthereumHash =
+proc address*(T: type Ethereum, publicKey: Secp256k1UncompressedPublicKey): EthereumAddress =
+  addressFromPublicKey(publicKey)
+
+proc `$`*(value: EthereumAddress): string =
+  to0xHex(value)
+
+proc personalMessageDigest(message: string): EthereumHash =
   keccak256("\x19Ethereum Signed Message:\n" & $message.len & message)
 
-proc ethereumTypedDataHash*(domainSeparator: EthereumHash; structHash: EthereumHash): EthereumHash =
+proc personalMessageHash*(T: type Ethereum, message: string): EthereumHash =
+  personalMessageDigest(message)
+
+proc typedDataDigest(domainSeparator: EthereumHash; structHash: EthereumHash): EthereumHash =
   keccak256("\x19\x01" & bytesToString(domainSeparator) & bytesToString(structHash))
 
-proc ethereumSignatureFromRecoverable(
-  signature: Secp256k1RecoverableSignature,
+proc typedDataHash*(
+    T: type Ethereum,
+    domainSeparator: EthereumHash,
+    structHash: EthereumHash,
+  ): EthereumHash =
+  typedDataDigest(domainSeparator, structHash)
+
+proc signatureFromRecoverable(
+    signature: Secp256k1RecoverableSignature,
     chainId: EthereumChainId,
   ): EthereumSignature =
   let recoveryId = signature[EthereumRecoverableSignatureLen - 1]
@@ -54,7 +91,15 @@ proc ethereumSignatureFromRecoverable(
     result.r[i] = signature[i]
     result.s[i] = signature[32 + i]
 
-proc ethereumRecoverableSignature(
+proc `$`*(value: EthereumSignature): string =
+  var bytes = newSeq[byte](EthereumRecoverableSignatureLen)
+  for i in 0 ..< 32:
+    bytes[i] = value.r[i]
+    bytes[32 + i] = value.s[i]
+  bytes[64] = value.v
+  to0xHex(bytes)
+
+proc recoverableSignatureFromEthereum(
     signature: EthereumSignature,
   ): tuple[signature: Secp256k1RecoverableSignature, valid: bool] =
   if signature.v == 27'u8 or signature.v == 28'u8:
@@ -74,56 +119,94 @@ proc ethereumRecoverableSignature(
   else:
     result.valid = false
 
-proc ethereumSignPersonalMessage*(
-    message: string,
-    secretKey: Secp256k1SecretKey,
-    chainId: EthereumChainId = 0,
-  ): EthereumSignature =
-  let digest = ethereumPersonalMessageHash(message)
-  ethereumSignatureFromRecoverable(secp256k1EcdsaSignRecoverable(digest, secretKey), chainId)
-
-proc ethereumVerifyPersonalMessage*(
-    message: string,
-    publicKey: Secp256k1UncompressedPublicKey,
+proc matchesRecoverableSignatureAddress(
+    digest: EthereumHash,
+    expectedAddress: EthereumAddress,
     signature: EthereumSignature,
   ): bool =
-  let digest = ethereumPersonalMessageHash(message)
-  let recovered = ethereumRecoverableSignature(signature)
+  let recovered = recoverableSignatureFromEthereum(signature)
   if not recovered.valid:
-    raise newException(ValueError, "ethereum signature has an unsupported v value")
+    return false
 
   for candidate in [0'u8, 1'u8, 2'u8, 3'u8]:
     var trial = recovered.signature
     trial[64] = candidate
-    if secp256k1EcdsaRecoverableVerify(digest, publicKey, trial):
-      return true
+    var recoveredPublicKey: Secp256k1UncompressedPublicKey
+    let status = secp256k1EcdsaRecoverPublicKeyRaw(
+      cptr(digest),
+      csize_t(digest.len),
+      cptr(trial),
+      csize_t(trial.len),
+      cast[ptr uint8](addr recoveredPublicKey[0]),
+      csize_t(recoveredPublicKey.len),
+      Secp256k1PublicKeyFormatUncompressed,
+    )
+    case status
+    of RustCryptoOk:
+      if addressFromPublicKey(recoveredPublicKey) == expectedAddress:
+        return true
+    of RustCryptoErrVerificationFailed:
+      discard
+    of RustCryptoErrNullOutput,
+       RustCryptoErrOutputTooShort,
+       RustCryptoErrNullInputWithData,
+       RustCryptoErrInvalidMessageDigest,
+       RustCryptoErrInvalidSignature,
+       RustCryptoErrInvalidPublicKeyFormat,
+       RustCryptoErrPanic:
+      raise newException(
+        ValueError,
+        "rustcrypto_secp256k1_ecdsa_recover_public_key failed: " & $status,
+      )
+    else:
+      raise newException(
+        ValueError,
+        "rustcrypto_secp256k1_ecdsa_recover_public_key failed: unexpected status " & $status,
+      )
 
   false
 
-proc ethereumSignTypedDataHash*(
+proc signPersonalMessage*(
+    T: type Ethereum,
+    message: string,
+    secretKey: Secp256k1SecretKey,
+    chainId: EthereumChainId = 0,
+  ): EthereumSignature =
+  signatureFromRecoverable(Secp256k1.signRecoverable(personalMessageDigest(message), secretKey), chainId)
+
+proc verifyPersonalMessage*(
+    T: type Ethereum,
+    message: string,
+    walletAddress: EthereumAddress,
+    signature: EthereumSignature,
+  ): bool =
+  if not recoverableSignatureFromEthereum(signature).valid:
+    raise newException(ValueError, "ethereum signature has an unsupported v value")
+  matchesRecoverableSignatureAddress(personalMessageDigest(message), walletAddress, signature)
+
+proc signTypedDataHash*(
+    T: type Ethereum,
     domainSeparator: EthereumHash,
     structHash: EthereumHash,
     secretKey: Secp256k1SecretKey,
     chainId: EthereumChainId = 0,
   ): EthereumSignature =
-  let digest = ethereumTypedDataHash(domainSeparator, structHash)
-  ethereumSignatureFromRecoverable(secp256k1EcdsaSignRecoverable(digest, secretKey), chainId)
+  signatureFromRecoverable(
+    Secp256k1.signRecoverable(typedDataDigest(domainSeparator, structHash), secretKey),
+    chainId,
+  )
 
-proc ethereumVerifyTypedDataHash*(
+proc verifyTypedDataHash*(
+    T: type Ethereum,
     domainSeparator: EthereumHash,
     structHash: EthereumHash,
-    publicKey: Secp256k1UncompressedPublicKey,
+    walletAddress: EthereumAddress,
     signature: EthereumSignature,
   ): bool =
-  let digest = ethereumTypedDataHash(domainSeparator, structHash)
-  let recovered = ethereumRecoverableSignature(signature)
-  if not recovered.valid:
+  if not recoverableSignatureFromEthereum(signature).valid:
     raise newException(ValueError, "ethereum signature has an unsupported v value")
-
-  for candidate in [0'u8, 1'u8, 2'u8, 3'u8]:
-    var trial = recovered.signature
-    trial[64] = candidate
-    if secp256k1EcdsaRecoverableVerify(digest, publicKey, trial):
-      return true
-
-  false
+  matchesRecoverableSignatureAddress(
+    typedDataDigest(domainSeparator, structHash),
+    walletAddress,
+    signature,
+  )

@@ -29,9 +29,4 @@ let k2 = Keccak256Digest.fromHexKeccak256(khex)
 
 ## secp256k1 ECDSA with SHA3 / Keccak
 
-The same module re-exports message-based ECDSA helpers that hash with SHA3-256 or Keccak-256 before signing:
-
-- `secp256k1EcdsaSignSha3_256` / `secp256k1EcdsaVerifySha3_256`
-- `secp256k1EcdsaSignKeccak256` / `secp256k1EcdsaVerifyKeccak256`
-
-See [secp256k1-ecdsa.md](./secp256k1-ecdsa.md).
+Use `Secp256k1.sign` / `Secp256k1.verify` with the digest overload if you want to sign a SHA3-256 or Keccak-256 digest explicitly.

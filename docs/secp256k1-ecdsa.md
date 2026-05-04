@@ -19,8 +19,8 @@ Modules:
 ```nim
 import rustcrypto/algorithm/secp256k1
 
-let sk = randomSecretKey()
-let pk = secp256k1PublicKeyCompressed(sk)
+let sk = Secp256k1.generateSecretKey()
+let pk = Secp256k1.publicKeyCompressed(sk)
 ```
 
 ## Secret key from 64-char hex
@@ -46,8 +46,8 @@ import rustcrypto/algorithm/ffi
 const digestHex =
   "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" # SHA-256 of ""
 let digest = fromHexDigest[Secp256k1MessageDigest](digestHex, Secp256k1MessageDigestLen)
-let sig = secp256k1EcdsaSign(digest, sk)
-discard secp256k1EcdsaVerify(digest, pk, sig)
+let sig = Secp256k1.sign(digest, sk)
+discard Secp256k1.verify(digest, pk, sig)
 ```
 
 `secp256k1EcdsaVerify` is overloaded for compressed and uncompressed public keys.
@@ -57,8 +57,8 @@ discard secp256k1EcdsaVerify(digest, pk, sig)
 ```nim
 import rustcrypto/algorithm/sha256
 
-let sig = secp256k1EcdsaSignSha256("hello", sk)
-discard secp256k1EcdsaVerifySha256("hello", pk, sig)
+let sig = Secp256k1.sign("hello", sk)
+discard Secp256k1.verify("hello", pk, sig)
 ```
 
 ## Recoverable signatures

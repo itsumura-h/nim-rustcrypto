@@ -25,8 +25,8 @@ suite "p384":
   test "public key derivation matches the RFC 6979 vector":
     let secretKey = fromHexSecretKey(SecretKeyHex)
 
-    let compressed = p384PublicKeyCompressed(secretKey)
-    let uncompressed = p384PublicKeyUncompressed(secretKey)
+    let compressed = P384.publicKeyCompressed(secretKey)
+    let uncompressed = P384.publicKeyUncompressed(secretKey)
 
     check hexOf(compressed) == PublicKeyCompressedHex
     check hexOf(uncompressed) == PublicKeyUncompressedHex
@@ -35,57 +35,57 @@ suite "p384":
 
   test "random secret key can derive public key and sign":
     let secretKey = randomSecretKey()
-    let publicKey = p384PublicKeyCompressed(secretKey)
-    let signature = p384EcdsaSignSha384("test", secretKey)
+    let publicKey = P384.publicKeyCompressed(secretKey)
+    let signature = P384.sign("test", secretKey)
 
     check secretKey.len == P384SecretKeyLen
     check publicKey.len == P384PublicKeyCompressedLen
     check $publicKey == hexOf(publicKey)
     check $signature == hexOf(signature)
-    check p384EcdsaVerifySha384("test", publicKey, P384PublicKeyFormatCompressed, signature)
+    check P384.verify("test", publicKey, signature)
 
   test "signing matches the RFC 6979 vector":
     let secretKey = fromHexSecretKey(SecretKeyHex)
 
-    check hexOf(p384EcdsaSignSha384("test", secretKey)) == SignatureHex
+    check hexOf(P384.sign("test", secretKey)) == SignatureHex
 
   test "verify accepts the RFC 6979 vector":
     let publicKey = fromHexPublicKeyCompressed(PublicKeyCompressedHex)
     let signature = fromHexSignature(SignatureHex)
 
-    check p384EcdsaVerifySha384("test", publicKey, P384PublicKeyFormatCompressed, signature)
+    check P384.verify("test", publicKey, signature)
 
   test "prehash signing matches the RFC 6979 vector":
     let secretKey = fromHexSecretKey(SecretKeyHex)
     let digest = fromHexMessageDigest(DigestHex)
 
-    check hexOf(p384EcdsaSignPrehash(digest, secretKey)) == SignatureHex
+    check hexOf(P384.sign(digest, secretKey)) == SignatureHex
 
   test "prehash verification accepts the RFC 6979 vector":
     let publicKey = fromHexPublicKeyUncompressed(PublicKeyUncompressedHex)
     let signature = fromHexSignature(SignatureHex)
     let digest = fromHexMessageDigest(DigestHex)
 
-    check p384EcdsaVerifyPrehash(digest, publicKey, P384PublicKeyFormatUncompressed, signature)
+    check P384.verify(digest, publicKey, signature)
 
   test "public key SPKI round-trip preserves both encodings":
     let secretKey = fromHexSecretKey(SecretKeyHex)
-    let compressed = p384PublicKeyCompressed(secretKey)
-    let uncompressed = p384PublicKeyUncompressed(secretKey)
-    let compressedSpki = p384PublicKeyToSpkiDer(compressed, P384PublicKeyFormatCompressed)
-    let uncompressedSpki = p384PublicKeyToSpkiDer(uncompressed, P384PublicKeyFormatUncompressed)
+    let compressed = P384.publicKeyCompressed(secretKey)
+    let uncompressed = P384.publicKeyUncompressed(secretKey)
+    let compressedSpki = P384.publicKeyToSpkiDer(compressed)
+    let uncompressedSpki = P384.publicKeyToSpkiDer(uncompressed)
 
     check compressedSpki == uncompressedSpki
     check $compressedSpki == hexOf(compressedSpki)
     check $uncompressedSpki == hexOf(uncompressedSpki)
-    check hexOf(p384PublicKeyFromSpkiDer(compressedSpki, P384PublicKeyFormatCompressed)) == PublicKeyCompressedHex
-    check hexOf(p384PublicKeyFromSpkiDer(uncompressedSpki, P384PublicKeyFormatUncompressed)) == PublicKeyUncompressedHex
+    check hexOf(P384.publicKeyFromSpkiDer(compressedSpki, P384CompressedPublicKey)) == PublicKeyCompressedHex
+    check hexOf(P384.publicKeyFromSpkiDer(uncompressedSpki, P384UncompressedPublicKey)) == PublicKeyUncompressedHex
 
   test "private key PKCS#8 round-trip preserves the raw scalar":
     let secretKey = fromHexSecretKey(SecretKeyHex)
-    let der = p384PrivateKeyToPkcs8Der(secretKey)
+    let der = P384.privateKeyToPkcs8Der(secretKey)
 
-    check p384PrivateKeyFromPkcs8Der(der) == secretKey
+    check P384.privateKeyFromPkcs8Der(der) == secretKey
 
   test "raw signing rejects short output buffers":
     let secretKey = fromHexSecretKey(SecretKeyHex)
@@ -129,3 +129,16 @@ suite "p384":
     )
 
     check status == RustCryptoErrInvalidParameter
+
+  test "marker type API round-trips":
+    let secretKey = P384.generateSecretKey()
+    let compressedPublicKey = P384.publicKeyCompressed(secretKey)
+    let uncompressedPublicKey = P384.publicKeyUncompressed(secretKey)
+    let messageSignature = P384.sign("test", secretKey)
+    let digest = fromHexMessageDigest(DigestHex)
+    let digestSignature = P384.sign(digest, secretKey)
+
+    check P384.verify("test", compressedPublicKey, messageSignature)
+    check P384.verify("test", uncompressedPublicKey, messageSignature)
+    check P384.verify(digest, compressedPublicKey, digestSignature)
+    check P384.verify(digest, uncompressedPublicKey, digestSignature)

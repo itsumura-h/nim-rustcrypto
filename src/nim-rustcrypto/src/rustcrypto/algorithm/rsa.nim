@@ -2,6 +2,7 @@ import ./ffi
 import ./common
 
 type
+  Rsa* = object
   RsaPrivateKeyDer* = seq[byte]
   RsaPublicKeyDer* = seq[byte]
   RsaSignature* = seq[byte]
@@ -9,6 +10,113 @@ type
 
 proc `$`*(value: RsaPublicKeyDer): string =
   bytesToHexString(value)
+
+proc normalizeDer(
+    rawProc: proc (
+      der: ptr uint8,
+      derLen: csize_t,
+      output: ptr uint8,
+      outputLen: csize_t,
+      writtenLen: ptr csize_t,
+    ): cint {.cdecl.},
+    input: openArray[byte],
+    outputLen: int,
+    operation: string,
+  ): seq[byte]
+proc signWithRaw(
+    rawProc: proc (
+      message: ptr uint8,
+      messageLen: csize_t,
+      privateKeyDer: ptr uint8,
+      privateKeyDerLen: csize_t,
+      output: ptr uint8,
+      outputLen: csize_t,
+      writtenLen: ptr csize_t,
+    ): cint {.cdecl.},
+    message: string,
+    privateKeyDer: openArray[byte],
+    operation: string,
+  ): RsaSignature
+proc verifyWithRaw(
+    rawProc: proc (
+      message: ptr uint8,
+      messageLen: csize_t,
+      publicKeyDer: ptr uint8,
+      publicKeyDerLen: csize_t,
+      signature: ptr uint8,
+      signatureLen: csize_t,
+    ): cint {.cdecl.},
+    message: string,
+    publicKeyDer: openArray[byte],
+    signature: openArray[byte],
+    operation: string,
+  ): bool
+proc encryptWithRaw(
+    rawProc: proc (
+      plaintext: ptr uint8,
+      plaintextLen: csize_t,
+      publicKeyDer: ptr uint8,
+      publicKeyDerLen: csize_t,
+      label: ptr uint8,
+      labelLen: csize_t,
+      output: ptr uint8,
+      outputLen: csize_t,
+      writtenLen: ptr csize_t,
+    ): cint {.cdecl.},
+    plaintext: openArray[byte],
+    publicKeyDer: openArray[byte],
+    label: string,
+    operation: string,
+  ): RsaCiphertext
+proc decryptWithRaw(
+    rawProc: proc (
+      ciphertext: ptr uint8,
+      ciphertextLen: csize_t,
+      privateKeyDer: ptr uint8,
+      privateKeyDerLen: csize_t,
+      label: ptr uint8,
+      labelLen: csize_t,
+      output: ptr uint8,
+      outputLen: csize_t,
+      writtenLen: ptr csize_t,
+    ): cint {.cdecl.},
+    ciphertext: openArray[byte],
+    privateKeyDer: openArray[byte],
+    label: string,
+    operation: string,
+  ): seq[byte]
+
+proc privateKeyToPkcs8Der*(T: type Rsa, privateKeyDer: openArray[byte]): RsaPrivateKeyDer =
+  normalizeDer(
+    rsaPrivateKeyToPkcs8DerRaw,
+    privateKeyDer,
+    RsaPrivateKeyDerMaxLen,
+    "rustcrypto_rsa_private_key_to_pkcs8_der",
+  )
+
+proc privateKeyFromPkcs8Der*(T: type Rsa, privateKeyDer: openArray[byte]): RsaPrivateKeyDer =
+  normalizeDer(
+    rsaPrivateKeyFromPkcs8DerRaw,
+    privateKeyDer,
+    RsaPrivateKeyDerMaxLen,
+    "rustcrypto_rsa_private_key_from_pkcs8_der",
+  )
+
+proc publicKeyToSpkiDer*(T: type Rsa, publicKeyDer: openArray[byte]): RsaPublicKeyDer =
+  normalizeDer(
+    rsaPublicKeyToSpkiDerRaw,
+    publicKeyDer,
+    RsaPublicKeyDerMaxLen,
+    "rustcrypto_rsa_public_key_to_spki_der",
+  )
+
+proc publicKeyFromSpkiDer*(T: type Rsa, publicKeyDer: openArray[byte]): RsaPublicKeyDer =
+  normalizeDer(
+    rsaPublicKeyFromSpkiDerRaw,
+    publicKeyDer,
+    RsaPublicKeyDerMaxLen,
+    "rustcrypto_rsa_public_key_from_spki_der",
+  )
 
 proc raiseIfError(status: cint; operation: string) =
   case status
@@ -76,38 +184,6 @@ proc normalizeDer(
   raiseIfError(status, operation)
   output.setLen(int(writtenLen))
   output
-
-proc rsaPrivateKeyToPkcs8Der*(privateKeyDer: openArray[byte]): RsaPrivateKeyDer =
-  normalizeDer(
-    rsaPrivateKeyToPkcs8DerRaw,
-    privateKeyDer,
-    RsaPrivateKeyDerMaxLen,
-    "rustcrypto_rsa_private_key_to_pkcs8_der",
-  )
-
-proc rsaPrivateKeyFromPkcs8Der*(privateKeyDer: openArray[byte]): RsaPrivateKeyDer =
-  normalizeDer(
-    rsaPrivateKeyFromPkcs8DerRaw,
-    privateKeyDer,
-    RsaPrivateKeyDerMaxLen,
-    "rustcrypto_rsa_private_key_from_pkcs8_der",
-  )
-
-proc rsaPublicKeyToSpkiDer*(publicKeyDer: openArray[byte]): RsaPublicKeyDer =
-  normalizeDer(
-    rsaPublicKeyToSpkiDerRaw,
-    publicKeyDer,
-    RsaPublicKeyDerMaxLen,
-    "rustcrypto_rsa_public_key_to_spki_der",
-  )
-
-proc rsaPublicKeyFromSpkiDer*(publicKeyDer: openArray[byte]): RsaPublicKeyDer =
-  normalizeDer(
-    rsaPublicKeyFromSpkiDerRaw,
-    publicKeyDer,
-    RsaPublicKeyDerMaxLen,
-    "rustcrypto_rsa_public_key_from_spki_der",
-  )
 
 proc signWithRaw(
     rawProc: proc (
@@ -230,28 +306,19 @@ proc decryptWithRaw(
   output.setLen(int(writtenLen))
   output
 
-proc rsaPssSignSha256*(message: string; privateKeyDer: openArray[byte]): RsaSignature =
-  signWithRaw(
-    rsaPssSignSha256Raw,
-    message,
-    privateKeyDer,
-    "rustcrypto_rsa_pss_sign_sha256",
-  )
+proc pssSignSha256*(T: type Rsa, message: string, privateKeyDer: openArray[byte]): RsaSignature =
+  signWithRaw(rsaPssSignSha256Raw, message, privateKeyDer, "rustcrypto_rsa_pss_sign_sha256")
 
-proc rsaPssVerifySha256*(
+proc pssVerifySha256*(
+    T: type Rsa,
     message: string,
     publicKeyDer: openArray[byte],
     signature: openArray[byte],
 ): bool =
-  verifyWithRaw(
-    rsaPssVerifySha256Raw,
-    message,
-    publicKeyDer,
-    signature,
-    "rustcrypto_rsa_pss_verify_sha256",
-  )
+  verifyWithRaw(rsaPssVerifySha256Raw, message, publicKeyDer, signature, "rustcrypto_rsa_pss_verify_sha256")
 
-proc rsaPkcs1v15SignSha256*(
+proc pkcs1v15SignSha256*(
+    T: type Rsa,
     message: string,
     privateKeyDer: openArray[byte],
 ): RsaSignature =
@@ -262,7 +329,8 @@ proc rsaPkcs1v15SignSha256*(
     "rustcrypto_rsa_pkcs1v15_sign_sha256",
   )
 
-proc rsaPkcs1v15VerifySha256*(
+proc pkcs1v15VerifySha256*(
+    T: type Rsa,
     message: string,
     publicKeyDer: openArray[byte],
     signature: openArray[byte],
@@ -275,7 +343,8 @@ proc rsaPkcs1v15VerifySha256*(
     "rustcrypto_rsa_pkcs1v15_verify_sha256",
   )
 
-proc rsaOaepSha256Encrypt*(
+proc oaepSha256Encrypt*(
+    T: type Rsa,
     plaintext: openArray[byte],
     publicKeyDer: openArray[byte],
     label: string = "",
@@ -288,7 +357,8 @@ proc rsaOaepSha256Encrypt*(
     "rustcrypto_rsa_oaep_sha256_encrypt",
   )
 
-proc rsaOaepSha256Decrypt*(
+proc oaepSha256Decrypt*(
+    T: type Rsa,
     ciphertext: openArray[byte],
     privateKeyDer: openArray[byte],
     label: string = "",
@@ -301,7 +371,8 @@ proc rsaOaepSha256Decrypt*(
     "rustcrypto_rsa_oaep_sha256_decrypt",
   )
 
-proc rsaPkcs1v15Encrypt*(
+proc pkcs1v15Encrypt*(
+    T: type Rsa,
     plaintext: openArray[byte],
     publicKeyDer: openArray[byte],
 ): RsaCiphertext =
@@ -320,7 +391,8 @@ proc rsaPkcs1v15Encrypt*(
   output.setLen(int(writtenLen))
   output
 
-proc rsaPkcs1v15Decrypt*(
+proc pkcs1v15Decrypt*(
+    T: type Rsa,
     ciphertext: openArray[byte],
     privateKeyDer: openArray[byte],
 ): seq[byte] =

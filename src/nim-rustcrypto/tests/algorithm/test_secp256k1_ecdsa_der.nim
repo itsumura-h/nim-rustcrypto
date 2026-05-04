@@ -27,19 +27,19 @@ suite "secp256k1 ecdsa der":
   test "high-level sign and verify accept the known vector":
     let messageDigest = sha256("abc")
     let secretKey = basePointSecretKey()
-    let compressedPublicKey = secp256k1PublicKeyCompressed(secretKey)
-    let uncompressedPublicKey = secp256k1PublicKeyUncompressed(secretKey)
-    let signature = secp256k1EcdsaSign(messageDigest, secretKey)
+    let compressedPublicKey = Secp256k1.publicKeyCompressed(secretKey)
+    let uncompressedPublicKey = Secp256k1.publicKeyUncompressed(secretKey)
+    let signature = Secp256k1.sign(messageDigest, secretKey)
 
     check hexOf(signature) == "75601b1385909ea698e3fd6e26e5fa5105127bd2299d3ab0b9d9f93df5b8b99c28ae7cc8f969e6b6fb1feac477818a75a46e8c364e88dfdc9880e1a5175c4bd1"
-    check secp256k1EcdsaVerify(messageDigest, compressedPublicKey, signature)
-    check secp256k1EcdsaVerify(messageDigest, uncompressedPublicKey, signature)
+    check Secp256k1.verify(messageDigest, compressedPublicKey, signature)
+    check Secp256k1.verify(messageDigest, uncompressedPublicKey, signature)
 
   test "raw verify rejects tampered signatures":
     let messageDigest = sha256("abc")
     let secretKey = basePointSecretKey()
-    let publicKey = secp256k1PublicKeyCompressed(secretKey)
-    var signature = secp256k1EcdsaSign(messageDigest, secretKey)
+    let publicKey = Secp256k1.publicKeyCompressed(secretKey)
+    var signature = Secp256k1.sign(messageDigest, secretKey)
 
     signature[0] = signature[0] xor 0x01
 
@@ -58,17 +58,17 @@ suite "secp256k1 ecdsa der":
   test "high-level verify returns false for tampered signatures":
     let messageDigest = sha256("abc")
     let secretKey = basePointSecretKey()
-    let publicKey = secp256k1PublicKeyCompressed(secretKey)
-    var signature = secp256k1EcdsaSign(messageDigest, secretKey)
+    let publicKey = Secp256k1.publicKeyCompressed(secretKey)
+    var signature = Secp256k1.sign(messageDigest, secretKey)
 
     signature[0] = signature[0] xor 0x01
 
-    check not secp256k1EcdsaVerify(messageDigest, publicKey, signature)
+    check not Secp256k1.verify(messageDigest, publicKey, signature)
 
   test "raw signature converts to the known DER vector":
     let messageDigest = sha256("abc")
     let secretKey = basePointSecretKey()
-    let signature = secp256k1EcdsaSign(messageDigest, secretKey)
+    let signature = Secp256k1.sign(messageDigest, secretKey)
     var output = newSeq[byte](Secp256k1SignatureDerMaxLen)
     var writtenLen: csize_t
 
@@ -89,7 +89,7 @@ suite "secp256k1 ecdsa der":
   test "high-level DER conversion round-trips the known vector":
     let messageDigest = sha256("abc")
     let secretKey = basePointSecretKey()
-    let signature = secp256k1EcdsaSign(messageDigest, secretKey)
+    let signature = Secp256k1.sign(messageDigest, secretKey)
 
     let der = secp256k1EcdsaSignatureToDer(signature)
     check hexOf(der) ==
@@ -100,7 +100,7 @@ suite "secp256k1 ecdsa der":
   test "raw DER conversion rejects short output buffers":
     let messageDigest = sha256("abc")
     let secretKey = basePointSecretKey()
-    let signature = secp256k1EcdsaSign(messageDigest, secretKey)
+    let signature = Secp256k1.sign(messageDigest, secretKey)
     var output = newSeq[byte](Secp256k1SignatureDerMaxLen - 3)
     var writtenLen: csize_t
 

@@ -8,56 +8,56 @@ suite "rsa":
     let privateKeyDer = bytesFromString(Rsa2048PrivateKeyDerFixture)
     let publicKeyDer = bytesFromString(Rsa2048PublicKeyDerFixture)
 
-    check rsaPrivateKeyToPkcs8Der(privateKeyDer) == privateKeyDer
-    check rsaPrivateKeyFromPkcs8Der(privateKeyDer) == privateKeyDer
-    check rsaPublicKeyToSpkiDer(publicKeyDer) == publicKeyDer
-    check rsaPublicKeyFromSpkiDer(publicKeyDer) == publicKeyDer
+    check Rsa.privateKeyToPkcs8Der(privateKeyDer) == privateKeyDer
+    check Rsa.privateKeyFromPkcs8Der(privateKeyDer) == privateKeyDer
+    check Rsa.publicKeyToSpkiDer(publicKeyDer) == publicKeyDer
+    check Rsa.publicKeyFromSpkiDer(publicKeyDer) == publicKeyDer
     check $publicKeyDer == hexOf(publicKeyDer)
 
   test "PSS signing and verification round-trip with the fixture key":
     let privateKeyDer = bytesFromString(Rsa2048PrivateKeyDerFixture)
     let publicKeyDer = bytesFromString(Rsa2048PublicKeyDerFixture)
-    let signature = rsaPssSignSha256("test", privateKeyDer)
+    let signature = Rsa.pssSignSha256("test", privateKeyDer)
 
     check signature.len == 256
     check $signature == hexOf(signature)
-    check rsaPssVerifySha256("test", publicKeyDer, signature)
-    check not rsaPssVerifySha256("test!", publicKeyDer, signature)
+    check Rsa.pssVerifySha256("test", publicKeyDer, signature)
+    check not Rsa.pssVerifySha256("test!", publicKeyDer, signature)
 
     var tampered = signature
     tampered[0] = tampered[0] xor 0x01
-    check not rsaPssVerifySha256("test", publicKeyDer, tampered)
+    check not Rsa.pssVerifySha256("test", publicKeyDer, tampered)
 
   test "PKCS#1 v1.5 signing and verification round-trip with the fixture key":
     let privateKeyDer = bytesFromString(Rsa2048PrivateKeyDerFixture)
     let publicKeyDer = bytesFromString(Rsa2048PublicKeyDerFixture)
-    let signature = rsaPkcs1v15SignSha256("test", privateKeyDer)
+    let signature = Rsa.pkcs1v15SignSha256("test", privateKeyDer)
 
     check signature.len == 256
     check $signature == hexOf(signature)
-    check rsaPkcs1v15VerifySha256("test", publicKeyDer, signature)
-    check not rsaPkcs1v15VerifySha256("test!", publicKeyDer, signature)
+    check Rsa.pkcs1v15VerifySha256("test", publicKeyDer, signature)
+    check not Rsa.pkcs1v15VerifySha256("test!", publicKeyDer, signature)
 
   test "OAEP encrypt and decrypt round-trip with and without labels":
     let privateKeyDer = bytesFromString(Rsa2048PrivateKeyDerFixture)
     let publicKeyDer = bytesFromString(Rsa2048PublicKeyDerFixture)
     let plaintext = bytesFromString("hello rsa")
 
-    let ciphertext = rsaOaepSha256Encrypt(plaintext, publicKeyDer, "context")
+    let ciphertext = Rsa.oaepSha256Encrypt(plaintext, publicKeyDer, "context")
     check ciphertext.len == 256
-    check rsaOaepSha256Decrypt(ciphertext, privateKeyDer, "context") == plaintext
+    check Rsa.oaepSha256Decrypt(ciphertext, privateKeyDer, "context") == plaintext
 
     expect ValueError:
-      discard rsaOaepSha256Decrypt(ciphertext, privateKeyDer, "wrong")
+      discard Rsa.oaepSha256Decrypt(ciphertext, privateKeyDer, "wrong")
 
   test "PKCS#1 v1.5 encrypt and decrypt round-trip":
     let privateKeyDer = bytesFromString(Rsa2048PrivateKeyDerFixture)
     let publicKeyDer = bytesFromString(Rsa2048PublicKeyDerFixture)
     let plaintext = bytesFromString("legacy compat")
 
-    let ciphertext = rsaPkcs1v15Encrypt(plaintext, publicKeyDer)
+    let ciphertext = Rsa.pkcs1v15Encrypt(plaintext, publicKeyDer)
     check ciphertext.len == 256
-    check rsaPkcs1v15Decrypt(ciphertext, privateKeyDer) == plaintext
+    check Rsa.pkcs1v15Decrypt(ciphertext, privateKeyDer) == plaintext
 
   test "raw signing rejects short output buffers":
     let privateKeyDer = bytesFromString(Rsa2048PrivateKeyDerFixture)
@@ -79,7 +79,7 @@ suite "rsa":
   test "raw verification rejects tampered signatures":
     let privateKeyDer = bytesFromString(Rsa2048PrivateKeyDerFixture)
     let publicKeyDer = bytesFromString(Rsa2048PublicKeyDerFixture)
-    var signature = rsaPssSignSha256("test", privateKeyDer)
+    var signature = Rsa.pssSignSha256("test", privateKeyDer)
     signature[0] = signature[0] xor 0x01
 
     let status = rsaPssVerifySha256Raw(
@@ -96,7 +96,7 @@ suite "rsa":
   test "raw decrypt rejects short output buffers":
     let privateKeyDer = bytesFromString(Rsa2048PrivateKeyDerFixture)
     let publicKeyDer = bytesFromString(Rsa2048PublicKeyDerFixture)
-    let ciphertext = rsaOaepSha256Encrypt(bytesFromString("hello rsa"), publicKeyDer, "context")
+    let ciphertext = Rsa.oaepSha256Encrypt(bytesFromString("hello rsa"), publicKeyDer, "context")
     var output = newSeq[byte](1)
     var writtenLen: csize_t
 
@@ -113,3 +113,20 @@ suite "rsa":
     )
 
     check status == RustCryptoErrOutputTooShort
+
+  test "marker type API round-trips":
+    let privateKeyDer = bytesFromString(Rsa2048PrivateKeyDerFixture)
+    let publicKeyDer = bytesFromString(Rsa2048PublicKeyDerFixture)
+    let pssSignature = Rsa.pssSignSha256("test", privateKeyDer)
+    let pkcs1Signature = Rsa.pkcs1v15SignSha256("test", privateKeyDer)
+    let ciphertext = Rsa.oaepSha256Encrypt(bytesFromString("hello rsa"), publicKeyDer, "context")
+
+    check Rsa.privateKeyToPkcs8Der(privateKeyDer) == privateKeyDer
+    check Rsa.privateKeyFromPkcs8Der(privateKeyDer) == privateKeyDer
+    check Rsa.publicKeyToSpkiDer(publicKeyDer) == publicKeyDer
+    check Rsa.publicKeyFromSpkiDer(publicKeyDer) == publicKeyDer
+    check Rsa.pssVerifySha256("test", publicKeyDer, pssSignature)
+    check Rsa.pkcs1v15VerifySha256("test", publicKeyDer, pkcs1Signature)
+    check Rsa.oaepSha256Decrypt(ciphertext, privateKeyDer, "context") == bytesFromString("hello rsa")
+    check Rsa.pkcs1v15Decrypt(Rsa.pkcs1v15Encrypt(bytesFromString("legacy compat"), publicKeyDer), privateKeyDer) ==
+      bytesFromString("legacy compat")

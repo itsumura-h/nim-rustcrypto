@@ -17,8 +17,8 @@ suite "x509":
 
     check hexOf(x509CertSignatureAlgorithmOid(certDer)) == "06092a864886f70d01010b"
     check x509CertSubjectDer(certDer) == x509CertIssuerDer(certDer)
-    check rsaPublicKeyFromSpkiDer(spki) == spki
-    check rsaPublicKeyToSpkiDer(spki) == spki
+    check Rsa.publicKeyFromSpkiDer(spki) == spki
+    check Rsa.publicKeyToSpkiDer(spki) == spki
 
   test "validate rejects malformed DER":
     check not x509CertValidateDer(bytesFromHex("3000"))

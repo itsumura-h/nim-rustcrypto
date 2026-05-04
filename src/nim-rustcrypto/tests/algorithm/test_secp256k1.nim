@@ -105,27 +105,27 @@ suite "secp256k1":
 
   test "high-level compressed public key derivation matches the known vector":
     let secretKey = basePointSecretKey()
-    let publicKey = secp256k1PublicKeyCompressed(secretKey)
+    let publicKey = Secp256k1.publicKeyCompressed(secretKey)
 
     check hexOf(publicKey) == "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
 
   test "high-level uncompressed public key derivation matches the known vector":
     let secretKey = basePointSecretKey()
-    let publicKey = secp256k1PublicKeyUncompressed(secretKey)
+    let publicKey = Secp256k1.publicKeyUncompressed(secretKey)
 
     check hexOf(publicKey) == "0479be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8"
     check $publicKey == hexOf(publicKey)
 
   test "random secret key can derive a public key and sign":
     let secretKey = randomSecretKey()
-    let publicKey = secp256k1PublicKeyCompressed(secretKey)
-    let signature = secp256k1EcdsaSignSha256("abc", secretKey)
+    let publicKey = Secp256k1.publicKeyCompressed(secretKey)
+    let signature = Secp256k1.sign("abc", secretKey)
 
     check secretKey.len == Secp256k1SecretKeyLen
     check publicKey.len == Secp256k1PublicKeyCompressedLen
     check $publicKey == hexOf(publicKey)
     check $signature == hexOf(signature)
-    check secp256k1EcdsaVerifySha256("abc", publicKey, signature)
+    check Secp256k1.verify("abc", publicKey, signature)
 
   test "raw ECDSA sign produces the known deterministic signature":
     let messageDigest = sha256("abc")
@@ -147,27 +147,27 @@ suite "secp256k1":
   test "high-level ECDSA sign and verify accept the known vector":
     let messageDigest = sha256("abc")
     let secretKey = basePointSecretKey()
-    let compressedPublicKey = secp256k1PublicKeyCompressed(secretKey)
-    let uncompressedPublicKey = secp256k1PublicKeyUncompressed(secretKey)
-    let signature = secp256k1EcdsaSign(messageDigest, secretKey)
+    let compressedPublicKey = Secp256k1.publicKeyCompressed(secretKey)
+    let uncompressedPublicKey = Secp256k1.publicKeyUncompressed(secretKey)
+    let signature = Secp256k1.sign(messageDigest, secretKey)
 
     check hexOf(signature) == "75601b1385909ea698e3fd6e26e5fa5105127bd2299d3ab0b9d9f93df5b8b99c28ae7cc8f969e6b6fb1feac477818a75a46e8c364e88dfdc9880e1a5175c4bd1"
     check $signature == hexOf(signature)
-    check secp256k1EcdsaVerify(messageDigest, compressedPublicKey, signature)
-    check secp256k1EcdsaVerify(messageDigest, uncompressedPublicKey, signature)
+    check Secp256k1.verify(messageDigest, compressedPublicKey, signature)
+    check Secp256k1.verify(messageDigest, uncompressedPublicKey, signature)
 
   test "recoverable signature stringifies as hex":
     let messageDigest = sha256("abc")
     let secretKey = basePointSecretKey()
-    let signature = secp256k1EcdsaSignRecoverable(messageDigest, secretKey)
+    let signature = Secp256k1.signRecoverable(messageDigest, secretKey)
 
     check $signature == hexOf(signature)
 
   test "raw ECDSA verify rejects tampered signatures":
     let messageDigest = sha256("abc")
     let secretKey = basePointSecretKey()
-    let publicKey = secp256k1PublicKeyCompressed(secretKey)
-    var signature = secp256k1EcdsaSign(messageDigest, secretKey)
+    let publicKey = Secp256k1.publicKeyCompressed(secretKey)
+    var signature = Secp256k1.sign(messageDigest, secretKey)
 
     signature[0] = signature[0] xor 0x01
 
@@ -186,15 +186,28 @@ suite "secp256k1":
   test "high-level ECDSA verify returns false for tampered signatures":
     let messageDigest = sha256("abc")
     let secretKey = basePointSecretKey()
-    let publicKey = secp256k1PublicKeyCompressed(secretKey)
-    var signature = secp256k1EcdsaSign(messageDigest, secretKey)
+    let publicKey = Secp256k1.publicKeyCompressed(secretKey)
+    var signature = Secp256k1.sign(messageDigest, secretKey)
 
     signature[0] = signature[0] xor 0x01
 
-    check not secp256k1EcdsaVerify(messageDigest, publicKey, signature)
+    check not Secp256k1.verify(messageDigest, publicKey, signature)
 
   test "high-level rejects invalid secret key":
     let secretKey = default(Secp256k1SecretKey)
 
     expect ValueError:
-      discard secp256k1PublicKeyCompressed(secretKey)
+      discard Secp256k1.publicKeyCompressed(secretKey)
+
+  test "marker type API accepts message and digest inputs":
+    let secretKey = Secp256k1.generateSecretKey()
+    let compressedPublicKey = Secp256k1.publicKeyCompressed(secretKey)
+    let uncompressedPublicKey = Secp256k1.publicKeyUncompressed(secretKey)
+    let messageSignature = Secp256k1.sign("abc", secretKey)
+    let digest = sha256("abc")
+    let digestSignature = Secp256k1.sign(digest, secretKey)
+
+    check Secp256k1.verify("abc", compressedPublicKey, messageSignature)
+    check Secp256k1.verify("abc", uncompressedPublicKey, messageSignature)
+    check Secp256k1.verify(digest, compressedPublicKey, digestSignature)
+    check Secp256k1.verify(digest, uncompressedPublicKey, digestSignature)

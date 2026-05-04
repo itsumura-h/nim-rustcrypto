@@ -74,7 +74,7 @@ suite "sha256":
     let message = "abc"
     let secretKey = basePointSecretKey()
     let messageDigest = sha256(message)
-    let prehashSignature = secp256k1EcdsaSign(messageDigest, secretKey)
+    let prehashSignature = Secp256k1.sign(messageDigest, secretKey)
     var signature: Secp256k1Signature
 
     let status = secp256k1EcdsaSignSha256Raw(
@@ -92,22 +92,22 @@ suite "sha256":
   test "high-level SHA-256 sign and verify accept the message text":
     let message = "abc"
     let secretKey = basePointSecretKey()
-    let compressedPublicKey = secp256k1PublicKeyCompressed(secretKey)
-    let uncompressedPublicKey = secp256k1PublicKeyUncompressed(secretKey)
+    let compressedPublicKey = Secp256k1.publicKeyCompressed(secretKey)
+    let uncompressedPublicKey = Secp256k1.publicKeyUncompressed(secretKey)
     let messageDigest = sha256(message)
-    let prehashSignature = secp256k1EcdsaSign(messageDigest, secretKey)
-    let signature = secp256k1EcdsaSignSha256(message, secretKey)
+    let prehashSignature = Secp256k1.sign(messageDigest, secretKey)
+    let signature = Secp256k1.sign(message, secretKey)
 
     check signature == prehashSignature
-    check secp256k1EcdsaVerifySha256(message, compressedPublicKey, signature)
-    check secp256k1EcdsaVerifySha256(message, uncompressedPublicKey, signature)
-    check not secp256k1EcdsaVerifySha256("abd", compressedPublicKey, signature)
+    check Secp256k1.verify(message, compressedPublicKey, signature)
+    check Secp256k1.verify(message, uncompressedPublicKey, signature)
+    check not Secp256k1.verify("abd", compressedPublicKey, signature)
 
   test "raw SHA-256 verify rejects tampering":
     let message = "abc"
     let secretKey = basePointSecretKey()
-    let publicKey = secp256k1PublicKeyCompressed(secretKey)
-    let signature = secp256k1EcdsaSignSha256(message, secretKey)
+    let publicKey = Secp256k1.publicKeyCompressed(secretKey)
+    let signature = Secp256k1.sign(message, secretKey)
     var tamperedSignature = signature
     tamperedSignature[0] = tamperedSignature[0] xor 0x01
 

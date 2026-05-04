@@ -11,20 +11,20 @@ import rustcrypto/algorithm/ed25519
 import rustcrypto/algorithm/pkcs8
 import rustcrypto/algorithm/pem
 
-let sk = randomSecretKey()
-let pk = ed25519PublicKeyFromSecretKey(sk)
+let sk = Ed25519.generateSecretKey()
+let pk = Ed25519.publicKey(sk)
 
-let skDer = ed25519PrivateKeyToPkcs8Der(sk)
-let sk2 = ed25519PrivateKeyFromPkcs8Der(skDer)
+let skDer = Ed25519.privateKeyToPkcs8Der(sk)
+let sk2 = Ed25519.privateKeyFromPkcs8Der(skDer)
 
-let pkDer = ed25519PublicKeyToSpkiDer(pk)
-let pk2 = ed25519PublicKeyFromSpkiDer(pkDer)
+let pkDer = Ed25519.publicKeyToSpkiDer(pk)
+let pk2 = Ed25519.publicKeyFromSpkiDer(pkDer)
 
-let skPem = ed25519PrivateKeyToPkcs8Pem(sk)
-let skFromPem = ed25519PrivateKeyFromPkcs8Pem(skPem)
+let skPem = Ed25519.privateKeyToPkcs8Pem(sk)
+let skFromPem = Ed25519.privateKeyFromPkcs8Pem(skPem)
 
-let pkPem = ed25519PublicKeyToSpkiPem(pk)
-let pkFromPem = ed25519PublicKeyFromSpkiPem(pkPem)
+let pkPem = Ed25519.publicKeyToSpkiPem(pk)
+let pkFromPem = Ed25519.publicKeyFromSpkiPem(pkPem)
 ```
 
 ## P-256 and P-384
@@ -35,13 +35,13 @@ Module: `rustcrypto/algorithm/p256` (and `p384` with `Sha384` names)
 import rustcrypto/algorithm/p256
 import rustcrypto/algorithm/ffi
 
-let sk = randomSecretKey()
-let skDer = p256PrivateKeyToPkcs8Der(sk)
-let sk2 = p256PrivateKeyFromPkcs8Der(skDer)
+let sk = P256.generateSecretKey()
+let skDer = P256.privateKeyToPkcs8Der(sk)
+let sk2 = P256.privateKeyFromPkcs8Der(skDer)
 
-let pk = p256PublicKeyCompressed(sk)
-let pkDer = p256PublicKeyToSpkiDer(pk, P256PublicKeyFormatCompressed)
-let pkBytes = p256PublicKeyFromSpkiDer(pkDer, P256PublicKeyFormatCompressed)
+let pk = P256.publicKeyCompressed(sk)
+let pkDer = P256.publicKeyToSpkiDer(pk)
+let pkBytes = P256.publicKeyFromSpkiDer(pkDer, P256CompressedPublicKey)
 ```
 
 Use the matching `P384*` symbols from `rustcrypto/algorithm/p384` for P-384.

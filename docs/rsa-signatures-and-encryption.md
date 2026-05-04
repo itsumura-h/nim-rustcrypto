@@ -11,25 +11,25 @@ These routines parse and re-encode RSA keys into a canonical PKCS#8 / SPKI DER f
 ```nim
 import rustcrypto/algorithm/rsa
 
-let privNorm = rsaPrivateKeyToPkcs8Der(privateKeyDerFromFile)
-let privRoundTrip = rsaPrivateKeyFromPkcs8Der(privNorm)
+let privNorm = Rsa.privateKeyToPkcs8Der(privateKeyDerFromFile)
+let privRoundTrip = Rsa.privateKeyFromPkcs8Der(privNorm)
 
-let pubNorm = rsaPublicKeyToSpkiDer(publicKeyDerFromFile)
-let pubRoundTrip = rsaPublicKeyFromSpkiDer(pubNorm)
+let pubNorm = Rsa.publicKeyToSpkiDer(publicKeyDerFromFile)
+let pubRoundTrip = Rsa.publicKeyFromSpkiDer(pubNorm)
 ```
 
 ## RSASSA-PSS with SHA-256
 
 ```nim
-let sig = rsaPssSignSha256("message", privateKeyDer)
-discard rsaPssVerifySha256("message", publicKeyDer, sig)
+let sig = Rsa.pssSignSha256("message", privateKeyDer)
+discard Rsa.pssVerifySha256("message", publicKeyDer, sig)
 ```
 
 ## RSASSA-PKCS1-v1_5 with SHA-256
 
 ```nim
-let sig = rsaPkcs1v15SignSha256("message", privateKeyDer)
-discard rsaPkcs1v15VerifySha256("message", publicKeyDer, sig)
+let sig = Rsa.pkcs1v15SignSha256("message", privateKeyDer)
+discard Rsa.pkcs1v15VerifySha256("message", publicKeyDer, sig)
 ```
 
 ## RSA-OAEP (SHA-256)
@@ -37,15 +37,15 @@ discard rsaPkcs1v15VerifySha256("message", publicKeyDer, sig)
 Optional OAEP `label` string (often empty):
 
 ```nim
-let ct = rsaOaepSha256Encrypt(plaintextBytes, publicKeyDer, label = "")
-let pt = rsaOaepSha256Decrypt(ct, privateKeyDer, label = "")
+let ct = Rsa.oaepSha256Encrypt(plaintextBytes, publicKeyDer, label = "")
+let pt = Rsa.oaepSha256Decrypt(ct, privateKeyDer, label = "")
 ```
 
 ## RSA PKCS#1 v1.5 encryption
 
 ```nim
-let ct = rsaPkcs1v15Encrypt(plaintextBytes, publicKeyDer)
-let pt = rsaPkcs1v15Decrypt(ct, privateKeyDer)
+let ct = Rsa.pkcs1v15Encrypt(plaintextBytes, publicKeyDer)
+let pt = Rsa.pkcs1v15Decrypt(ct, privateKeyDer)
 ```
 
 Decryption failures raise `ValueError`.

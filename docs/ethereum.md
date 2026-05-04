@@ -2,7 +2,7 @@
 
 Module: `rustcrypto/ethereum`
 
-Keccak-256, address derivation from an uncompressed secp256k1 key, EIP-191 personal message hashing, EIP-712 digest hashing, and **recoverable ECDSA** signatures with Ethereum `v` encoding.
+Keccak-256, address derivation from an uncompressed secp256k1 key, EIP-191 personal message hashing, EIP-712 digest hashing, and **recoverable ECDSA** signatures with Ethereum `v` encoding. Verification uses the wallet address, not the raw public key.
 
 ## Types
 
@@ -15,14 +15,15 @@ Keccak-256, address derivation from an uncompressed secp256k1 key, EIP-191 perso
 
 ```nim
 import rustcrypto/ethereum
+import rustcrypto/algorithm/secp256k1
 
-let h = ethereumKeccak256(messageBytes)
+let h = Ethereum.keccak256(messageBytes)
 ```
 
 ## Address from uncompressed public key
 
 ```nim
-let addr = ethereumAddress(uncompressedSecp256k1PubKey)
+let addr = Ethereum.address(uncompressedSecp256k1PubKey)
 ```
 
 The public key must be a 65-byte SEC1 uncompressed point (`0x04 || X || Y`).
@@ -30,20 +31,25 @@ The public key must be a 65-byte SEC1 uncompressed point (`0x04 || X || Y`).
 ## EIP-191 personal message
 
 ```nim
-let digest = ethereumPersonalMessageHash("Hello")
-let sig = ethereumSignPersonalMessage("Hello", secretKey, chainId = 1)
-discard ethereumVerifyPersonalMessage("Hello", uncompressedPubKey, sig)
+let secretKey = Secp256k1.generateSecretKey()
+let uncompressedPubKey = Secp256k1.publicKeyUncompressed(secretKey)
+let walletAddress = Ethereum.address(uncompressedPubKey)
+let sig = Ethereum.signPersonalMessage("Hello", secretKey, chainId = 1)
+discard Ethereum.verifyPersonalMessage("Hello", walletAddress, sig)
 ```
 
-`ethereumVerifyPersonalMessage` tries recovery ids internally; unsupported `v` raises `ValueError`.
+`Ethereum.verifyPersonalMessage` tries recovery ids internally and compares the recovered wallet address; unsupported `v` raises `ValueError`.
 
 ## EIP-712 (precomputed hashes)
 
 When you already have `domainSeparator` and `structHash` as `EthereumHash`:
 
 ```nim
-let sig = ethereumSignTypedDataHash(domainSeparator, structHash, secretKey, chainId = 1)
-discard ethereumVerifyTypedDataHash(domainSeparator, structHash, uncompressedPubKey, sig)
+let secretKey = Secp256k1.generateSecretKey()
+let uncompressedPubKey = Secp256k1.publicKeyUncompressed(secretKey)
+let walletAddress = Ethereum.address(uncompressedPubKey)
+let sig = Ethereum.signTypedDataHash(domainSeparator, structHash, secretKey, chainId = 1)
+discard Ethereum.verifyTypedDataHash(domainSeparator, structHash, walletAddress, sig)
 ```
 
 This module does **not** build EIP-712 structs from JSON or perform JSON canonicalization.

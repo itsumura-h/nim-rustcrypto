@@ -3,6 +3,7 @@ import ./algorithm/secp256k1
 import ./algorithm/schnorr
 
 type
+  Bitcoin* = object
   BitcoinMessageSignature* = array[65, byte]
   BitcoinEcdsaSignature* = Secp256k1Signature
   BitcoinSchnorrSignature* = SchnorrSignature
@@ -46,16 +47,16 @@ proc compactSize(value: int): string =
     for i in 0 ..< 8:
       result[1 + i] = char((n shr (8 * i)) and 0xff)
 
-proc bitcoinHash256*(data: openArray[byte]): BitcoinMessageHash =
+proc hash256*(T: type Bitcoin, data: openArray[byte]): BitcoinMessageHash =
   let first = sha256(bytesToString(data))
   sha256(bytesToString(first))
 
-proc bitcoinTaggedHash*(tag: string; message: openArray[byte]): BitcoinMessageHash =
+proc taggedHash*(T: type Bitcoin, tag: string, message: openArray[byte]): BitcoinMessageHash =
   let tagHash = sha256(tag)
   let tagHashBytes = bytesToString(tagHash)
   sha256(tagHashBytes & tagHashBytes & bytesToString(message))
 
-proc bitcoinMessageHash*(message: string): BitcoinMessageHash =
+proc messageHash*(T: type Bitcoin, message: string): BitcoinMessageHash =
   let payload = char(BitcoinSignedMessagePrefix.len) &
     BitcoinSignedMessagePrefix &
     compactSize(message.len) &
@@ -81,37 +82,45 @@ proc bitcoinCompactToRecoverable(signature: BitcoinMessageSignature): Secp256k1R
   for i in 0 ..< BitcoinRawSignatureLen:
     result[i] = signature[1 + i]
 
-proc bitcoinSignMessage*(message: string; secretKey: Secp256k1SecretKey): BitcoinMessageSignature =
-  let digest = bitcoinMessageHash(message)
-  bitcoinRecoverableToCompact(secp256k1EcdsaSignRecoverable(digest, secretKey))
+proc signMessage*(T: type Bitcoin, message: string, secretKey: Secp256k1SecretKey): BitcoinMessageSignature =
+  let digest = messageHash(T, message)
+  bitcoinRecoverableToCompact(Secp256k1.signRecoverable(digest, secretKey))
 
-proc bitcoinVerifyMessage*(
+proc verifyMessage*(
+    T: type Bitcoin,
     message: string,
     publicKey: Secp256k1CompressedPublicKey,
     signature: BitcoinMessageSignature,
   ): bool =
-  let digest = bitcoinMessageHash(message)
-  secp256k1EcdsaRecoverableVerify(digest, publicKey, bitcoinCompactToRecoverable(signature))
+  let digest = messageHash(T, message)
+  Secp256k1.verifyRecoverable(digest, publicKey, bitcoinCompactToRecoverable(signature))
 
-proc bitcoinSignDigestEcdsa*(digest: BitcoinMessageHash; secretKey: Secp256k1SecretKey): BitcoinEcdsaSignature =
-  secp256k1EcdsaSign(digest, secretKey)
+proc signDigestEcdsa*(
+    T: type Bitcoin,
+    digest: BitcoinMessageHash,
+    secretKey: Secp256k1SecretKey,
+  ): BitcoinEcdsaSignature =
+  Secp256k1.sign(digest, secretKey)
 
-proc bitcoinVerifyDigestEcdsa*(
+proc verifyDigestEcdsa*(
+    T: type Bitcoin,
     digest: BitcoinMessageHash,
     publicKey: Secp256k1CompressedPublicKey,
     signature: BitcoinEcdsaSignature,
   ): bool =
-  secp256k1EcdsaVerify(digest, publicKey, signature)
+  Secp256k1.verify(digest, publicKey, signature)
 
-proc bitcoinSignTaprootDigest*(
+proc signTaprootDigest*(
+    T: type Bitcoin,
     digest: BitcoinMessageHash,
     secretKey: SchnorrSecretKey,
   ): BitcoinSchnorrSignature =
-  schnorrSign(digest, secretKey)
+  Schnorr.sign(digest, secretKey)
 
-proc bitcoinVerifyTaprootDigest*(
+proc verifyTaprootDigest*(
+    T: type Bitcoin,
     digest: BitcoinMessageHash,
     publicKey: BitcoinXOnlyPublicKey,
     signature: BitcoinSchnorrSignature,
   ): bool =
-  schnorrVerify(digest, publicKey, signature)
+  Schnorr.verify(digest, publicKey, signature)

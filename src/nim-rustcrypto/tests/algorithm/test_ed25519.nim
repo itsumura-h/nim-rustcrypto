@@ -8,27 +8,27 @@ suite "ed25519":
     let secretKey = fromHexSecretKey(
       "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
     )
-    let publicKey = ed25519PublicKeyFromSecretKey(secretKey)
+    let publicKey = Ed25519.publicKey(secretKey)
     check hexOf(publicKey) ==
       "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
     check $publicKey == hexOf(publicKey)
 
   test "random secret key can derive public key and sign":
     let secretKey = randomSecretKey()
-    let publicKey = ed25519PublicKeyFromSecretKey(secretKey)
-    let signature = ed25519Sign("abc", secretKey)
+    let publicKey = Ed25519.publicKey(secretKey)
+    let signature = Ed25519.sign("abc", secretKey)
 
     check secretKey.len == Ed25519PrivateKeyLen
     check publicKey.len == Ed25519PublicKeyLen
     check $publicKey == hexOf(publicKey)
     check $signature == hexOf(signature)
-    check ed25519Verify("abc", publicKey, signature)
+    check Ed25519.verify("abc", publicKey, signature)
 
   test "signing matches the RFC 8032 vector":
     let secretKey = fromHexSecretKey(
       "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
     )
-    let signature = ed25519Sign("", secretKey)
+    let signature = Ed25519.sign("", secretKey)
     check hexOf(signature) ==
       "e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e06522490155" &
       "5fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b"
@@ -37,41 +37,41 @@ suite "ed25519":
     let secretKey = fromHexSecretKey(
       "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
     )
-    let publicKey = ed25519PublicKeyFromSecretKey(secretKey)
+    let publicKey = Ed25519.publicKey(secretKey)
     let signature = fromHexSignature(
       "e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e06522490155" &
       "5fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b"
     )
-    check ed25519Verify("", publicKey, signature)
+    check Ed25519.verify("", publicKey, signature)
 
   test "high-level string scenario creates keys, signs, and verifies":
     let secretKey = fromHexSecretKey(
       "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
     )
-    let publicKey = ed25519PublicKeyFromSecretKey(secretKey)
+    let publicKey = Ed25519.publicKey(secretKey)
     let message = "abc"
-    let signature = ed25519Sign(message, secretKey)
+    let signature = Ed25519.sign(message, secretKey)
 
     check hexOf(publicKey) ==
       "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
-    check ed25519Verify(message, publicKey, signature)
-    check not ed25519Verify("abd", publicKey, signature)
+    check Ed25519.verify(message, publicKey, signature)
+    check not Ed25519.verify("abd", publicKey, signature)
 
     var tamperedSignature = signature
     tamperedSignature[0] = tamperedSignature[0] xor 0x01
-    check not ed25519Verify(message, publicKey, tamperedSignature)
+    check not Ed25519.verify(message, publicKey, tamperedSignature)
 
   test "verify rejects a tampered signature":
     let secretKey = fromHexSecretKey(
       "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
     )
-    let publicKey = ed25519PublicKeyFromSecretKey(secretKey)
+    let publicKey = Ed25519.publicKey(secretKey)
     var signature = fromHexSignature(
       "e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e06522490155" &
       "5fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b"
     )
     signature[0] = signature[0] xor 0x01
-    check not ed25519Verify("", publicKey, signature)
+    check not Ed25519.verify("", publicKey, signature)
 
   test "raw public key derivation rejects short output buffers":
     let secretKey = fromHexSecretKey(
@@ -122,3 +122,11 @@ suite "ed25519":
     )
 
     check status == RustCryptoErrInvalidPublicKeyFormat
+
+  test "marker type API round-trips":
+    let secretKey = Ed25519.generateSecretKey()
+    let publicKey = Ed25519.publicKey(secretKey)
+    let signature = Ed25519.sign("abc", secretKey)
+
+    check Ed25519.verify("abc", publicKey, signature)
+    check not Ed25519.verify("abd", publicKey, signature)

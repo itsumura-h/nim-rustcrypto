@@ -32,23 +32,29 @@ let h = bitcoinTaggedHash("TagName", messageBytes)
 import rustcrypto/bitcoin
 import rustcrypto/algorithm/secp256k1
 
-let sig = bitcoinSignMessage("Hello", secretKey)
-discard bitcoinVerifyMessage("Hello", compressedPubKey, sig)
+let secretKey = Secp256k1.generateSecretKey()
+let compressedPubKey = Secp256k1.publicKeyCompressed(secretKey)
+let sig = Bitcoin.signMessage("Hello", secretKey)
+discard Bitcoin.verifyMessage("Hello", compressedPubKey, sig)
 ```
 
 ## ECDSA on an arbitrary 32-byte digest
 
 ```nim
-let digest: BitcoinMessageHash = bitcoinMessageHash("Hello")
-let sig = bitcoinSignDigestEcdsa(digest, secretKey)
-discard bitcoinVerifyDigestEcdsa(digest, compressedPubKey, sig)
+let digest: BitcoinMessageHash = Bitcoin.messageHash("Hello")
+let sig = Bitcoin.signDigestEcdsa(digest, secretKey)
+discard Bitcoin.verifyDigestEcdsa(digest, compressedPubKey, sig)
 ```
 
 ## Schnorr on a 32-byte digest (Taproot signing workflows)
 
 ```nim
-let sig = bitcoinSignTaprootDigest(digest, schnorrSecretKey)
-discard bitcoinVerifyTaprootDigest(digest, xOnlyPubKey, sig)
+import rustcrypto/algorithm/schnorr
+
+let schnorrSecretKey = Schnorr.generateSecretKey()
+let xOnlyPubKey = Schnorr.publicKey(schnorrSecretKey)
+let sig = Bitcoin.signTaprootDigest(digest, schnorrSecretKey)
+discard Bitcoin.verifyTaprootDigest(digest, xOnlyPubKey, sig)
 ```
 
 This crate does **not** implement full wallets, transaction parsing, or script execution.
