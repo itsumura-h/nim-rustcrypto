@@ -1,8 +1,8 @@
 import unittest
 
 import ./utils
-import nim_rustcrypto/algorithm/sha256
-import nim_rustcrypto/algorithm/secp256k1
+import ../../src/rustcrypto/algorithm/sha256
+import ../../src/rustcrypto/algorithm/secp256k1
 
 
 suite "sha256":

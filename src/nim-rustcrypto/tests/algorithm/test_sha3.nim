@@ -1,8 +1,8 @@
 import unittest
 
 import ./utils
-import nim_rustcrypto/algorithm/sha3
-import nim_rustcrypto/algorithm/secp256k1
+import ../../src/rustcrypto/algorithm/sha3
+import ../../src/rustcrypto/algorithm/secp256k1
 
 suite "sha3 and keccak":
   test "sha3-256 high-level abc matches the known vector":

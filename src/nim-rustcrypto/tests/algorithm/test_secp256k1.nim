@@ -1,8 +1,8 @@
 import unittest
 
 import ./utils
-import rustcrypto/algorithm/sha256
-import rustcrypto/algorithm/secp256k1
+import ../../src/rustcrypto/algorithm/sha256
+import ../../src/rustcrypto/algorithm/secp256k1
 
 suite "secp256k1":
   test "raw compressed public key derivation matches the known vector":

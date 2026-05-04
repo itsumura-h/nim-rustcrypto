@@ -1,10 +1,10 @@
 import unittest
 
 import ./utils
-import nim_rustcrypto/algorithm/sha256
-import nim_rustcrypto/algorithm/secp256k1
-import nim_rustcrypto/algorithm/schnorr
-import nim_rustcrypto/bitcoin
+import rustcrypto/algorithm/sha256
+import rustcrypto/algorithm/secp256k1
+import rustcrypto/algorithm/schnorr
+import rustcrypto/bitcoin
 
 proc basePointSchnorrSecretKey(): SchnorrSecretKey =
   result = default(SchnorrSecretKey)

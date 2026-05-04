@@ -1,7 +1,7 @@
 import unittest
 
 import ./utils
-import nim_rustcrypto/algorithm/hkdf
+import ../../src/rustcrypto/algorithm/hkdf
 
 proc bytesString(bytes: openArray[byte]): string =
   result = newString(bytes.len)

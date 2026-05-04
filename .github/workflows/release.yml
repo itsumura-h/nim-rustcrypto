@@ -1,0 +1,79 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version without leading v"
+        required: true
+        default: "0.1.0"
+
+permissions:
+  contents: write
+
+jobs:
+  build-release-asset:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ] && [ -n "${INPUT_VERSION:-}" ]; then
+            VERSION="$INPUT_VERSION"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Run Rust tests
+        run: |
+          cd src/rustcrypto-ffi
+          cargo test
+
+      - name: Build Rust static library
+        run: |
+          cd src/rustcrypto-ffi
+          cargo build --release --lib
+
+      - name: Print native static libs
+        run: |
+          cd src/rustcrypto-ffi
+          cargo rustc --release --lib -- --print native-static-libs | tee native-static-libs.txt
+
+      - name: Stage release archive
+        shell: bash
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          stage_dir="src/rustcrypto-ffi/dist/rustcrypto-ffi/linux-x86_64"
+          archive_dir="src/rustcrypto-ffi/dist"
+          archive_name="rustcrypto-ffi-v${version}-linux-x86_64.tar.gz"
+          mkdir -p "$stage_dir"
+          cp src/rustcrypto-ffi/target/release/librust_crypto_ffi.a "$stage_dir/librust_crypto_ffi.a"
+          tar -C "src/rustcrypto-ffi/dist" -czf "$archive_dir/$archive_name" rustcrypto-ffi
+          (cd "$archive_dir" && sha256sum "$archive_name" > "$archive_name.sha256")
+
+      - name: Upload GitHub Release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: v${{ steps.version.outputs.version }}
+          files: |
+            src/rustcrypto-ffi/dist/rustcrypto-ffi-v${{ steps.version.outputs.version }}-linux-x86_64.tar.gz
+            src/rustcrypto-ffi/dist/rustcrypto-ffi-v${{ steps.version.outputs.version }}-linux-x86_64.tar.gz.sha256
+          generate_release_notes: true

@@ -1,7 +1,7 @@
 import unittest
 
 import ./utils
-import rustcrypto/algorithm/p384
+import ../../src/rustcrypto/algorithm/p384
 
 suite "p384":
   const

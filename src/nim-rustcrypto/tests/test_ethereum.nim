@@ -1,8 +1,8 @@
 import unittest
 
 import ./utils
-import nim_rustcrypto/algorithm/secp256k1
-import nim_rustcrypto/ethereum
+import rustcrypto/algorithm/secp256k1
+import rustcrypto/ethereum
 
 proc bytesToString(data: openArray[byte]): string =
   result = newString(data.len)

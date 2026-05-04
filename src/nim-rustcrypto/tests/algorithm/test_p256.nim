@@ -1,8 +1,8 @@
 import unittest
 
 import ./utils
-import rustcrypto/algorithm/p256
-import rustcrypto/algorithm/sha256
+import ../../src/rustcrypto/algorithm/p256
+import ../../src/rustcrypto/algorithm/sha256
 
 suite "p256":
   const

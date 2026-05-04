@@ -1,6 +1,17 @@
-const rustCryptoStaticLib* = "/application/src/rustcrypto-ffi/target/release/librust_crypto_ffi.a"
+import std/[os, strutils]
 
-{.passL: rustCryptoStaticLib.}
+when not defined(linux) or not defined(amd64):
+  {.error: "rustcrypto FFI static archive currently supports only Linux x86_64.".}
+else:
+  const rustCryptoResolveScript = currentSourcePath.parentDir.parentDir / "tools" / "resolve_rustcrypto_ffi.nim"
+  const rustCryptoStaticLib* = staticExec(
+    "nim r --hints:off --warnings:off " & rustCryptoResolveScript
+  ).strip
+
+  when rustCryptoStaticLib.len == 0:
+    {.error: "rustcrypto FFI static archive is not available. Run `nimble fetchRustFfi` or `nimble buildRustFfiLocal` first.".}
+
+  {.passL: rustCryptoStaticLib.}
 
 const
   SHA256DigestLen* = 32

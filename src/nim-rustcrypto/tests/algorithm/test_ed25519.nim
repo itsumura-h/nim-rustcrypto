@@ -1,7 +1,7 @@
 import unittest
 
 import ./utils
-import rustcrypto/algorithm/ed25519
+import ../../src/rustcrypto/algorithm/ed25519
 
 suite "ed25519":
   test "public key derivation matches the RFC 8032 vector":

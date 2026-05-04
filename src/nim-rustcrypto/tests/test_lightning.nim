@@ -1,9 +1,9 @@
 import unittest
 
 import ./utils
-import nim_rustcrypto/algorithm/sha256
-import nim_rustcrypto/algorithm/secp256k1
-import nim_rustcrypto/lightning
+import rustcrypto/algorithm/sha256
+import rustcrypto/algorithm/secp256k1
+import rustcrypto/lightning
 
 proc packFiveBitWords(words: openArray[byte]): string =
   var buffer: uint64 = 0

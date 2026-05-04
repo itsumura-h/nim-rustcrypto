@@ -1,7 +1,7 @@
 import unittest
 
 import ./utils
-import nim_rustcrypto/algorithm/pbkdf2
+import ../../src/rustcrypto/algorithm/pbkdf2
 
 suite "pbkdf2":
   test "high-level derive matches the known one-round vector":

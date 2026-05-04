@@ -1,9 +1,9 @@
 import unittest
 
 import ./utils
-import rustcrypto/algorithm/sha256
-import rustcrypto/algorithm/secp256k1
-import rustcrypto/algorithm/secp256k1_ecdsa_der
+import ../../src/rustcrypto/algorithm/sha256
+import ../../src/rustcrypto/algorithm/secp256k1
+import ../../src/rustcrypto/algorithm/secp256k1_ecdsa_der
 
 suite "secp256k1 ecdsa der":
   test "raw sign produces the known deterministic signature":

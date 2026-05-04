@@ -1,8 +1,8 @@
 import unittest
 
 import ./utils
-import nim_rustcrypto/algorithm/pkcs8
-import nim_rustcrypto/algorithm/pem
+import ../../src/rustcrypto/algorithm/pkcs8
+import ../../src/rustcrypto/algorithm/pem
 
 suite "pem-rfc7468":
   test "raw private key encodes to the RFC 7468 example":

@@ -1,7 +1,7 @@
 import unittest
 
 import ./utils
-import rustcrypto/algorithm/schnorr
+import ../../src/rustcrypto/algorithm/schnorr
 
 proc basePointSchnorrSecretKey(): SchnorrSecretKey =
   result = default(SchnorrSecretKey)

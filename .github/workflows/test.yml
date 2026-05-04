@@ -26,6 +26,9 @@ jobs:
       - name: Build Rust static library
         run: docker compose exec -T app bash -lc 'cd /application/src/rustcrypto-ffi && cargo build --release --lib'
 
+      - name: Sync Rust static library to Nim package tree
+        run: docker compose exec -T app bash -lc 'cd /application/src/nim-rustcrypto && nim r --hints:off --warnings:off src/rustcrypto/tools/sync_local_rustcrypto_ffi.nim'
+
       - name: Run Nim tests
         run: docker compose exec -T app bash -lc 'cd /application/src/nim-rustcrypto && nimble test -y'
 

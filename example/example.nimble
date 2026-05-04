@@ -11,3 +11,4 @@ bin           = @["example"]
 # Dependencies
 
 requires "nim >= 2.2.10"
+requires "rustcrypto >= 0.1.0"

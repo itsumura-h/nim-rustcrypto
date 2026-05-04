@@ -1,7 +1,7 @@
 import unittest
 
 import ./utils
-import rustcrypto/algorithm/rsa
+import ../../src/rustcrypto/algorithm/rsa
 
 suite "rsa":
   test "private and public key DER normalize from the fixtures":

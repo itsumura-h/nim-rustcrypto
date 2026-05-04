@@ -1,7 +1,7 @@
 import unittest
 
 import ./utils
-import nim_rustcrypto/algorithm/passwordhash
+import ../../src/rustcrypto/algorithm/passwordhash
 
 suite "password-hash":
   test "high-level validate accepts known PHC strings":
