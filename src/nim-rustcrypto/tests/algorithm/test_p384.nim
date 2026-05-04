@@ -129,3 +129,16 @@ suite "p384":
     )
 
     check status == RustCryptoErrInvalidParameter
+
+  test "marker type API round-trips":
+    let secretKey = P384.generateSecretKey()
+    let compressedPublicKey = P384.publicKeyCompressed(secretKey)
+    let uncompressedPublicKey = P384.publicKeyUncompressed(secretKey)
+    let messageSignature = P384.sign("test", secretKey)
+    let digest = fromHexMessageDigest(DigestHex)
+    let digestSignature = P384.sign(digest, secretKey)
+
+    check P384.verify("test", compressedPublicKey, messageSignature)
+    check P384.verify("test", uncompressedPublicKey, messageSignature)
+    check P384.verify(digest, compressedPublicKey, digestSignature)
+    check P384.verify(digest, uncompressedPublicKey, digestSignature)

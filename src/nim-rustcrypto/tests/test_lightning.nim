@@ -55,3 +55,17 @@ suite "lightning":
     var tampered = dataPart
     tampered[0] = tampered[0] xor 0x01
     check not lightningVerifyInvoice(hrp, tampered, nodeId, signature)
+
+  test "marker type API round-trips":
+    let preimage = default(LightningPaymentPreimage)
+    let secretKey = Secp256k1.generateSecretKey()
+    let nodeId = Lightning.nodeId(secretKey)
+    let hrp = "lnbc"
+    let dataPart = @[1'u8, 2'u8, 3'u8, 4'u8, 5'u8, 31'u8]
+    let signingHash = Lightning.invoiceSigningHash(hrp, dataPart)
+    let signature = Lightning.signInvoice(hrp, dataPart, secretKey)
+
+    check Lightning.paymentHash(preimage) == lightningPaymentHash(preimage)
+    check nodeId == Lightning.nodeId(secretKey)
+    check Lightning.verifyInvoice(hrp, dataPart, nodeId, signature)
+    check Lightning.verifyInvoiceHash(signingHash, nodeId, signature)

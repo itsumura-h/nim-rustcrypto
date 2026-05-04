@@ -3,6 +3,7 @@ import ./algorithm/secp256k1
 import ./algorithm/schnorr
 
 type
+  Bitcoin* = object
   BitcoinMessageSignature* = array[65, byte]
   BitcoinEcdsaSignature* = Secp256k1Signature
   BitcoinSchnorrSignature* = SchnorrSignature
@@ -17,6 +18,31 @@ const
   BitcoinSignedMessagePrefix = "Bitcoin Signed Message:\n"
   BitcoinRecoverableSignatureLen = 65
   BitcoinRawSignatureLen = 64
+
+proc bitcoinHash256*(data: openArray[byte]): BitcoinMessageHash
+proc bitcoinTaggedHash*(tag: string; message: openArray[byte]): BitcoinMessageHash
+proc bitcoinMessageHash*(message: string): BitcoinMessageHash
+proc bitcoinSignMessage*(message: string; secretKey: Secp256k1SecretKey): BitcoinMessageSignature
+proc bitcoinVerifyMessage*(
+    message: string,
+    publicKey: Secp256k1CompressedPublicKey,
+    signature: BitcoinMessageSignature,
+  ): bool
+proc bitcoinSignDigestEcdsa*(digest: BitcoinMessageHash; secretKey: Secp256k1SecretKey): BitcoinEcdsaSignature
+proc bitcoinVerifyDigestEcdsa*(
+    digest: BitcoinMessageHash,
+    publicKey: Secp256k1CompressedPublicKey,
+    signature: BitcoinEcdsaSignature,
+  ): bool
+proc bitcoinSignTaprootDigest*(
+    digest: BitcoinMessageHash,
+    secretKey: SchnorrSecretKey,
+  ): BitcoinSchnorrSignature
+proc bitcoinVerifyTaprootDigest*(
+    digest: BitcoinMessageHash,
+    publicKey: BitcoinXOnlyPublicKey,
+    signature: BitcoinSchnorrSignature,
+  ): bool
 
 proc bytesToString(data: openArray[byte]): string =
   result = newString(data.len)
@@ -50,10 +76,16 @@ proc bitcoinHash256*(data: openArray[byte]): BitcoinMessageHash =
   let first = sha256(bytesToString(data))
   sha256(bytesToString(first))
 
+proc hash256*(T: type Bitcoin, data: openArray[byte]): BitcoinMessageHash =
+  bitcoinHash256(data)
+
 proc bitcoinTaggedHash*(tag: string; message: openArray[byte]): BitcoinMessageHash =
   let tagHash = sha256(tag)
   let tagHashBytes = bytesToString(tagHash)
   sha256(tagHashBytes & tagHashBytes & bytesToString(message))
+
+proc taggedHash*(T: type Bitcoin, tag: string, message: openArray[byte]): BitcoinMessageHash =
+  bitcoinTaggedHash(tag, message)
 
 proc bitcoinMessageHash*(message: string): BitcoinMessageHash =
   let payload = char(BitcoinSignedMessagePrefix.len) &
@@ -62,6 +94,9 @@ proc bitcoinMessageHash*(message: string): BitcoinMessageHash =
     message
   let first = sha256(payload)
   sha256(bytesToString(first))
+
+proc messageHash*(T: type Bitcoin, message: string): BitcoinMessageHash =
+  bitcoinMessageHash(message)
 
 proc bitcoinRecoverableToCompact(signature: Secp256k1RecoverableSignature): BitcoinMessageSignature =
   let recoveryId = signature[BitcoinRecoverableSignatureLen - 1]
@@ -80,6 +115,47 @@ proc bitcoinCompactToRecoverable(signature: BitcoinMessageSignature): Secp256k1R
   result[BitcoinRecoverableSignatureLen - 1] = header - 31
   for i in 0 ..< BitcoinRawSignatureLen:
     result[i] = signature[1 + i]
+
+proc signMessage*(T: type Bitcoin, message: string, secretKey: Secp256k1SecretKey): BitcoinMessageSignature =
+  bitcoinSignMessage(message, secretKey)
+
+proc verifyMessage*(
+    T: type Bitcoin,
+    message: string,
+    publicKey: Secp256k1CompressedPublicKey,
+    signature: BitcoinMessageSignature,
+  ): bool =
+  bitcoinVerifyMessage(message, publicKey, signature)
+
+proc signDigestEcdsa*(
+    T: type Bitcoin,
+    digest: BitcoinMessageHash,
+    secretKey: Secp256k1SecretKey,
+  ): BitcoinEcdsaSignature =
+  bitcoinSignDigestEcdsa(digest, secretKey)
+
+proc verifyDigestEcdsa*(
+    T: type Bitcoin,
+    digest: BitcoinMessageHash,
+    publicKey: Secp256k1CompressedPublicKey,
+    signature: BitcoinEcdsaSignature,
+  ): bool =
+  bitcoinVerifyDigestEcdsa(digest, publicKey, signature)
+
+proc signTaprootDigest*(
+    T: type Bitcoin,
+    digest: BitcoinMessageHash,
+    secretKey: SchnorrSecretKey,
+  ): BitcoinSchnorrSignature =
+  bitcoinSignTaprootDigest(digest, secretKey)
+
+proc verifyTaprootDigest*(
+    T: type Bitcoin,
+    digest: BitcoinMessageHash,
+    publicKey: BitcoinXOnlyPublicKey,
+    signature: BitcoinSchnorrSignature,
+  ): bool =
+  bitcoinVerifyTaprootDigest(digest, publicKey, signature)
 
 proc bitcoinSignMessage*(message: string; secretKey: Secp256k1SecretKey): BitcoinMessageSignature =
   let digest = bitcoinMessageHash(message)

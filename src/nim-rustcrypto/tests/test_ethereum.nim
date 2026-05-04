@@ -77,3 +77,24 @@ suite "ethereum":
       32,
     )
     check not ethereumVerifyTypedDataHash(domain, tamperedStruct, publicKey, signature)
+
+  test "marker type API round-trips":
+    let secretKey = Secp256k1.generateSecretKey()
+    let publicKey = Secp256k1.publicKeyUncompressed(secretKey)
+    let domain = fromHexDigest[EthereumHash](
+      "1111111111111111111111111111111111111111111111111111111111111111",
+      32,
+    )
+    let structHash = fromHexDigest[EthereumHash](
+      "2222222222222222222222222222222222222222222222222222222222222222",
+      32,
+    )
+    let personalSignature = Ethereum.signPersonalMessage("abc", secretKey)
+    let typedSignature = Ethereum.signTypedDataHash(domain, structHash, secretKey)
+
+    check Ethereum.keccak256(bytesFromString("abc")) == ethereumKeccak256(bytesFromString("abc"))
+    check Ethereum.address(publicKey) == ethereumAddress(publicKey)
+    check Ethereum.personalMessageHash("abc") == ethereumPersonalMessageHash("abc")
+    check Ethereum.typedDataHash(domain, structHash) == ethereumTypedDataHash(domain, structHash)
+    check Ethereum.verifyPersonalMessage("abc", publicKey, personalSignature)
+    check Ethereum.verifyTypedDataHash(domain, structHash, publicKey, typedSignature)

@@ -198,3 +198,16 @@ suite "secp256k1":
 
     expect ValueError:
       discard secp256k1PublicKeyCompressed(secretKey)
+
+  test "marker type API accepts message and digest inputs":
+    let secretKey = Secp256k1.generateSecretKey()
+    let compressedPublicKey = Secp256k1.publicKeyCompressed(secretKey)
+    let uncompressedPublicKey = Secp256k1.publicKeyUncompressed(secretKey)
+    let messageSignature = Secp256k1.sign("abc", secretKey)
+    let digest = sha256("abc")
+    let digestSignature = Secp256k1.sign(digest, secretKey)
+
+    check Secp256k1.verify("abc", compressedPublicKey, messageSignature)
+    check Secp256k1.verify("abc", uncompressedPublicKey, messageSignature)
+    check Secp256k1.verify(digest, compressedPublicKey, digestSignature)
+    check Secp256k1.verify(digest, uncompressedPublicKey, digestSignature)

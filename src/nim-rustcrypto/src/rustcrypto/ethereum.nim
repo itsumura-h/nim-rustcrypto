@@ -2,6 +2,7 @@ import ./algorithm/sha3
 import ./algorithm/secp256k1
 
 type
+  Ethereum* = object
   EthereumAddress* = array[20, byte]
   EthereumHash* = array[32, byte]
   EthereumSignature* = object
@@ -12,6 +13,33 @@ type
 
 const EthereumRecoverableSignatureLen = 65
 
+proc ethereumKeccak256*(data: openArray[byte]): EthereumHash
+proc ethereumAddress*(publicKey: Secp256k1UncompressedPublicKey): EthereumAddress
+proc ethereumPersonalMessageHash*(message: string): EthereumHash
+proc ethereumTypedDataHash*(domainSeparator: EthereumHash; structHash: EthereumHash): EthereumHash
+proc ethereumSignPersonalMessage*(
+    message: string,
+    secretKey: Secp256k1SecretKey,
+    chainId: EthereumChainId = 0,
+  ): EthereumSignature
+proc ethereumVerifyPersonalMessage*(
+    message: string,
+    publicKey: Secp256k1UncompressedPublicKey,
+    signature: EthereumSignature,
+  ): bool
+proc ethereumSignTypedDataHash*(
+    domainSeparator: EthereumHash,
+    structHash: EthereumHash,
+    secretKey: Secp256k1SecretKey,
+    chainId: EthereumChainId = 0,
+  ): EthereumSignature
+proc ethereumVerifyTypedDataHash*(
+    domainSeparator: EthereumHash,
+    structHash: EthereumHash,
+    publicKey: Secp256k1UncompressedPublicKey,
+    signature: EthereumSignature,
+  ): bool
+
 proc bytesToString(data: openArray[byte]): string =
   result = newString(data.len)
   for i, value in data:
@@ -19,6 +47,9 @@ proc bytesToString(data: openArray[byte]): string =
 
 proc ethereumKeccak256*(data: openArray[byte]): EthereumHash =
   keccak256(bytesToString(data))
+
+proc keccak256*(T: type Ethereum, data: openArray[byte]): EthereumHash =
+  ethereumKeccak256(data)
 
 proc ethereumAddress*(publicKey: Secp256k1UncompressedPublicKey): EthereumAddress =
   if publicKey[0] != 0x04:
@@ -28,11 +59,24 @@ proc ethereumAddress*(publicKey: Secp256k1UncompressedPublicKey): EthereumAddres
   for i in 0 ..< result.len:
     result[i] = digest[digest.len - result.len + i]
 
+proc address*(T: type Ethereum, publicKey: Secp256k1UncompressedPublicKey): EthereumAddress =
+  ethereumAddress(publicKey)
+
 proc ethereumPersonalMessageHash*(message: string): EthereumHash =
   keccak256("\x19Ethereum Signed Message:\n" & $message.len & message)
 
+proc personalMessageHash*(T: type Ethereum, message: string): EthereumHash =
+  ethereumPersonalMessageHash(message)
+
 proc ethereumTypedDataHash*(domainSeparator: EthereumHash; structHash: EthereumHash): EthereumHash =
   keccak256("\x19\x01" & bytesToString(domainSeparator) & bytesToString(structHash))
+
+proc typedDataHash*(
+    T: type Ethereum,
+    domainSeparator: EthereumHash,
+    structHash: EthereumHash,
+  ): EthereumHash =
+  ethereumTypedDataHash(domainSeparator, structHash)
 
 proc ethereumSignatureFromRecoverable(
   signature: Secp256k1RecoverableSignature,
@@ -73,6 +117,40 @@ proc ethereumRecoverableSignature(
     result.valid = true
   else:
     result.valid = false
+
+proc signPersonalMessage*(
+    T: type Ethereum,
+    message: string,
+    secretKey: Secp256k1SecretKey,
+    chainId: EthereumChainId = 0,
+  ): EthereumSignature =
+  ethereumSignPersonalMessage(message, secretKey, chainId)
+
+proc verifyPersonalMessage*(
+    T: type Ethereum,
+    message: string,
+    publicKey: Secp256k1UncompressedPublicKey,
+    signature: EthereumSignature,
+  ): bool =
+  ethereumVerifyPersonalMessage(message, publicKey, signature)
+
+proc signTypedDataHash*(
+    T: type Ethereum,
+    domainSeparator: EthereumHash,
+    structHash: EthereumHash,
+    secretKey: Secp256k1SecretKey,
+    chainId: EthereumChainId = 0,
+  ): EthereumSignature =
+  ethereumSignTypedDataHash(domainSeparator, structHash, secretKey, chainId)
+
+proc verifyTypedDataHash*(
+    T: type Ethereum,
+    domainSeparator: EthereumHash,
+    structHash: EthereumHash,
+    publicKey: Secp256k1UncompressedPublicKey,
+    signature: EthereumSignature,
+  ): bool =
+  ethereumVerifyTypedDataHash(domainSeparator, structHash, publicKey, signature)
 
 proc ethereumSignPersonalMessage*(
     message: string,

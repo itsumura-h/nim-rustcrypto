@@ -113,3 +113,20 @@ suite "rsa":
     )
 
     check status == RustCryptoErrOutputTooShort
+
+  test "marker type API round-trips":
+    let privateKeyDer = bytesFromString(Rsa2048PrivateKeyDerFixture)
+    let publicKeyDer = bytesFromString(Rsa2048PublicKeyDerFixture)
+    let pssSignature = Rsa.pssSignSha256("test", privateKeyDer)
+    let pkcs1Signature = Rsa.pkcs1v15SignSha256("test", privateKeyDer)
+    let ciphertext = Rsa.oaepSha256Encrypt(bytesFromString("hello rsa"), publicKeyDer, "context")
+
+    check Rsa.privateKeyToPkcs8Der(privateKeyDer) == privateKeyDer
+    check Rsa.privateKeyFromPkcs8Der(privateKeyDer) == privateKeyDer
+    check Rsa.publicKeyToSpkiDer(publicKeyDer) == publicKeyDer
+    check Rsa.publicKeyFromSpkiDer(publicKeyDer) == publicKeyDer
+    check Rsa.pssVerifySha256("test", publicKeyDer, pssSignature)
+    check Rsa.pkcs1v15VerifySha256("test", publicKeyDer, pkcs1Signature)
+    check Rsa.oaepSha256Decrypt(ciphertext, privateKeyDer, "context") == bytesFromString("hello rsa")
+    check Rsa.pkcs1v15Decrypt(Rsa.pkcs1v15Encrypt(bytesFromString("legacy compat"), publicKeyDer), privateKeyDer) ==
+      bytesFromString("legacy compat")

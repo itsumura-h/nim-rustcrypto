@@ -46,3 +46,23 @@ suite "bitcoin":
     var tampered = signature
     tampered[0] = tampered[0] xor 0x01
     check not bitcoinVerifyTaprootDigest(digest, publicKey, tampered)
+
+  test "marker type API round-trips":
+    let secretKey = Secp256k1.generateSecretKey()
+    let publicKeyCompressed = Secp256k1.publicKeyCompressed(secretKey)
+    let publicKeyUncompressed = Secp256k1.publicKeyUncompressed(secretKey)
+    let messageSignature = Bitcoin.signMessage("abc", secretKey)
+    let digest = Bitcoin.messageHash("abc")
+    let digestSignature = Bitcoin.signDigestEcdsa(digest, secretKey)
+    let taprootSecretKey = Schnorr.generateSecretKey()
+    let taprootPublicKey = Schnorr.publicKey(taprootSecretKey)
+    let taprootSignature = Bitcoin.signTaprootDigest(digest, taprootSecretKey)
+
+    check Bitcoin.hash256(bytesFromString("abc")) == bitcoinHash256(bytesFromString("abc"))
+    check Bitcoin.taggedHash("TapTweak", bytesFromString("abc")) == bitcoinTaggedHash("TapTweak", bytesFromString("abc"))
+    check Bitcoin.messageHash("abc") == bitcoinMessageHash("abc")
+    check Bitcoin.verifyMessage("abc", publicKeyCompressed, messageSignature)
+    check Bitcoin.verifyDigestEcdsa(digest, publicKeyCompressed, digestSignature)
+    check Bitcoin.verifyTaprootDigest(digest, taprootPublicKey, taprootSignature)
+    check Secp256k1.generateSecretKey().len == Secp256k1SecretKeyLen
+    check publicKeyUncompressed.len == Secp256k1PublicKeyUncompressedLen

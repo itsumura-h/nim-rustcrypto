@@ -15,8 +15,8 @@ Schnorr signatures on secp256k1 with x-only public keys. **Not compatible** with
 ```nim
 import rustcrypto/algorithm/schnorr
 
-let sk = randomSecretKey()
-let pk = schnorrPublicKey(sk)
+let sk = Schnorr.generateSecretKey()
+let pk = Schnorr.publicKey(sk)
 ```
 
 ## Sign / verify
@@ -24,11 +24,11 @@ let pk = schnorrPublicKey(sk)
 `message` overloads exist for `string` and `openArray[byte]`:
 
 ```nim
-let sig = schnorrSign("hello", sk)
-discard schnorrVerify("hello", pk, sig)
+let sig = Schnorr.sign("hello", sk)
+discard Schnorr.verify("hello", pk, sig)
 
-let sig2 = schnorrSign(messageBytes, sk)
-discard schnorrVerify(messageBytes, pk, sig2)
+let sig2 = Schnorr.sign(messageBytes, sk)
+discard Schnorr.verify(messageBytes, pk, sig2)
 ```
 
 ## Bitcoin Taproot digest helpers

@@ -3,6 +3,7 @@ import ./ffi
 import ./common
 
 type
+  Secp256k1* = object
   Secp256k1SecretKey* = array[Secp256k1SecretKeyLen, byte]
   Secp256k1CompressedPublicKey* = array[Secp256k1PublicKeyCompressedLen, byte]
   Secp256k1UncompressedPublicKey* = array[Secp256k1PublicKeyUncompressedLen, byte]
@@ -20,6 +21,30 @@ proc `$`*(value: Secp256k1Signature): string =
 proc `$`*(value: Secp256k1UncompressedPublicKey |
     Secp256k1RecoverableSignature): string =
   bytesToHexString(value)
+
+proc randomSecretKey*(): Secp256k1SecretKey
+proc raiseIfError(status: cint; operation: string)
+
+proc cptr(data: string): ptr uint8 =
+  if data.len == 0:
+    nil
+  else:
+    cast[ptr uint8](unsafeAddr data[0])
+
+proc cptr(data: openArray[byte]): ptr uint8 =
+  if data.len == 0:
+    nil
+  else:
+    cast[ptr uint8](unsafeAddr data[0])
+
+proc sha256Digest(message: string): Secp256k1MessageDigest =
+  let status = sha256Raw(
+    cptr(message),
+    csize_t(message.len),
+    cast[ptr uint8](addr result[0]),
+    csize_t(result.len),
+  )
+  raiseRustCryptoStatus(status, "rustcrypto_sha256")
 
 proc randomSecretKey*(): Secp256k1SecretKey =
   while true:
@@ -44,6 +69,39 @@ proc randomSecretKey*(): Secp256k1SecretKey =
         ValueError,
         "rustcrypto_secp256k1_random_secret_key failed: unexpected status " & $status,
       )
+
+proc generateSecretKey*(T: type Secp256k1): Secp256k1SecretKey =
+  randomSecretKey()
+
+proc publicKeyCompressed*(
+    T: type Secp256k1,
+    secretKey: Secp256k1SecretKey,
+  ): Secp256k1CompressedPublicKey =
+  var output: Secp256k1CompressedPublicKey
+  let status = secp256k1PublicKeyFromSecretKeyRaw(
+    cptr(secretKey),
+    csize_t(secretKey.len),
+    cast[ptr uint8](addr output[0]),
+    csize_t(output.len),
+    Secp256k1PublicKeyFormatCompressed,
+  )
+  raiseIfError(status, "rustcrypto_secp256k1_public_key_from_secret_key")
+  output
+
+proc publicKeyUncompressed*(
+    T: type Secp256k1,
+    secretKey: Secp256k1SecretKey,
+  ): Secp256k1UncompressedPublicKey =
+  var output: Secp256k1UncompressedPublicKey
+  let status = secp256k1PublicKeyFromSecretKeyRaw(
+    cptr(secretKey),
+    csize_t(secretKey.len),
+    cast[ptr uint8](addr output[0]),
+    csize_t(output.len),
+    Secp256k1PublicKeyFormatUncompressed,
+  )
+  raiseIfError(status, "rustcrypto_secp256k1_public_key_from_secret_key")
+  output
 
 proc raiseIfError(status: cint; operation: string) =
   case status
@@ -90,6 +148,108 @@ proc secp256k1PublicKeyUncompressed*(secretKey: Secp256k1SecretKey): Secp256k1Un
   )
   raiseIfError(status, "rustcrypto_secp256k1_public_key_from_secret_key")
   output
+
+proc sign*(
+    T: type Secp256k1,
+    message: string,
+    secretKey: Secp256k1SecretKey,
+  ): Secp256k1Signature =
+  var output: Secp256k1Signature
+  let status = secp256k1EcdsaSignRaw(
+    cptr(sha256Digest(message)),
+    csize_t(Secp256k1MessageDigestLen),
+    cptr(secretKey),
+    csize_t(secretKey.len),
+    cast[ptr uint8](addr output[0]),
+    csize_t(output.len),
+  )
+  raiseSignError(status, "rustcrypto_secp256k1_ecdsa_sign_prehash")
+  output
+
+proc sign*(
+    T: type Secp256k1,
+    messageDigest: Secp256k1MessageDigest,
+    secretKey: Secp256k1SecretKey,
+  ): Secp256k1Signature =
+  var output: Secp256k1Signature
+  let status = secp256k1EcdsaSignRaw(
+    cptr(messageDigest),
+    csize_t(messageDigest.len),
+    cptr(secretKey),
+    csize_t(secretKey.len),
+    cast[ptr uint8](addr output[0]),
+    csize_t(output.len),
+  )
+  raiseSignError(status, "rustcrypto_secp256k1_ecdsa_sign_prehash")
+  output
+
+proc verify*(
+    T: type Secp256k1,
+    message: string,
+    publicKey: Secp256k1CompressedPublicKey,
+    signature: Secp256k1Signature,
+  ): bool =
+  let status = secp256k1EcdsaVerifyRaw(
+    cptr(sha256Digest(message)),
+    csize_t(Secp256k1MessageDigestLen),
+    cptr(publicKey),
+    csize_t(publicKey.len),
+    Secp256k1PublicKeyFormatCompressed,
+    cptr(signature),
+    csize_t(signature.len),
+  )
+  verifyStatus(status, "rustcrypto_secp256k1_ecdsa_verify_prehash")
+
+proc verify*(
+    T: type Secp256k1,
+    message: string,
+    publicKey: Secp256k1UncompressedPublicKey,
+    signature: Secp256k1Signature,
+  ): bool =
+  let status = secp256k1EcdsaVerifyRaw(
+    cptr(sha256Digest(message)),
+    csize_t(Secp256k1MessageDigestLen),
+    cptr(publicKey),
+    csize_t(publicKey.len),
+    Secp256k1PublicKeyFormatUncompressed,
+    cptr(signature),
+    csize_t(signature.len),
+  )
+  verifyStatus(status, "rustcrypto_secp256k1_ecdsa_verify_prehash")
+
+proc verify*(
+    T: type Secp256k1,
+    messageDigest: Secp256k1MessageDigest,
+    publicKey: Secp256k1CompressedPublicKey,
+    signature: Secp256k1Signature,
+  ): bool =
+  let status = secp256k1EcdsaVerifyRaw(
+    cptr(messageDigest),
+    csize_t(messageDigest.len),
+    cptr(publicKey),
+    csize_t(publicKey.len),
+    Secp256k1PublicKeyFormatCompressed,
+    cptr(signature),
+    csize_t(signature.len),
+  )
+  verifyStatus(status, "rustcrypto_secp256k1_ecdsa_verify_prehash")
+
+proc verify*(
+    T: type Secp256k1,
+    messageDigest: Secp256k1MessageDigest,
+    publicKey: Secp256k1UncompressedPublicKey,
+    signature: Secp256k1Signature,
+  ): bool =
+  let status = secp256k1EcdsaVerifyRaw(
+    cptr(messageDigest),
+    csize_t(messageDigest.len),
+    cptr(publicKey),
+    csize_t(publicKey.len),
+    Secp256k1PublicKeyFormatUncompressed,
+    cptr(signature),
+    csize_t(signature.len),
+  )
+  verifyStatus(status, "rustcrypto_secp256k1_ecdsa_verify_prehash")
 
 proc secp256k1EcdsaSign*(
     messageDigest: Secp256k1MessageDigest,

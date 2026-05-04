@@ -3,6 +3,7 @@ import ./ffi
 import ./common
 
 type
+  P256* = object
   P256SecretKey* = array[P256SecretKeyLen, byte]
   P256CompressedPublicKey* = array[P256PublicKeyCompressedLen, byte]
   P256UncompressedPublicKey* = array[P256PublicKeyUncompressedLen, byte]
@@ -22,6 +23,48 @@ proc `$`*(value: P256Signature): string =
 
 proc `$`*(value: P256PublicKeySpkiDer): string =
   bytesToHexString(value)
+
+proc randomSecretKey*(): P256SecretKey
+proc raiseIfError(status: cint; operation: string)
+
+proc cptr(data: string): ptr uint8 =
+  if data.len == 0:
+    nil
+  else:
+    cast[ptr uint8](unsafeAddr data[0])
+
+proc cptr(data: openArray[byte]): ptr uint8 =
+  if data.len == 0:
+    nil
+  else:
+    cast[ptr uint8](unsafeAddr data[0])
+
+proc generateSecretKey*(T: type P256): P256SecretKey =
+  randomSecretKey()
+
+proc publicKeyCompressed*(T: type P256, secretKey: P256SecretKey): P256CompressedPublicKey =
+  var output: P256CompressedPublicKey
+  let status = p256PublicKeyFromSecretKeyRaw(
+    cptr(secretKey),
+    csize_t(secretKey.len),
+    cast[ptr uint8](addr output[0]),
+    csize_t(output.len),
+    P256PublicKeyFormatCompressed,
+  )
+  raiseIfError(status, "rustcrypto_p256_public_key_from_secret_key")
+  output
+
+proc publicKeyUncompressed*(T: type P256, secretKey: P256SecretKey): P256UncompressedPublicKey =
+  var output: P256UncompressedPublicKey
+  let status = p256PublicKeyFromSecretKeyRaw(
+    cptr(secretKey),
+    csize_t(secretKey.len),
+    cast[ptr uint8](addr output[0]),
+    csize_t(output.len),
+    P256PublicKeyFormatUncompressed,
+  )
+  raiseIfError(status, "rustcrypto_p256_public_key_from_secret_key")
+  output
 
 proc randomSecretKey*(): P256SecretKey =
   while true:
@@ -116,6 +159,100 @@ proc p256PublicKeyUncompressed*(secretKey: P256SecretKey): P256UncompressedPubli
   )
   raiseIfError(status, "rustcrypto_p256_public_key_from_secret_key")
   output
+
+proc sign*(T: type P256, message: string, secretKey: P256SecretKey): P256Signature =
+  var output: P256Signature
+  let status = p256EcdsaSignSha256Raw(
+    cptr(message),
+    csize_t(message.len),
+    cptr(secretKey),
+    csize_t(secretKey.len),
+    cast[ptr uint8](addr output[0]),
+    csize_t(output.len),
+  )
+  raiseSignError(status, "rustcrypto_p256_ecdsa_sign_sha256")
+  output
+
+proc sign*(T: type P256, messageDigest: P256MessageDigest, secretKey: P256SecretKey): P256Signature =
+  var output: P256Signature
+  let status = p256EcdsaSignPrehashRaw(
+    cptr(messageDigest),
+    csize_t(messageDigest.len),
+    cptr(secretKey),
+    csize_t(secretKey.len),
+    cast[ptr uint8](addr output[0]),
+    csize_t(output.len),
+  )
+  raiseSignError(status, "rustcrypto_p256_ecdsa_sign_prehash")
+  output
+
+proc verify*(
+    T: type P256,
+    message: string,
+    publicKey: P256CompressedPublicKey,
+    signature: P256Signature,
+  ): bool =
+  let status = p256EcdsaVerifySha256Raw(
+    cptr(message),
+    csize_t(message.len),
+    cptr(publicKey),
+    csize_t(publicKey.len),
+    P256PublicKeyFormatCompressed,
+    cptr(signature),
+    csize_t(signature.len),
+  )
+  verifyStatus(status, "rustcrypto_p256_ecdsa_verify_sha256")
+
+proc verify*(
+    T: type P256,
+    message: string,
+    publicKey: P256UncompressedPublicKey,
+    signature: P256Signature,
+  ): bool =
+  let status = p256EcdsaVerifySha256Raw(
+    cptr(message),
+    csize_t(message.len),
+    cptr(publicKey),
+    csize_t(publicKey.len),
+    P256PublicKeyFormatUncompressed,
+    cptr(signature),
+    csize_t(signature.len),
+  )
+  verifyStatus(status, "rustcrypto_p256_ecdsa_verify_sha256")
+
+proc verify*(
+    T: type P256,
+    messageDigest: P256MessageDigest,
+    publicKey: P256CompressedPublicKey,
+    signature: P256Signature,
+  ): bool =
+  let status = p256EcdsaVerifyPrehashRaw(
+    cptr(messageDigest),
+    csize_t(messageDigest.len),
+    cptr(publicKey),
+    csize_t(publicKey.len),
+    P256PublicKeyFormatCompressed,
+    cptr(signature),
+    csize_t(signature.len),
+  )
+  verifyStatus(status, "rustcrypto_p256_ecdsa_verify_prehash")
+
+proc verify*(
+    T: type P256,
+    messageDigest: P256MessageDigest,
+    publicKey: P256UncompressedPublicKey,
+    signature: P256Signature,
+  ): bool =
+  let status = p256EcdsaVerifyPrehashRaw(
+    cptr(messageDigest),
+    csize_t(messageDigest.len),
+    cptr(publicKey),
+    csize_t(publicKey.len),
+    P256PublicKeyFormatUncompressed,
+    cptr(signature),
+    csize_t(signature.len),
+  )
+  verifyStatus(status, "rustcrypto_p256_ecdsa_verify_prehash")
 
 proc p256EcdsaSignSha256*(message: string; secretKey: P256SecretKey): P256Signature =
   var output: P256Signature

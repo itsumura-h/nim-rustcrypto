@@ -123,3 +123,16 @@ suite "p256":
     )
 
     check status == RustCryptoErrInvalidParameter
+
+  test "marker type API round-trips":
+    let secretKey = P256.generateSecretKey()
+    let compressedPublicKey = P256.publicKeyCompressed(secretKey)
+    let uncompressedPublicKey = P256.publicKeyUncompressed(secretKey)
+    let messageSignature = P256.sign("test", secretKey)
+    let digest = sha256("test")
+    let digestSignature = P256.sign(digest, secretKey)
+
+    check P256.verify("test", compressedPublicKey, messageSignature)
+    check P256.verify("test", uncompressedPublicKey, messageSignature)
+    check P256.verify(digest, compressedPublicKey, digestSignature)
+    check P256.verify(digest, uncompressedPublicKey, digestSignature)

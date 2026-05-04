@@ -151,3 +151,12 @@ suite "schnorr":
       bytesPtr(shortSignature),
       csize_t(shortSignature.len),
     ) == RustCryptoErrInvalidSignature
+
+  test "marker type API round-trips":
+    let secretKey = Schnorr.generateSecretKey()
+    let publicKey = Schnorr.publicKey(secretKey)
+    let stringSignature = Schnorr.sign("abc", secretKey)
+    let bytesSignature = Schnorr.sign(bytesFromString("abc"), secretKey)
+
+    check Schnorr.verify("abc", publicKey, stringSignature)
+    check Schnorr.verify(bytesFromString("abc"), publicKey, bytesSignature)

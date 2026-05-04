@@ -1,0 +1,251 @@
+---
+description: 20-fix-apiブランチでの開発時に読み込む
+alwaysApply: false
+---
+20-fix-apiブランチルール
+===
+
+このブランチで実装することは以下の通りです。
+- Nim公開APIのデザインを、暗号方式を表す型を第一引数に取るstatic関数風APIへ変更する
+- 公開鍵暗号方式と署名方式では、`Secp256k1.generateSecretKey()` のように暗号方式名から操作を呼び出せる設計へ統一する
+- `Secp256k1` だけでなく、同じ設計を適用できる `P256`、`P384`、`Ed25519`、`Schnorr`、`Rsa` にも適用する
+- Bitcoin、Ethereum、Lightning、JWTなどの高レベルAPIにも同じmarker type + static関数風APIデザインを適用する
+- 既存のRust FFI公開APIは原則維持し、Nim高水準APIの整理を中心にする
+- 既存APIとの互換性維持、移行期間、README更新、テスト更新までを実装対象に含める
+
+このブランチでは、Rust FFIの低水準C ABI設計、暗号アルゴリズム本体、鍵・署名・暗号文のバイナリ形式は変更しない。
+変更対象はNim側の利用者向けAPIデザインであり、algorithm配下の暗号プリミティブAPIと、Bitcoin/Ethereum/Lightning/JWTなどの高レベルAPIの両方を含む。
+Rust側のFFI関数名や引数を変える必要が出た場合は、互換性への影響をこのブランチルールに追記してから実装する。
+
+## 進捗
+- [x] `.cursor/rules/project.mdc` を読み、FFI、ビルド、TDD、依存追加ルールを確認する
+- [x] `.cursor/rules/branch.mdc` を読み、ブランチルールの形式と記録方針を確認する
+- [x] 現在ブランチ `20-fix-api` に対応する既存ブランチルールがないことを確認する
+- [x] 既存の `secp256k1`、`p256`、`p384`、`ed25519`、`schnorr`、`rsa` のNim公開APIの形を確認する
+- [x] 実装方針と設計をこのブランチルールに記録する
+- [x] 実装開始前に、対象モジュールと互換APIの扱いを再確認する
+- [x] Nim側に暗号方式を表すmarker typeを追加する
+- [x] `Secp256k1` のstatic関数風APIを追加する
+- [x] `P256` のstatic関数風APIを追加する
+- [x] `P384` のstatic関数風APIを追加する
+- [x] `Ed25519` のstatic関数風APIを追加する
+- [x] `Schnorr` のstatic関数風APIを追加する
+- [x] `Rsa` のstatic関数風APIを追加する
+- [x] 本文入力とDigest入力の `sign` / `verify` が同名オーバーロードで提供されていることを確認する
+- [x] 高レベルAPIに適用するmarker typeと対象操作を確認する
+- [x] `Bitcoin` のstatic関数風APIを追加する
+- [x] `Ethereum` のstatic関数風APIを追加する
+- [x] `Lightning` のstatic関数風APIを追加する
+- [x] `Jwt` のstatic関数風APIを追加する
+- [x] JWT APIで `std/json.JsonNode` のpayload/headerを扱えるようにする
+- [x] `Jwk` 型を新規追加する
+- [x] `Jwk` の `$` と `parseJson($jwk)` によるJSON相互運用を確認する
+- [x] 既存APIを互換APIとして残すか、deprecated pragmaを付けるかを決める
+- [x] Nimテストを新API呼び出しに更新し、必要なら旧API互換テストを追加する
+- [x] READMEとdocsのサンプルコードを新APIに更新する
+- [x] Rust側テストを変更不要で通ることを確認する
+- [x] Nim側テストを実行し、新APIで既存機能が壊れていないことを確認する
+
+## 参考資料
+- Nim Manual: https://nim-lang.org/docs/manual.html
+- Nim proc call syntax: https://nim-lang.org/docs/manual.html#procedures
+- Nim type sections: https://nim-lang.org/docs/manual.html#types
+- Nim deprecated pragma: https://nim-lang.org/docs/manual.html#pragmas-deprecated-pragma
+- RustCrypto: https://github.com/RustCrypto
+- Rust Reference Linkage: https://doc.rust-lang.org/reference/linkage.html
+- SEC 1: Elliptic Curve Cryptography: https://www.secg.org/sec1-v2.pdf
+- FIPS 186-5 Digital Signature Standard: https://csrc.nist.gov/pubs/fips/186-5/final
+- RFC 8032: Edwards-Curve Digital Signature Algorithm: https://www.rfc-editor.org/rfc/rfc8032
+- RFC 8017: PKCS #1: RSA Cryptography Specifications Version 2.2: https://www.rfc-editor.org/rfc/rfc8017
+- RFC 7515: JSON Web Signature: https://www.rfc-editor.org/rfc/rfc7515
+- RFC 7517: JSON Web Key: https://www.rfc-editor.org/rfc/rfc7517
+- RFC 7518: JSON Web Algorithms: https://www.rfc-editor.org/rfc/rfc7518
+- RFC 7519: JSON Web Token: https://www.rfc-editor.org/rfc/rfc7519
+
+## 調査結果・設計まとめ
+- 既存のNim高水準APIは `secp256k1PublicKeyCompressed(secretKey)`、`secp256k1EcdsaSignSha256(message, secretKey)`、`p256EcdsaSignSha256(message, secretKey)`、`ed25519Sign(message, secretKey)`、`rsaPssSignSha256(message, privateKeyDer)` のように、関数名へ暗号方式名と用途名を埋め込む設計になっている。
+- 新APIでは暗号方式名を型として表し、第一引数に `type Algorithm` を受けるprocを定義する。これにより、Nimの呼び出し構文で `Secp256k1.generateSecretKey()`、`Secp256k1.sign("abc", secretKey)`、`Secp256k1.verify("abc", publicKey, signature)` のように呼び出せる。
+- 高レベルAPIでも同じ考え方を採用し、プロトコルや用途を表す型を第一引数に取る。例: `Bitcoin.addressFromPublicKey(publicKey)`、`Ethereum.addressFromPublicKey(publicKey)`、`Lightning.nodeIdFromPublicKey(publicKey)`、`Jwt.sign(payload, key)`。
+- marker typeは値を持たない `object` とする。例: `type Secp256k1* = object`、`type P256* = object`、`type Rsa* = object`。
+- marker typeの値を生成して使う設計にはしない。常に `type Secp256k1` や `type Bitcoin` を第一引数に取るprocとして定義し、アルゴリズムまたは高レベル用途の名前空間として使う。
+- 例:
+  ```nim
+  type Secp256k1* = object
+
+  proc generateSecretKey*(_: type Secp256k1): Secp256k1SecretKey
+  proc publicKeyCompressed*(_: type Secp256k1; secretKey: Secp256k1SecretKey): Secp256k1CompressedPublicKey
+  proc publicKeyUncompressed*(_: type Secp256k1; secretKey: Secp256k1SecretKey): Secp256k1UncompressedPublicKey
+  proc sign*(_: type Secp256k1; message: string; secretKey: Secp256k1SecretKey): Secp256k1Signature
+  proc sign*(_: type Secp256k1; messageDigest: Secp256k1MessageDigest; secretKey: Secp256k1SecretKey): Secp256k1Signature
+  proc verify*(_: type Secp256k1; message: string; publicKey: Secp256k1CompressedPublicKey; signature: Secp256k1Signature): bool
+  proc verify*(_: type Secp256k1; messageDigest: Secp256k1MessageDigest; publicKey: Secp256k1CompressedPublicKey; signature: Secp256k1Signature): bool
+  ```
+- 利用例は以下を目標形とする。
+  ```nim
+  let secretKey = Secp256k1.generateSecretKey()
+  let publicKeyCompressed = Secp256k1.publicKeyCompressed(secretKey)
+  let publicKeyUncompressed = Secp256k1.publicKeyUncompressed(secretKey)
+  let signature1 = Secp256k1.sign("abc", secretKey)
+  let messageDigest = sha256("abc")
+  let signature2 = Secp256k1.sign(messageDigest, secretKey)
+  let verification1 = Secp256k1.verify("abc", publicKeyCompressed, signature1)
+  let verification2 = Secp256k1.verify(messageDigest, publicKeyCompressed, signature2)
+  ```
+- `verify("abc", publicKeyCompressed, signature2)` のように、本文メッセージとprehash署名を混ぜた呼び出しは、署名方式の意味としては検証失敗になる。新APIでは、本文入力署名は本文入力検証、digest入力署名はdigest入力検証に対応させる。サンプルでは `signature2` の検証は `messageDigest` を渡す形を正とする。
+- `publicKeyCompressed(secretKey)` のような裸の関数名は新APIの主目的ではない。第一引数を `type` にする設計を優先し、主APIは `Secp256k1.publicKeyCompressed(secretKey)` とする。既存の裸関数やprefix付き関数を残す場合も、READMEでは暗号方式型から呼ぶ形を正規の書き方として扱う。
+- `sign` の引数順は `message_or_digest, secretKey` を基本にする。`verify` の引数順は既存APIに合わせて `message_or_digest, publicKey, signature` を基本にする。
+- `sign` は、署名対象として文字列本文を受け取る場合と、ハッシュ化済みDigestを受け取る場合で同じ関数名を使い、引数型でオーバーロードする。正規APIとして `signDigest`、`signPrehash`、`signMessage` のように入力形式を関数名へ分けない。
+- `verify` も同様に、文字列本文を受け取る場合とDigestを受け取る場合で同じ関数名を使い、引数型でオーバーロードする。正規APIとして `verifyDigest`、`verifyPrehash`、`verifyMessage` のように入力形式を関数名へ分けない。
+- ただし、Rust FFIの低水準関数名や既存互換API名では、実装上の区別として `prehash`、`sha256`、`sha384` などを残してよい。統一対象は利用者向けの新しい高水準APIである。
+- `verify` は既存方針どおり、暗号学的な検証失敗を `false` として返し、呼び出し方の誤り、不正な鍵形式、不正な署名形式、FFI panicは例外にする。
+- `generateSecretKey` は既存の `randomSecretKey` と同じ意味にする。暗号方式ごとに秘密鍵の検証方法が違うため、既存実装が不正鍵を避けるループを持つ場合はそのロジックを再利用する。
+- `publicKeyCompressed` と `publicKeyUncompressed` は、SEC1圧縮/非圧縮公開鍵を持つ曲線系にだけ提供する。Ed25519やSchnorrのように公開鍵形式が1種類の方式では `publicKey` を提供する。
+- 本文入力の `sign(message: string, ...)` は、既存のハッシュ込み署名APIへ委譲する。secp256k1とP-256はSHA-256、P-384はSHA-384、Ed25519とSchnorrは採用ライブラリの既存挙動に合わせる。
+- digest入力の `sign(messageDigest, ...)` は、prehash APIが既にある方式にだけ提供する。secp256k1、P-256、P-384は対象とする。Ed25519、Schnorr、RSAでprehash APIを追加するかは、このブランチでは新規暗号機能追加になるため原則対象外とする。
+- Digest入力に対応する方式では、`sign(messageDigest, secretKey)` と `verify(messageDigest, publicKey, signature)` を本文入力と同じ `sign` / `verify` 名で提供する。Digest型は `Secp256k1MessageDigest`、`P256MessageDigest`、`P384MessageDigest` など方式ごとの型を使い、`string` 入力とのオーバーロード解決を明確にする。
+- `sha256("abc")` は既存の `sha256` 関数を維持する。ハッシュ関数にも将来 `Sha256.digest("abc")` のような型ベースAPIを適用できるが、このブランチの主対象は公開鍵暗号方式である。
+- 高レベルAPIは、既存の低水準暗号APIを直接置き換えるのではなく、プロトコル利用者に自然な単位で名前空間化する。例として、Bitcoinならアドレス、WIF、署名検証、Ethereumならアドレス、Keccak、署名回復、JWTならsign/verify/encode/decodeを対象候補にする。
+- 高レベルAPIに暗号方式の選択肢がある場合は、プロトコル名のmarker typeの下に用途が分かる名前を置く。曖昧な `sign` が複数方式を隠す場合は、`signEs256`、`signRs256`、`pssSignSha256` のように方式名を明示する。
+- 既存の型名 `Secp256k1SecretKey`、`P256Signature`、`RsaPrivateKeyDer` などは維持する。変更するのは操作procの公開デザインであり、値型まで全面改名しない。
+- 既存の低水準FFI procは `algorithm/ffi.nim` に残し、高水準APIから委譲する。Rust FFIを呼ぶ場所を増やしすぎず、既存のエラー処理ヘルパーを再利用する。
+- 旧APIを即削除すると既存利用者と既存テストへの影響が大きい。初期実装では旧APIを互換aliasとして残し、新APIを正規APIとしてREADMEとdocsへ記載する。削除する場合は別ブランチで破壊的変更として扱う。
+- 旧APIにdeprecated pragmaを付ける場合は、テストやサンプルの警告量を確認してから行う。警告が多すぎて開発体験を悪化させる場合は、README上の非推奨表記だけに留める。
+- `Jwk` は JSON 文字列を保持する軽量ラッパーとして実装し、`$` で JSON 文字列へ、`parseJson($jwk)` で `JsonNode` へ戻せるようにした。
+- JWT の新APIは `Jwt.generateSecretKey(jwtHS256/jwtES256/jwtEdDSA)` と `Jwt.publicKey(secretKey)`、`Jwt.sign(jwt..., payload, jwk)`、`Jwt.verify(jwt..., jwk, token)`、`Jwt.decode(token)` を中心に組み立てた。
+- ES256 と EdDSA は JWK から秘密鍵・公開鍵を復元できるようにした。RSA は既存の DER ベースの互換APIを温存し、新JWK APIの拡張余地として `private_der` / `public_der` を持たせた。
+- README には実質的な API サンプルがなかったため、コード例の移行対象は docs 側に集中させた。
+
+### 対象アルゴリズム別のAPI方針
+- `Secp256k1`
+  - `generateSecretKey`
+  - `publicKeyCompressed`
+  - `publicKeyUncompressed`
+  - `sign(message: string, secretKey)`
+  - `sign(messageDigest: Secp256k1MessageDigest, secretKey)`
+  - `verify(message: string, publicKey, signature)`
+  - `verify(messageDigest: Secp256k1MessageDigest, publicKey, signature)`
+  - 本文入力とDigest入力は同じ `sign` / `verify` 名でオーバーロードする
+  - recoverable signatureとDER署名は、汎用 `sign` と混同しないよう `signRecoverable`、`recoverPublicKey`、`signDer`、`verifyDer` など明示名にする。
+- `P256`
+  - `generateSecretKey`
+  - `publicKeyCompressed`
+  - `publicKeyUncompressed`
+  - `sign(message: string, secretKey)` は既存 `p256EcdsaSignSha256` へ委譲する
+  - `sign(messageDigest: P256MessageDigest, secretKey)` は既存 `p256EcdsaSignPrehash` へ委譲する
+  - `verify` は本文入力とdigest入力の両方を提供する
+  - 本文入力とDigest入力は同じ `sign` / `verify` 名でオーバーロードする
+  - PKCS#8/SPKI変換は `privateKeyToPkcs8Der`、`privateKeyFromPkcs8Der`、`publicKeyToSpkiDer`、`publicKeyFromSpkiDer` として型ベースAPIにする。
+- `P384`
+  - `generateSecretKey`
+  - `publicKeyCompressed`
+  - `publicKeyUncompressed`
+  - `sign(message: string, secretKey)` は既存 `p384EcdsaSignSha384` へ委譲する
+  - `sign(messageDigest: P384MessageDigest, secretKey)` は既存 `p384EcdsaSignPrehash` へ委譲する
+  - `verify` は本文入力とdigest入力の両方を提供する
+  - 本文入力とDigest入力は同じ `sign` / `verify` 名でオーバーロードする
+  - PKCS#8/SPKI変換はP-256と同じ命名に揃える。
+- `Ed25519`
+  - `generateSecretKey`
+  - `publicKey`
+  - `sign(message: string, secretKey)`
+  - `verify(message: string, publicKey, signature)`
+  - Ed25519では圧縮/非圧縮公開鍵の区別を提供しない。
+- `Schnorr`
+  - `generateSecretKey`
+  - `publicKey`
+  - `sign(message: string, secretKey)`
+  - `sign(message: openArray[byte], secretKey)` は既存APIに合わせて必要なら提供する
+  - `verify(message: string, publicKey, signature)`
+  - `verify(message: openArray[byte], publicKey, signature)`
+  - BIP340固有の名前やTaproot固有処理は、このブランチでは追加しない。
+- `Rsa`
+  - `pssSignSha256`
+  - `pssVerifySha256`
+  - `pkcs1v15SignSha256`
+  - `pkcs1v15VerifySha256`
+  - `oaepSha256Encrypt`
+  - `oaepSha256Decrypt`
+  - `pkcs1v15Encrypt`
+  - `pkcs1v15Decrypt`
+  - `privateKeyToPkcs8Der`、`privateKeyFromPkcs8Der`、`publicKeyToSpkiDer`、`publicKeyFromSpkiDer`
+  - RSAは署名方式と暗号化方式を名前で明示し、汎用 `sign` / `verify` / `encrypt` / `decrypt` だけにしない。これはPSS、PKCS#1 v1.5、OAEPの混同を避けるためである。
+
+### 高レベルAPI別のAPI方針
+- `Bitcoin`
+  - marker typeは `type Bitcoin* = object` とする
+  - 既存のBitcoin向け高レベル処理は `Bitcoin.operation(...)` で呼び出せるようにする
+  - 対象候補はアドレス生成、公開鍵/秘密鍵のエンコード、WIF、署名検証、トランザクションやscript関連の既存APIである
+  - secp256k1の低水準操作そのものは `Secp256k1` に残し、Bitcoin固有のエンコードやプロトコル規則だけを `Bitcoin` に置く
+- `Ethereum`
+  - marker typeは `type Ethereum* = object` とする
+  - 対象候補はアドレス生成、Keccak-256を使う識別子生成、Ethereum署名、署名回復、EIP-191/EIP-712など既存実装済み範囲の操作である
+  - `Keccak256` のようなハッシュ単体APIを追加する場合は、Ethereum固有用途と汎用ハッシュAPIを混同しない命名にする
+- `Lightning`
+  - marker typeは `type Lightning* = object` とする
+  - 対象候補はnode id、invoice、署名、検証、鍵導出など既存実装済み範囲の操作である
+  - BitcoinやSecp256k1と重なる操作は、Lightningプロトコル上の意味があるものだけ `Lightning` に置く
+- `Jwt`
+  - marker typeは `type Jwt* = object` とする
+  - JWT APIは `import std/json` と組み合わせ、payloadと必要に応じたheaderを `JsonNode` として扱えるようにする
+  - 正規の署名APIは `Jwt.sign(algorithm: JwtAlgorithm, payload: JsonNode, secretKey: Jwk): JwtCompact` とする。既存の `headerJson: string` / `claimsJson: string` を直接受けるAPIは互換APIとして扱う
+  - 正規の検証APIは `Jwt.verify(algorithm: JwtAlgorithm, publicKey: Jwk, token: JwtCompact): bool` とする
+  - 正規のdecode APIは `Jwt.decode(token: JwtCompact): JsonNode` とし、JWT claims payloadを `JsonNode` で返す
+  - headerは `algorithm` から既定生成し、少なくとも `alg` と `typ: "JWT"` を含める。カスタムheaderが必要な場合は、別オーバーロード `Jwt.sign(algorithm, header: JsonNode, payload: JsonNode, secretKey: Jwk)` を検討する
+  - JWTは `HS256`、`RS256`、`ES256`、`PS256`、`EdDSA` など方式名がセキュリティ上重要であるため、`JwtAlgorithm` 引数を必須にして方式を隠さない
+  - 方式ごとの `signEs256`、`verifyRs256` のような関数名は新しい正規APIにはしない。`Jwt.sign(jwtES256, payload, secretKey)`、`Jwt.verify(jwtES256, publicKey, token)` のように `JwtAlgorithm` で分岐する
+  - 利用例は以下を目標形とする
+    ```nim
+    import std/json
+
+    let secretKey = Jwt.generateSecretKey(jwtES256)
+    let publicKey = Jwt.publicKey(secretKey)
+    let payload = %*{
+      "sub": 1234567890,
+      "name": "John Doe",
+      "admin": true
+    }
+    let token = Jwt.sign(jwtES256, payload, secretKey)
+    let verification = Jwt.verify(jwtES256, publicKey, token)
+    let decoded = Jwt.decode(token)
+    assert decoded == payload
+    ```
+  - 例の `token` はJWS compact serializationであり、既存型 `JwtCompact = string` を継続利用する。利用者が変数名を `signature` として受けてもよいが、設計上は署名単体ではなくJWT compact tokenとして扱う
+  - 秘密鍵と公開鍵は `Jwk` 型にする。ES256はEC JWK、EdDSAはOKP JWK、RS256/PS256はRSA JWK、HS256はoct JWKを扱う
+  - `Jwt.generateSecretKey(algorithm: JwtAlgorithm): Jwk` はアルゴリズムに対応した秘密鍵JWKを返す。`Jwt.publicKey(secretKey: Jwk): Jwk` は公開鍵を持つ方式では公開鍵JWKを返す。HS256のような対称鍵では、公開鍵を生成できないため例外にするか、検証用にも同じoct JWKを使う別方針を実装前に確定する
+  - `Jwk` は新規型として追加する。内部表現は実装時に決めるが、利用者向けにはJSON Web Keyとして扱える型にする
+  - `Jwk` は `$` 関数でJSON文字列へ変換できるようにする。`parseJson($jwk)` で `JsonNode` へ変換できることを保証する
+  - `Jwk` から `JsonNode` を直接得る補助APIを追加する場合も、標準の `parseJson` と矛盾しない名前にする
+  - `Jwk` のJSON出力では秘密鍵パラメータを含むprivate JWKと公開鍵パラメータだけのpublic JWKを区別する。`Jwt.publicKey(secretKey)` が返すJWKには秘密鍵成分を含めない
+  - 既存のDERやraw key型からJWKへ変換するAPIは必要に応じて追加する。ただしこのブランチの主目的は新APIデザインであり、未実装アルゴリズムや新しい暗号処理を追加しない
+
+### モジュール配置方針
+- marker typeは各アルゴリズムの既存モジュールに置く。例: `Secp256k1` は `src/nim-rustcrypto/src/rustcrypto/algorithm/secp256k1.nim`、`P256` は `p256.nim`、`Rsa` は `rsa.nim` に置く。
+- 高レベルAPIのmarker typeは各高レベルモジュールに置く。例: `Bitcoin` は `src/nim-rustcrypto/src/rustcrypto/bitcoin.nim`、`Ethereum` は `ethereum.nim`、`Lightning` は `lightning.nim`、`Jwt` は `jwt.nim` に置く。
+- 新APIは既存高水準procの近くに実装し、FFI raw procを直接呼ぶより既存高水準procへ委譲する。これにより既存の入力検証、エラー変換、出力長管理を再利用する。
+- 高レベルAPIでも既存procへ委譲する。プロトコル処理、エンコード、入力検証の実装を複製せず、static関数風APIは公開デザインの薄いラッパーとして実装する。
+- `Jwk` 型をJWTモジュールに置くか、`algorithm/jwk.nim` のような共有モジュールに置くかは実装前に決める。JWT以外でもJWKを使う可能性があるため、循環importが起きない配置を優先する。
+- 循環importを避けるため、secp256k1の本文入力SHA-256署名APIが `sha256.nim` にある現状を整理する必要がある。実装時には、`Secp256k1.sign(message: string, ...)` をどのモジュールへ置くと循環しないか確認する。
+- 必要であれば、ECDSA本文入力APIを `secp256k1.nim` 側へ移し、`sha256.nim` はハッシュ関数だけを提供する形へ整理する。ただしこの場合もRust FFIは変更しない。
+- ルートモジュール `rustcrypto.nim` が各algorithmモジュールをexportしている場合、新APIが通常importで見えることを確認する。
+- ルートモジュールから高レベルAPIもexportされている場合、`import rustcrypto` だけで `Bitcoin...`、`Ethereum...`、`Lightning...`、`Jwt...` のmarker typeを使えることを確認する。
+
+### テスト方針
+- 既存の暗号テストベクトルは変更せず、新API経由でも同じ値を生成・検証できることを確認する。
+- `Secp256k1` は、秘密鍵生成、圧縮/非圧縮公開鍵導出、本文入力署名・検証、digest入力署名・検証、改ざん失敗を確認する。
+- `P256` と `P384` は、本文入力署名・検証、prehash署名・検証、PKCS#8/SPKI round-tripを新API経由で確認する。
+- `Ed25519` と `Schnorr` は、公開鍵導出、署名、検証、改ざん失敗を新API経由で確認する。
+- `Rsa` は、PSS署名、PKCS#1 v1.5署名、OAEP暗号化、PKCS#1 v1.5暗号化、DER正規化を新API経由で確認する。
+- `Bitcoin`、`Ethereum`、`Lightning`、`Jwt` は、既存の高レベルAPIテストを新API経由でも通す。既存テストベクトル、既存fixture、既存round-tripを再利用する。
+- `Jwt` は `JsonNode` payloadで署名し、検証し、`Jwt.decode(token)` が元のpayloadと等しい `JsonNode` を返すことを確認する。
+- `Jwt` は `Jwk` の `$` 出力が妥当なJSON文字列であり、`parseJson($jwk)` で `JsonNode` に変換できることを確認する。
+- `Jwt` は秘密鍵JWKから公開鍵JWKを導出したときに、公開鍵JWKへ秘密鍵成分が漏れないことを確認する。
+- 旧APIを互換として残す場合は、最低限のコンパイル確認または代表的な互換テストを残す。
+
+### README/docs更新方針
+- READMEの利用例は、暗号方式型または高レベル用途型から呼ぶstatic関数風APIへ更新する。
+- 旧API名は互換APIとして残す場合でも、READMEの主サンプルには載せない。
+- 署名APIでは、本文入力とdigest入力の違いを明記する。特に `sign("abc", secretKey)` と `sign(sha256("abc"), secretKey)` は別の入力形式であり、検証時も同じ入力形式を使うことを示す。
+- READMEのサンプルでは、本文入力とDigest入力をどちらも `sign` / `verify` の同名オーバーロードとして示し、`signDigest` や `verifyDigest` のような別名を正規APIとして紹介しない。
+- RSAでは、PSS/OAEPを基本用途、PKCS#1 v1.5を互換用途として書き分ける。
+- 高レベルAPIでは、プロトコル名を先頭に出すサンプルへ統一する。例: `Bitcoin...`、`Ethereum...`、`Lightning...`、`Jwt...`。
+- JWTのREADMEサンプルは `std/json` の `%*` で `JsonNode` payloadを作り、`Jwk` 鍵、`Jwt.sign(jwtES256, payload, secretKey)`、`Jwt.verify(jwtES256, publicKey, token)`、`Jwt.decode(token)` を使う形へ更新する。

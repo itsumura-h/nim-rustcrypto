@@ -122,3 +122,11 @@ suite "ed25519":
     )
 
     check status == RustCryptoErrInvalidPublicKeyFormat
+
+  test "marker type API round-trips":
+    let secretKey = Ed25519.generateSecretKey()
+    let publicKey = Ed25519.publicKey(secretKey)
+    let signature = Ed25519.sign("abc", secretKey)
+
+    check Ed25519.verify("abc", publicKey, signature)
+    check not Ed25519.verify("abd", publicKey, signature)
