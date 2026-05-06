@@ -1,0 +1,139 @@
+---
+description: 29-fix-releaseブランチでの開発時に読み込む
+alwaysApply: false
+---
+29-fix-releaseブランチルール
+===
+
+このブランチで実装することは以下の通りです。
+- `.github/workflows/release.yml` で `nimble: command not found` が発生しないように、Release workflow内でNim/Nimbleを明示的にセットアップする
+- `27-rust-build-in-actions` の設計を引き継ぎ、Rust環境を持たないNim利用者でもNimライブラリのインストール時にLinux x86_64向け静的アーカイブ `librust_crypto_ffi.a` が取得または同封解決される状態にする
+- Nimble install時の `.a` 取得は `rustcrypto.nimble` の install hook と `fetchRustFfi` 補助タスクを正規導線にし、利用者アプリ側へ `--passL` やRustビルド手順を漏らさない
+- GitHub Release assetとして公開される `rustcrypto-ffi-v{version}-linux-x86_64.tar.gz` と `.sha256` を、Nimble install時の自動取得元として扱う
+- Release workflowで、Rust FFIビルド、Nim vendor同期、Nimテスト、Release asset作成を同一versionで検証する
+- 既存のRust FFI ABI、Nim公開API、暗号アルゴリズム本体は変更しない
+
+このブランチでは、まずUbuntu Linux x86_64のみを対象にする。macOS、Windows、aarch64 Linux、musl Linuxへの配布は対象外とし、未対応ターゲットでは明示的に失敗させる。
+
+## 進捗
+- [x] `.cursor/rules/project.mdc` を読み、FFI、ビルド、Nimラッパー、Ubuntu優先ルールを確認する
+- [x] `.cursor/rules/branch.mdc` を読み、ブランチルールの形式と記録方針を確認する
+- [x] 現在ブランチ `29-fix-release` に対応する既存ブランチルールがないことを確認する
+- [x] `.cursor/rules/branch/27-rust-build-in-actions.mdc` を読み、既存の配布・vendor・Release asset設計を確認する
+- [x] `.github/workflows/release.yml` を読み、`nimble test -y` の前にNim/Nimbleセットアップが存在しないことを確認する
+- [x] `src/nim-rustcrypto/rustcrypto.nimble` を読み、Linux amd64の `before install` で `fetchRustFfi` 相当を実行する設計が既に入っていることを確認する
+- [x] Nimbleの `installDirs` / `installFiles` とGitHub Actions/Nim setupの参考資料を確認する
+- [x] 実装方針と設計をこのブランチルールに記録する
+- [x] Release workflowにNim/Nimbleセットアップstepを追加する
+- [x] Release workflowでNim/Nimbleのversion確認を行い、`nimble test -y` の前提をログに残す
+- [x] Release workflowで生成した `.a` をNim vendor配置へ同期したあと、Nimテストが同封アーカイブで通ることを確認する
+- [x] 一時利用側プロジェクトでNimble installを実行し、インストール時に `.a` が取得または同封され、代表APIをcompile/runできることを検証する
+- [ ] `fetchRustFfi` がRelease assetから `.a` とchecksumを取得し、vendor配置へ展開できることを検証する
+- [ ] 必要であればREADMEまたはリリース手順に、Release assetとNimble package versionの一致条件を追記する
+
+## 参考資料
+- Nimble .nimble file reference: https://nim-lang.github.io/nimble/nimble-reference.html
+- Nimble package types: https://nim-lang.github.io/nimble/package-types.html
+- setup-nim-action: https://github.com/jiro4989/setup-nim-action
+- GitHub Actions workflow syntax: https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax
+- GitHub Actions Rust build/test: https://docs.github.com/en/actions/tutorials/build-and-test-code/rust
+- GitHub Actions GITHUB_TOKEN permissions: https://docs.github.com/en/actions/tutorials/authenticate-with-github_token
+- GitHub Release assets REST API: https://docs.github.com/en/rest/releases/assets
+- Rust Reference Linkage: https://doc.rust-lang.org/reference/linkage.html
+
+## 調査結果・設計まとめ
+- 発生したエラーは `.github/workflows/release.yml` の `Run Nim tests` stepで `cd src/nim-rustcrypto` の後に `nimble test -y` を実行しているが、その前にNim/Nimbleを導入するstepがないため発生する。GitHub-hosted Ubuntu runnerにRustはセットアップしているが、Nim/Nimbleは前提にしてはならない。
+- この作業環境はDockerコンテナ内である。ローカルDocker内のPATHやインストール済みツールの有無をGitHub Actions runnerの前提にしてはならない。workflow上で必要なCLIは、workflow内のstepで明示的に入れる。
+- `27-rust-build-in-actions` の主設計は維持する。正規vendor配置は `src/nim-rustcrypto/src/rustcrypto/vendor/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi.a` とし、Nimble install後も `src/rustcrypto` 配下に同封される構造にする。
+- Nimble公式仕様では、`installDirs` を指定した場合、そのディレクトリと `installFiles` など明示されたものだけがインストール対象になる。現在の `rustcrypto.nimble` は `installDirs = @["../src/rustcrypto"]` を指定しているため、module vendor配下に `.a` が存在すればNimble install対象に含められる。
+- `src/nim-rustcrypto/rustcrypto.nimble` には、Linux amd64の `before install` で `fetchRustFfiCommand()` を実行する設計が既に入っている。この導線は「インストール時に `.a` もダウンロードされる」要件に合うため、まず壊さずに活かす。
+- `fetchRustFfi` は、GitHub Release asset `rustcrypto-ffi-v{version}-linux-x86_64.tar.gz` を取得し、module vendor配下へ展開する補助タスクとして扱う。通常利用者は明示実行しなくても、Linux amd64ではNimble install hookから呼ばれる状態を目標にする。
+- `before install` は利用者環境でネットワーク、curl、tar、sha256sumに依存する。Release assetからの取得に失敗した場合は、エラーメッセージで `nimble fetchRustFfi` と `nimble buildRustFfiLocal` を回復手段として案内する。
+- Release workflowでは `nimble test -y` の前に `jiro4989/setup-nim-action@v2` などでNimを入れる。`nim-version` は `rustcrypto.nimble` の `requires "nim >= 2.0.0"` と合わせ、まず `2.0.x` または安定版を使う。rate limit回避のため `repo-token: ${{ secrets.GITHUB_TOKEN }}` を渡してよい。
+- Release workflowの権限はRelease asset公開があるため `contents: write` を維持する。ただし、Nim setupやテスト自体にwrite権限を使わせる設計にはしない。
+- Rust FFIの生成元は `src/rustcrypto-ffi/target/release/librust_crypto_ffi.a` とする。workflowでは `cargo test`、`cargo build --release --lib`、生成物の存在確認と非0バイト確認を行ってからNim vendorへ同期する。
+- Release workflow内のNimテストは、同期済みvendorアーカイブでリンクできることを確認する目的で実行する。`nimble test -y` 実行前に `nim -v` と `nimble -v` を出して、今回の `nimble: command not found` の再発を即座に判別できるログにする。
+- 利用者相当の検証は、リポジトリ直下の開発ツリーではなく一時ディレクトリで行う。最小Nimbleプロジェクトからこのパッケージをインストールし、`import rustcrypto` と代表APIのcompile/runを確認する。
+- 利用者相当の検証では、Rust toolchainがrunnerに存在すること自体は許容する。ただし通常導線で `cargo` を呼ばず、Nimble install hookまたは同封vendorから `.a` が解決されることをログとファイル存在確認で検証する。
+- Release asset公開前後のversion整合が重要である。`rustcrypto.nimble` の `version`、workflow_dispatch入力、tag `v{version}`、asset名 `rustcrypto-ffi-v{version}-linux-x86_64.tar.gz` がずれると、install hookの取得先が存在せず失敗する。
+- workflow_dispatchで未作成のRelease assetを前提にinstall hook検証を行うと失敗する可能性がある。Release workflow内では、生成したローカル `.a` によるNimテストと、Release asset作成後に取得導線を検証するstepを分ける。
+- PR時点の検証としては、Release asset未公開でも、生成済み `.a` をvendorへ同期した状態のNimテストと、ローカルpath installによる利用者相当テストを合格条件にする。tag release時はasset upload後に `fetchRustFfi` 導線も確認する。
+- 実装調査で、`rustcrypto.nimble` が `src/rustcrypto/tools/fetch_rustcrypto_ffi.nim` を呼ぶ一方、そのNimエントリが存在せず、実体は `fetch_rustcrypto_ffi.sh` のみであることが判明した。Nimble task/hookから安定して呼ぶため、package rootを特定して `.sh` に委譲する薄いNimエントリを追加する。
+
+### 目標状態
+- Release workflowで `nimble: command not found` が発生しない。
+- Linux x86_64のNim利用者は、以下のような依存指定だけで利用開始できる。
+  ```nim
+  requires "https://github.com/itsumura-h/nim-rustcrypto?subdir=src/nim-rustcrypto"
+  ```
+- Nimble install時に `librust_crypto_ffi.a` がmodule vendor配下へ取得される、または同封済みvendorアーカイブがそのまま使われる。
+- 利用者はRust、Cargo、RustCryptoのビルド知識、`--passL`、静的アーカイブのパス指定を要求されない。
+- Linux x86_64以外では、未対応ターゲットとして明示的に失敗する。静的アーカイブ欠落、Release asset取得失敗、未対応ターゲットは別の原因として読めるエラーメッセージにする。
+
+### Release workflow設計
+- `actions/checkout@v4` と `dtolnay/rust-toolchain@stable` は維持する。
+- `Run Nim tests` より前にNim setup stepを追加する。
+  ```yaml
+  - name: Install Nim toolchain
+    uses: jiro4989/setup-nim-action@v2
+    with:
+      nim-version: "2.0.x"
+      repo-token: ${{ secrets.GITHUB_TOKEN }}
+  ```
+- Nim setup直後に以下の確認stepを入れてよい。
+  ```yaml
+  - name: Print Nim versions
+    run: |
+      nim -v
+      nimble -v
+  ```
+- Rust静的アーカイブのビルド後、以下を確認する。
+  ```bash
+  test -s src/rustcrypto-ffi/target/release/librust_crypto_ffi.a
+  ```
+- Nim vendor同期先は `src/nim-rustcrypto/src/rustcrypto/vendor/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi.a` に固定する。
+- `nimble test -y` は `/application/src/nim-rustcrypto` 相当、つまりworkflowでは `cd src/nim-rustcrypto` 後に実行する。
+- Release archiveの内部構造は既存どおり `rustcrypto-ffi/linux-x86_64/librust_crypto_ffi.a` にする。これはfetch scriptの展開処理と合わせるためである。
+- Release asset upload後、可能であれば一時ディレクトリで `nimble fetchRustFfi` またはinstall hook相当を実行し、GitHub Release assetから取得できることを確認する。ただしRelease作成直後のasset可視性やAPI反映遅延がある場合は、リトライを短く入れる。
+
+### Nimble install設計
+- `rustcrypto.nimble` の `before install` hookはLinux amd64限定で維持する。
+  ```nim
+  when defined(linux) and defined(amd64):
+    before install:
+      exec fetchRustFfiCommand()
+  ```
+- `fetchRustFfiCommand()` はpackage rootから見た `src/rustcrypto/tools/fetch_rustcrypto_ffi.nim` を実行する。Nimble install中の作業ディレクトリ差異に弱い場合は、NimScriptの相対パス解決をpackage root基準にできる形へ調整する。
+- `installDirs = @["../src/rustcrypto"]` と `installFiles = @["../src/rustcrypto.nim"]` は維持する。vendorアーカイブは `../src/rustcrypto` 配下に置く。
+- `.gitignore` やNimbleの `skipDirs`、`skipFiles`、`skipExt` により、`vendor` または `.a` が除外されていないことを確認する。Nimble installでダウンロードする設計の場合でも、Release前検証ではvendor配置がinstall対象から外れないことを確認する。
+- `resolve_rustcrypto_ffi.nim` は、module vendorを最優先、次に互換vendor/cache、最後にfetchを試す順序にする。インストール済みパッケージではmodule vendorが正規経路である。
+- `buildRustFfiLocal` はRustを持つ開発者向けの補助タスクとして維持する。通常利用者導線に含めない。
+
+### 検証設計
+- Release workflow内で最低限以下を確認する。
+  1. `cd src/rustcrypto-ffi && cargo test`
+  2. `cd src/rustcrypto-ffi && cargo build --release --lib`
+  3. `test -s src/rustcrypto-ffi/target/release/librust_crypto_ffi.a`
+  4. vendor同期後に `cd src/nim-rustcrypto && nimble test -y`
+  5. 一時利用側プロジェクトでNimble installし、`import rustcrypto` とSHA-256代表APIをcompile/run
+- ローカル検証ではDockerコンテナ内でNim/Nimbleが存在しない可能性を前提にする。実装時にローカルでworkflow相当を実行する場合は、まず `nim -v` と `nimble -v` を確認し、未導入ならDocker内に入れるかActions上の検証に寄せる。
+- 利用者相当テストでは、`rustcrypto FFI static archive is not available` がLinux x86_64通常導線で出ないことを受け入れ条件にする。
+- 取得導線の検証では、vendorを一時的に空にした環境で `nimble install` または `nimble fetchRustFfi` を走らせ、`src/rustcrypto/vendor/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi.a` の存在と非0バイトを確認する。
+- `.sha256` が存在する場合はchecksum検証を必須にする。checksum不一致はRelease asset破損として失敗させる。
+
+### 受け入れ条件
+- `.github/workflows/release.yml` の `Run Nim tests` stepで `nimble: command not found` が再発しない。
+- Release workflowのログに `nim -v` と `nimble -v` が出る。
+- Linux x86_64でNimble install時に `librust_crypto_ffi.a` が取得または同封解決される。
+- `src/nim-rustcrypto/src/rustcrypto/vendor/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi.a` がNimテスト時のリンク対象になる。
+- `rustcrypto FFI static archive is not available` エラーが、Release workflowの通常経路と利用者相当テストで発生しない。
+- Release asset名、`.sha256`、Nimble package version、Git tag versionの整合が保たれる。
+- Rust FFI ABI、Nim公開API、暗号アルゴリズム本体に不要な変更を入れない。
+
+### 実装時の注意
+- このブランチルール作成時点では実装に進まない。
+- 実装時も `git add`、`git commit` は行わない。
+- Rustビルドは必ず `/application/src/rustcrypto-ffi` で実行する。
+- NimビルドとNimble検証は必ず `/application/src/nim-rustcrypto` または一時利用側プロジェクトで実行する。
+- workflowのaction versionは既存workflowとの整合を優先し、Nim setupは `jiro4989/setup-nim-action@v2` を第一候補にする。
+- Release workflow以外のCIを追加する場合、通常テストは `contents: read` に留め、Release asset公開だけ `contents: write` にする。
