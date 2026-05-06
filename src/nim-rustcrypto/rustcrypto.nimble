@@ -17,8 +17,15 @@ installFiles  = @[
 
 requires "nim >= 2.0.0"
 
+proc fetchRustFfiCommand(): string =
+  "nim r --hints:off --warnings:off src/rustcrypto/tools/fetch_rustcrypto_ffi.nim"
+
 task fetchRustFfi, "Download Rust FFI static archive from GitHub Release":
-  exec "nim r --hints:off --warnings:off src/rustcrypto/tools/fetch_rustcrypto_ffi.nim"
+  exec fetchRustFfiCommand()
+
+when defined(linux) and defined(amd64):
+  before install:
+    exec fetchRustFfiCommand()
 
 task buildRustFfiLocal, "Build Rust FFI static archive locally and sync it":
   exec "cd ../rustcrypto-ffi && cargo build --release --lib"

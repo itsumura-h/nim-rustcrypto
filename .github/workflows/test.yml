@@ -20,17 +20,8 @@ jobs:
       - name: Start app service
         run: docker compose up -d app
 
-      - name: Run Rust tests
-        run: docker compose exec -T app bash -lc 'cd /application/src/rustcrypto-ffi && cargo test'
-
-      - name: Build Rust static library
-        run: docker compose exec -T app bash -lc 'cd /application/src/rustcrypto-ffi && cargo build --release --lib'
-
-      - name: Sync Rust static library to Nim package tree
-        run: docker compose exec -T app bash -lc 'cd /application/src/nim-rustcrypto && nim r --hints:off --warnings:off src/rustcrypto/tools/sync_local_rustcrypto_ffi.nim'
-
-      - name: Run Nim tests
-        run: docker compose exec -T app bash -lc 'cd /application/src/nim-rustcrypto && nimble test -y'
+      - name: Run package checks
+        run: docker compose exec -T app bash -lc '/application/test.sh'
 
       - name: Stop compose services
         if: always()
