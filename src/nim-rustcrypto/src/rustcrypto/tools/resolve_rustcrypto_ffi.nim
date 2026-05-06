@@ -13,9 +13,9 @@ when defined(linux) and defined(amd64):
   elif fileExists(cachePath):
     echo cachePath
   else:
-    let fetchScript = currentSourcePath.parentDir / "fetch_rustcrypto_ffi.nim"
+    let fetchScript = currentSourcePath.parentDir / "fetch_rustcrypto_ffi.sh"
     let fetchResult = execCmdEx(
-      "nim r --hints:off --warnings:off " & quoteShell(fetchScript),
+      "sh " & quoteShell(fetchScript) & " " & quoteShell(packageRoot),
       workingDir = packageRoot,
       options = {poUsePath, poStdErrToStdOut},
     )

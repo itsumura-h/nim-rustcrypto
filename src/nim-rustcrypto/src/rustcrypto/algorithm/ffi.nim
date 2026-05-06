@@ -9,7 +9,7 @@ else:
   ).strip
 
   when rustCryptoStaticLib.len == 0:
-    {.error: "rustcrypto FFI static archive is not available. Run `nimble fetchRustFfi` or `nimble buildRustFfiLocal` first.".}
+    {.error: "rustcrypto FFI static archive is not available. Automatic download from GitHub Release failed; run `nimble fetchRustFfi` or `nimble buildRustFfiLocal` from `/application/src/nim-rustcrypto`.".}
 
   {.passL: rustCryptoStaticLib.}
 
