@@ -29,6 +29,19 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      # Nim パッケージのテストとインストール検証に必要な Nim/Nimble を入れる。
+      - name: Install Nim toolchain
+        uses: jiro4989/setup-nim-action@v2
+        with:
+          nim-version: "2.0.x"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # runner 側の PATH 問題を早期に検出できるよう、利用する Nim/Nimble をログに残す。
+      - name: Print Nim versions
+        run: |
+          nim -v
+          nimble -v
+
       # タグ push と workflow_dispatch の両方で使える version を決める。
       - name: Resolve version
         id: version
@@ -54,6 +67,7 @@ jobs:
         run: |
           cd src/rustcrypto-ffi
           cargo build --release --lib
+          test -s target/release/librust_crypto_ffi.a
 
       # 生成物を Nim パッケージの vendor 配置へ同期し、同封物としても利用できることを確認する。
       - name: Sync Rust static library to Nim vendor tree
@@ -67,6 +81,36 @@ jobs:
         run: |
           cd src/nim-rustcrypto
           nimble test -y
+
+      # 利用側プロジェクト相当の一時環境で、Nimble install 後に import とリンクが通ることを確認する。
+      - name: Verify Nimble consumer install
+        shell: bash
+        run: |
+          set -eu
+          consumer_dir="$(mktemp -d)"
+          package_dir="$PWD/src/nim-rustcrypto"
+          export NIMBLE_DIR="$consumer_dir/.nimble"
+          mkdir -p "$consumer_dir/app"
+          cd "$consumer_dir/app"
+          cat > consumer.nimble <<EOF
+          version = "0.1.0"
+          author = "CI"
+          description = "rustcrypto consumer smoke test"
+          license = "MIT"
+          srcDir = "."
+          bin = @["main"]
+          requires "nim >= 2.0.0"
+          EOF
+          cat > main.nim <<EOF
+          import rustcrypto/algorithm/sha256
+
+          doAssert sha256Hex("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+          EOF
+          (cd "$package_dir" && nimble install -y)
+          printf '%s\n' 'requires "rustcrypto >= 0.1.0"' >> consumer.nimble
+          nimble c -r -y main.nim
+          installed_dir="$(nimble path rustcrypto | tail -n 1)"
+          test -s "$installed_dir/rustcrypto/vendor/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi.a"
 
       # 追加で必要になるネイティブ静的ライブラリをログに残す。
       - name: Print native static libs
