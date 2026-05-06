@@ -15,7 +15,7 @@ installFiles  = @[
 
 # Dependencies
 
-requires "nim >= 2.2.10"
+requires "nim >= 2.0.0"
 
 task fetchRustFfi, "Download Rust FFI static archive from GitHub Release":
   exec "nim r --hints:off --warnings:off src/rustcrypto/tools/fetch_rustcrypto_ffi.nim"
