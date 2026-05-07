@@ -2,9 +2,9 @@ use crate::{
     P384_MESSAGE_DIGEST_LEN, P384_PUBLIC_KEY_COMPRESSED_LEN, P384_PUBLIC_KEY_UNCOMPRESSED_LEN,
     P384_SECRET_KEY_LEN, P384_SIGNATURE_LEN, RUSTCRYPTO_ERR_INVALID_MESSAGE_DIGEST,
     RUSTCRYPTO_ERR_INVALID_PARAMETER, RUSTCRYPTO_ERR_INVALID_PUBLIC_KEY_FORMAT,
-    RUSTCRYPTO_ERR_INVALID_SECRET_KEY, RUSTCRYPTO_ERR_INVALID_SIGNATURE, RUSTCRYPTO_ERR_NULL_OUTPUT,
-    RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT, RUSTCRYPTO_ERR_VERIFICATION_FAILED, RUSTCRYPTO_OK,
-    aead_common,
+    RUSTCRYPTO_ERR_INVALID_SECRET_KEY, RUSTCRYPTO_ERR_INVALID_SIGNATURE,
+    RUSTCRYPTO_ERR_NULL_OUTPUT, RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT,
+    RUSTCRYPTO_ERR_VERIFICATION_FAILED, RUSTCRYPTO_OK, aead_common,
 };
 use ::p384::{
     PublicKey, SecretKey,
@@ -55,7 +55,10 @@ fn raw_secret_key(input: *const u8, input_len: usize) -> Result<SecretKey, c_int
     SecretKey::from_slice(bytes).map_err(|_| RUSTCRYPTO_ERR_INVALID_SECRET_KEY)
 }
 
-fn digest_message(message: *const u8, message_len: usize) -> Result<[u8; P384_MESSAGE_DIGEST_LEN], c_int> {
+fn digest_message(
+    message: *const u8,
+    message_len: usize,
+) -> Result<[u8; P384_MESSAGE_DIGEST_LEN], c_int> {
     let message = aead_common::optional_input(message, message_len)?;
     let digest = Sha384::digest(message);
     let mut output = [0u8; P384_MESSAGE_DIGEST_LEN];
@@ -191,10 +194,11 @@ pub(crate) fn ecdsa_verify_prehash_impl(
         Ok(public_key) => public_key,
         Err(_) => return RUSTCRYPTO_ERR_INVALID_PUBLIC_KEY_FORMAT,
     };
-    let verifying_key = match VerifyingKey::from_encoded_point(&public_key.to_encoded_point(compressed)) {
-        Ok(verifying_key) => verifying_key,
-        Err(_) => return RUSTCRYPTO_ERR_INVALID_PUBLIC_KEY_FORMAT,
-    };
+    let verifying_key =
+        match VerifyingKey::from_encoded_point(&public_key.to_encoded_point(compressed)) {
+            Ok(verifying_key) => verifying_key,
+            Err(_) => return RUSTCRYPTO_ERR_INVALID_PUBLIC_KEY_FORMAT,
+        };
     let signature = match Signature::from_slice(signature) {
         Ok(signature) => signature,
         Err(_) => return RUSTCRYPTO_ERR_INVALID_SIGNATURE,

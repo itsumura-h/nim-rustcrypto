@@ -1,24 +1,26 @@
 use crate::{
-    RUSTCRYPTO_ERR_DECRYPTION_FAILED, RUSTCRYPTO_ERR_INVALID_LENGTH, RUSTCRYPTO_ERR_INVALID_PARAMETER,
-    RUSTCRYPTO_ERR_NULL_INPUT_WITH_DATA, RUSTCRYPTO_ERR_NULL_OUTPUT,
-    RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT, RUSTCRYPTO_ERR_VERIFICATION_FAILED, RUSTCRYPTO_OK,
-    aead_common,
+    RUSTCRYPTO_ERR_DECRYPTION_FAILED, RUSTCRYPTO_ERR_INVALID_LENGTH,
+    RUSTCRYPTO_ERR_INVALID_PARAMETER, RUSTCRYPTO_ERR_NULL_INPUT_WITH_DATA,
+    RUSTCRYPTO_ERR_NULL_OUTPUT, RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT,
+    RUSTCRYPTO_ERR_VERIFICATION_FAILED, RUSTCRYPTO_OK, aead_common,
 };
 use core::ffi::c_int;
 use rand_core::OsRng;
 use rsa::{
     Oaep, Pkcs1v15Encrypt, RsaPrivateKey, RsaPublicKey,
-    pkcs8::{DecodePrivateKey, DecodePublicKey, EncodePrivateKey, EncodePublicKey},
-    pss::{Signature as PssSignature, SigningKey as PssSigningKey, VerifyingKey as PssVerifyingKey},
     pkcs1v15::{
         Signature as Pkcs1v15Signature, SigningKey as Pkcs1v15SigningKey,
         VerifyingKey as Pkcs1v15VerifyingKey,
     },
+    pkcs8::{DecodePrivateKey, DecodePublicKey, EncodePrivateKey, EncodePublicKey},
+    pss::{
+        Signature as PssSignature, SigningKey as PssSigningKey, VerifyingKey as PssVerifyingKey,
+    },
+    sha2::{Digest, Sha256},
     signature::{
         SignatureEncoding,
         hazmat::{PrehashSigner, PrehashVerifier, RandomizedPrehashSigner},
     },
-    sha2::{Digest, Sha256},
     traits::PublicKeyParts,
 };
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -29,7 +31,9 @@ fn optional_label<'a>(label: *const u8, label_len: usize) -> Result<Option<&'a [
     } else if label.is_null() {
         Err(RUSTCRYPTO_ERR_NULL_INPUT_WITH_DATA)
     } else {
-        Ok(Some(unsafe { core::slice::from_raw_parts(label, label_len) }))
+        Ok(Some(unsafe {
+            core::slice::from_raw_parts(label, label_len)
+        }))
     }
 }
 
@@ -100,7 +104,7 @@ fn map_decrypt_error(err: rsa::errors::Error) -> c_int {
     match err {
         rsa::errors::Error::Decryption
         | rsa::errors::Error::InvalidPadLen
-                | rsa::errors::Error::LabelTooLong => RUSTCRYPTO_ERR_DECRYPTION_FAILED,
+        | rsa::errors::Error::LabelTooLong => RUSTCRYPTO_ERR_DECRYPTION_FAILED,
         rsa::errors::Error::MessageTooLong => RUSTCRYPTO_ERR_INVALID_LENGTH,
         _ => map_sign_verify_error(err),
     }
@@ -114,10 +118,7 @@ fn digest_message(message: *const u8, message_len: usize) -> Result<[u8; 32], c_
     Ok(output)
 }
 
-fn derive_pss_signature(
-    private_key: &RsaPrivateKey,
-    digest: &[u8],
-) -> Result<PssSignature, c_int> {
+fn derive_pss_signature(private_key: &RsaPrivateKey, digest: &[u8]) -> Result<PssSignature, c_int> {
     let signing_key = PssSigningKey::<Sha256>::new(private_key.clone());
     signing_key
         .sign_prehash_with_rng(&mut OsRng, digest)
@@ -156,12 +157,7 @@ fn verify_pkcs1v15_signature(
         .map_err(|_| RUSTCRYPTO_ERR_VERIFICATION_FAILED)
 }
 
-fn write_der(
-    output: *mut u8,
-    output_len: usize,
-    written_len: *mut usize,
-    der: &[u8],
-) -> c_int {
+fn write_der(output: *mut u8, output_len: usize, written_len: *mut usize, der: &[u8]) -> c_int {
     if written_len.is_null() {
         return RUSTCRYPTO_ERR_INVALID_PARAMETER;
     }
@@ -838,8 +834,10 @@ mod tests {
         RUSTCRYPTO_OK,
     };
 
-    const RSA_2048_PRIVATE_KEY_DER: &[u8] = include_bytes!("../tests/fixtures/rsa2048-private-key.der");
-    const RSA_2048_PUBLIC_KEY_DER: &[u8] = include_bytes!("../tests/fixtures/rsa2048-public-key.der");
+    const RSA_2048_PRIVATE_KEY_DER: &[u8] =
+        include_bytes!("../tests/fixtures/rsa2048-private-key.der");
+    const RSA_2048_PUBLIC_KEY_DER: &[u8] =
+        include_bytes!("../tests/fixtures/rsa2048-public-key.der");
 
     #[test]
     fn private_key_der_round_trip_normalizes_example() {

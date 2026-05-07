@@ -1,6 +1,6 @@
 use crate::{
-    X509_CERT_DER_MAX_LEN, RUSTCRYPTO_ERR_INVALID_CERTIFICATE, RUSTCRYPTO_ERR_INVALID_LENGTH,
-    RUSTCRYPTO_ERR_INVALID_PARAMETER, RUSTCRYPTO_OK, aead_common,
+    RUSTCRYPTO_ERR_INVALID_CERTIFICATE, RUSTCRYPTO_ERR_INVALID_LENGTH,
+    RUSTCRYPTO_ERR_INVALID_PARAMETER, RUSTCRYPTO_OK, X509_CERT_DER_MAX_LEN, aead_common,
 };
 use core::ffi::c_int;
 use pem_rfc7468::{Error, LineEnding, decode, encode, encoded_len};
@@ -28,12 +28,7 @@ fn validate_certificate_der(der: &[u8]) -> c_int {
     }
 }
 
-fn encode_pem(
-    der: &[u8],
-    output: *mut u8,
-    output_len: usize,
-    written_len: *mut usize,
-) -> c_int {
+fn encode_pem(der: &[u8], output: *mut u8, output_len: usize, written_len: *mut usize) -> c_int {
     if written_len.is_null() {
         return RUSTCRYPTO_ERR_INVALID_PARAMETER;
     }
@@ -295,8 +290,10 @@ pub extern "C" fn rustcrypto_x509_cert_to_pem(
     output_len: usize,
     written_len: *mut usize,
 ) -> c_int {
-    catch_unwind(AssertUnwindSafe(|| to_pem_impl(der, der_len, output, output_len, written_len)))
-        .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
+    catch_unwind(AssertUnwindSafe(|| {
+        to_pem_impl(der, der_len, output, output_len, written_len)
+    }))
+    .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
 }
 
 #[unsafe(no_mangle)]
@@ -335,8 +332,10 @@ pub extern "C" fn rustcrypto_x509_cert_subject_der(
     output_len: usize,
     written_len: *mut usize,
 ) -> c_int {
-    catch_unwind(AssertUnwindSafe(|| subject_der_impl(der, der_len, output, output_len, written_len)))
-        .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
+    catch_unwind(AssertUnwindSafe(|| {
+        subject_der_impl(der, der_len, output, output_len, written_len)
+    }))
+    .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
 }
 
 #[unsafe(no_mangle)]
@@ -347,8 +346,10 @@ pub extern "C" fn rustcrypto_x509_cert_issuer_der(
     output_len: usize,
     written_len: *mut usize,
 ) -> c_int {
-    catch_unwind(AssertUnwindSafe(|| issuer_der_impl(der, der_len, output, output_len, written_len)))
-        .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
+    catch_unwind(AssertUnwindSafe(|| {
+        issuer_der_impl(der, der_len, output, output_len, written_len)
+    }))
+    .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
 }
 
 #[cfg(test)]

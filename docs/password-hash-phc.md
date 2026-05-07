@@ -4,6 +4,8 @@ Module: `rustcrypto/algorithm/passwordhash`
 
 Helpers to validate and canonicalize PHC-encoded password hash strings (as produced by `argon2idHashPassword` and similar flows).
 
+bcrypt uses Modular Crypt Format strings such as `$2b$...`, not PHC strings. Use `Bcrypt.hashPassword` / `Bcrypt.verifyPassword` from `rustcrypto/algorithm/bcrypt` for bcrypt.
+
 ## Validate
 
 ```nim
@@ -23,4 +25,4 @@ let canonical: PasswordHashString = passwordHashCanonicalize(phcString)
 
 Raises `ValueError` if the string cannot be canonicalized.
 
-See also [argon2.md](./argon2.md).
+See also [argon2.md](./argon2.md) and [bcrypt.md](./bcrypt.md).

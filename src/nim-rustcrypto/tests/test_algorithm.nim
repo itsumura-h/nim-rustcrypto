@@ -1,6 +1,7 @@
 import ./algorithm/test_aesgcm
 import ./algorithm/test_aesgcmsiv
 import ./algorithm/test_argon2
+import ./algorithm/test_bcrypt
 import ./algorithm/test_blake2
 import ./algorithm/test_chacha20poly1305
 import ./algorithm/test_ed25519

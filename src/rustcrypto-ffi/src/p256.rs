@@ -2,9 +2,9 @@ use crate::{
     P256_MESSAGE_DIGEST_LEN, P256_PUBLIC_KEY_COMPRESSED_LEN, P256_PUBLIC_KEY_UNCOMPRESSED_LEN,
     P256_SECRET_KEY_LEN, P256_SIGNATURE_LEN, RUSTCRYPTO_ERR_INVALID_MESSAGE_DIGEST,
     RUSTCRYPTO_ERR_INVALID_PARAMETER, RUSTCRYPTO_ERR_INVALID_PUBLIC_KEY_FORMAT,
-    RUSTCRYPTO_ERR_INVALID_SECRET_KEY, RUSTCRYPTO_ERR_INVALID_SIGNATURE, RUSTCRYPTO_ERR_NULL_OUTPUT,
-    RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT, RUSTCRYPTO_ERR_VERIFICATION_FAILED, RUSTCRYPTO_OK,
-    aead_common,
+    RUSTCRYPTO_ERR_INVALID_SECRET_KEY, RUSTCRYPTO_ERR_INVALID_SIGNATURE,
+    RUSTCRYPTO_ERR_NULL_OUTPUT, RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT,
+    RUSTCRYPTO_ERR_VERIFICATION_FAILED, RUSTCRYPTO_OK, aead_common,
 };
 use ::p256::{
     PublicKey, SecretKey,
@@ -55,7 +55,10 @@ fn raw_secret_key(input: *const u8, input_len: usize) -> Result<SecretKey, c_int
     SecretKey::from_slice(bytes).map_err(|_| RUSTCRYPTO_ERR_INVALID_SECRET_KEY)
 }
 
-fn digest_message(message: *const u8, message_len: usize) -> Result<[u8; P256_MESSAGE_DIGEST_LEN], c_int> {
+fn digest_message(
+    message: *const u8,
+    message_len: usize,
+) -> Result<[u8; P256_MESSAGE_DIGEST_LEN], c_int> {
     let message = aead_common::optional_input(message, message_len)?;
     let digest = Sha256::digest(message);
     let mut output = [0u8; P256_MESSAGE_DIGEST_LEN];
@@ -191,10 +194,11 @@ pub(crate) fn ecdsa_verify_prehash_impl(
         Ok(public_key) => public_key,
         Err(_) => return RUSTCRYPTO_ERR_INVALID_PUBLIC_KEY_FORMAT,
     };
-    let verifying_key = match VerifyingKey::from_encoded_point(&public_key.to_encoded_point(compressed)) {
-        Ok(verifying_key) => verifying_key,
-        Err(_) => return RUSTCRYPTO_ERR_INVALID_PUBLIC_KEY_FORMAT,
-    };
+    let verifying_key =
+        match VerifyingKey::from_encoded_point(&public_key.to_encoded_point(compressed)) {
+            Ok(verifying_key) => verifying_key,
+            Err(_) => return RUSTCRYPTO_ERR_INVALID_PUBLIC_KEY_FORMAT,
+        };
     let signature = match Signature::from_slice(signature) {
         Ok(signature) => signature,
         Err(_) => return RUSTCRYPTO_ERR_INVALID_SIGNATURE,
@@ -581,7 +585,8 @@ mod tests {
 
     #[test]
     fn public_key_from_secret_key_matches_secret_key_one() {
-        let secret_key = hex_bytes("0000000000000000000000000000000000000000000000000000000000000001");
+        let secret_key =
+            hex_bytes("0000000000000000000000000000000000000000000000000000000000000001");
         let mut output = [0u8; P256_PUBLIC_KEY_COMPRESSED_LEN];
 
         let status = public_key_from_secret_key_impl(
@@ -665,7 +670,8 @@ mod tests {
 
     #[test]
     fn pkcs8_round_trip_private_key() {
-        let secret_key = hex_bytes("0000000000000000000000000000000000000000000000000000000000000001");
+        let secret_key =
+            hex_bytes("0000000000000000000000000000000000000000000000000000000000000001");
         let mut der = [0u8; P256_PRIVATE_KEY_DER_MAX_LEN];
         let mut written = 0usize;
 
@@ -691,7 +697,8 @@ mod tests {
 
     #[test]
     fn spki_round_trip_public_key() {
-        let secret_key = hex_bytes("0000000000000000000000000000000000000000000000000000000000000001");
+        let secret_key =
+            hex_bytes("0000000000000000000000000000000000000000000000000000000000000001");
         let mut public_key = [0u8; P256_PUBLIC_KEY_COMPRESSED_LEN];
         let status = public_key_from_secret_key_impl(
             secret_key.as_ptr(),
@@ -728,7 +735,8 @@ mod tests {
 
     #[test]
     fn raw_sign_rejects_short_output_buffer() {
-        let secret_key = hex_bytes("0000000000000000000000000000000000000000000000000000000000000001");
+        let secret_key =
+            hex_bytes("0000000000000000000000000000000000000000000000000000000000000001");
         let mut output = [0u8; P256_SIGNATURE_LEN - 1];
         let status = ecdsa_sign_message_impl(
             b"abc".as_ptr(),
