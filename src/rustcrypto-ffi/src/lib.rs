@@ -12,14 +12,14 @@ mod hash;
 mod hkdf;
 mod hmac;
 mod oid;
-mod password_hash;
-mod pbkdf2;
 mod p256;
 mod p384;
+mod password_hash;
+mod pbkdf2;
+mod rsa;
 mod schnorr;
 mod scrypt;
 mod secp256k1;
-mod rsa;
 mod x509;
 
 pub const RUSTCRYPTO_OK: c_int = 0;
