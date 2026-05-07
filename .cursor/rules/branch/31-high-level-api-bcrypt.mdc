@@ -1,0 +1,127 @@
+---
+description: 31-high-level-api-bcryptブランチでの開発時に読み込む
+alwaysApply: false
+---
+31-high-level-api-bcryptブランチルール
+===
+
+このブランチで実装することは以下の通りです。
+- `/application/src/rustcrypto-ffi/src/password_hash.rs` はPHC string用であり、`/application/src/nim-rustcrypto/src/rustcrypto/algorithm/passwordhash.nim` はそのNimラッパーとして維持する。
+- Nim利用者向けのbcrypt高レベルAPIは、`/application/src/nim-rustcrypto/src/rustcrypto/algorithm/bcrypt.nim` に追加する。
+- bcrypt APIは marker type + type-first の static 関数風APIを正規公開面にする。
+- bcryptのハッシュ生成、検証、ハッシュ文字列の形式検査、必要に応じた正規化または情報取得を扱う。
+- bcryptの仕様、制約、互換形式、エラー分類を調査し、Rust FFI/Nim API/テスト方針を固める。
+- 既存の `passwordHashValidate` / `passwordHashCanonicalize` はPHC string向け共通APIとして維持し、bcrypt固有のModular Crypt Formatとは混同しない。
+
+RustCrypto `password-hashes` と `argon2` はPHC stringやArgon2id向けであり、OpenBSD互換bcrypt password hashの形式ではない。このブランチではRustの `bcrypt` packageを追加し、Rust FFIで包み、Nimの `bcrypt.nim` に高レベルラッパーを作る。`passwordhash.nim` は前回コミット時点のPHC専用ラッパーへ戻す。
+
+## 進捗
+- [x] `.cursor/rules/project.mdc` を読み、FFI、ビルド、TDD、依存追加、公開API設計ルールを確認する
+- [x] `.cursor/rules/branch.mdc` を読み、ブランチルールの形式と記録方針を確認する
+- [x] 現在ブランチ `31-high-level-api-bcrypt` に対応する既存ブランチルールがないことを確認する
+- [x] `passwordhash.nim` の既存APIがPHC stringの検証と正規化だけを扱うことを確認する
+- [x] `argon2.nim` のPHC生成・検証APIを読み、パスワードハッシュ系APIの既存エラー処理とバッファ拡張方針を確認する
+- [x] RustCrypto `password-hashes` の対応アルゴリズムを確認し、OpenBSD互換bcrypt password hashが含まれていないことを確認する
+- [x] bcryptの仕様、文字列形式、cost範囲、入力長制限、推奨work factorを調査する
+- [x] 実装方針と設計をこのブランチルールに記録する
+- [x] 依存クレート方針をRust `bcrypt` package追加に確定する
+- [x] `/application/src/rustcrypto-ffi` で `cargo add bcrypt` を実行し、依存をCLI経由で追加する
+- [x] Rust側FFI関数名、引数、戻り値、エラーコード対応を確定する
+- [x] Nim側marker type APIの公開名と互換APIの有無を確定する
+- [x] Rust側テストベクトルを選定する
+- [x] Nim側テストケースを選定する
+- [x] READMEまたはdocsへ載せる使用例を決める
+- [x] Rust側にbcrypt FFIを実装する
+- [x] Rust側テストを追加して実行する
+- [x] Rust静的アーカイブをビルドする
+- [x] Nim側に低水準FFI procを追加する
+- [x] Nim側に高水準bcrypt APIを追加する
+- [x] Nim側テストを追加して実行する
+- [x] READMEまたはdocsを更新する
+- [x] `passwordhash.nim` を前回コミット時点に戻し、bcryptのNim実装を `bcrypt.nim` へ分離する
+
+## 参考資料
+- RustCrypto `password-hashes`: https://github.com/RustCrypto/password-hashes
+- RustCrypto organization overview: https://github.com/rustcrypto
+- Rust `bcrypt` package docs: https://docs.rs/bcrypt/latest/bcrypt/
+- Rust `bcrypt` crate `DEFAULT_COST`: https://docs.rs/bcrypt/latest/bcrypt/constant.DEFAULT_COST.html
+- Rust `bcrypt` crate `BcryptError`: https://docs.rs/bcrypt/latest/bcrypt/enum.BcryptError.html
+- Rust `bcrypt` crate `non_truncating_hash`: https://docs.rs/bcrypt/latest/bcrypt/fn.non_truncating_hash.html
+- OpenBSD `crypt_newhash(3)`: https://man.openbsd.org/OpenBSD-5.8/crypt_newhash.3
+- Debian `crypt(5)` password hash formats: https://manpages.debian.org/bookworm/libcrypt-dev/crypt.5.en.html
+- OWASP Password Storage Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
+- Provos/Mazieres, A Future-Adaptable Password Scheme: https://www.usenix.org/conference/1999-usenix-annual-technical-conference/future-adaptable-password-scheme
+- Rust Reference Linkage: https://doc.rust-lang.org/reference/linkage.html
+- Nim Manual: https://nim-lang.org/docs/manual.html
+
+## 調査結果・設計まとめ
+- bcryptはNiels ProvosとDavid Mazieresによる、Blowfishの高コストな鍵スケジュールを利用した適応可能なパスワードハッシュ方式である。costを上げることでハードウェア進歩に合わせて検証コストを増やせる。
+- OpenBSD系のbcryptでは、costは2を底とする対数で表される。許容範囲は4から31であり、cost 12なら概念上 `2^12` 回相当の作業量になる。
+- OWASPは、bcryptを主にレガシー互換で使う方式と位置付け、Argon2idが使えるならArgon2idを優先する方針を示している。bcryptを使う場合はwork factor 10以上、かつ72バイト入力制限を前提にする。
+- bcryptの代表的な保存形式はPHC stringではなくModular Crypt Formatである。標準的な新規生成形式は `$2b$<cost>$<22文字salt><31文字hash>` で、全体は60文字になる。
+- `password_hash::phc::PasswordHash` が扱う既存 `passwordHashValidate` / `passwordHashCanonicalize` はPHC string向けであり、bcryptの `$2b$...` 形式をそのまま正規PHCとして扱う設計にはしない。`argon2` crateのPHC生成・検証もbcrypt形式ではない。
+- `passwordhash.nim` は `/application/src/rustcrypto-ffi/src/password_hash.rs` のPHC string用ラッパーであるため、bcrypt APIを置かない。bcryptのNim高レベルAPIは `bcrypt.nim` に置き、PHC string APIとファイル単位で分ける。
+- bcrypt高水準APIのmarker typeは `type Bcrypt* = object` とする。値を生成して使わず、常に `type Bcrypt` を第一引数に取るprocとして定義する。
+- 正規API案は以下を基本にする。
+  ```nim
+  type
+    Bcrypt* = object
+    BcryptHashString* = PasswordHashString
+
+  proc hashPassword*(_: type Bcrypt; password: string; cost = BcryptDefaultCost): BcryptHashString
+  proc verifyPassword*(_: type Bcrypt; password, hash: string): bool
+  proc validateHash*(_: type Bcrypt; hash: string): bool
+  proc needsRehash*(_: type Bcrypt; hash: string; cost = BcryptDefaultCost): bool
+  proc cost*(_: type Bcrypt; hash: string): int
+  ```
+- `hashPassword` はOS乱数でsaltを生成し、bcrypt 2b形式の60文字hashを返す。saltを利用者に直接扱わせるAPIは正規APIにはしない。
+- テスト再現性のため、低水準またはテスト専用に固定saltを渡すRust内部関数を用意してもよい。ただしNimの正規公開APIでは固定salt指定を出さない。
+- `verifyPassword` は、パスワードと保存済みbcrypt hashを受け取り、認証失敗を `false` として返す。不正hash形式、NULL入力、FFI panicなど呼び出し方や内部処理の異常は例外にする。
+- `validateHash` はbcrypt hash文字列の形式検査を行う。`$2b$` を正規形式として受け入れる。互換性のため `$2a$`、`$2y$` を検証対象として受け入れるかは、採用クレートの検証互換性と安全性を確認してから確定する。
+- 新規生成では `$2b$` のみを出力する。旧prefixへの生成切り替えは正規APIには入れない。
+- `needsRehash` は、既存hashのcostが現在指定のcost未満、またはprefixが新規標準の `$2b$` でない場合に `true` を返す候補APIとする。実装時にprefix互換方針を固めてから最終決定する。
+- `cost` は保存済みhashからwork factorを取り出す補助APIとする。ログイン成功後のwork factor更新判断に使う。
+- bcryptのパスワード入力はバイト列として扱われ、一般的な実装では長い入力が切り捨てられる。正規APIではサイレントな切り捨てを避けるため、採用packageが切り捨て対象とする72バイト以上の入力を `ValueError` にする。
+- Rust側では `bcrypt` packageの `non_truncating_hash_bytes` / `non_truncating_verify` を使う。bcrypt packageはNUL終端を含めて扱うため、72バイト以上の入力を切り捨て対象としてエラーにする。Nim側でも `password.len <= 71` を確認し、Rust側でも同じ制約を再検証する。
+- bcrypt hashの最大長は標準2b形式では60バイト固定だが、将来互換または入力検証を考慮し、Rust FFIは出力バッファ長と `writtenLen` を受け取る既存の可変長文字列API形に揃える。
+- Rust FFI案は以下を基本にする。
+  ```c
+  int rustcrypto_bcrypt_hash_password(
+    const uint8_t *password,
+    size_t password_len,
+    uint32_t cost,
+    uint8_t *output,
+    size_t output_len,
+    size_t *written_len
+  );
+
+  int rustcrypto_bcrypt_verify_password(
+    const uint8_t *password,
+    size_t password_len,
+    const uint8_t *hash,
+    size_t hash_len
+  );
+
+  int rustcrypto_bcrypt_validate_hash(
+    const uint8_t *hash,
+    size_t hash_len
+  );
+
+  int rustcrypto_bcrypt_cost(
+    const uint8_t *hash,
+    size_t hash_len,
+    uint32_t *cost
+  );
+  ```
+- Rust側のエラー対応は、cost範囲外を `RustCryptoErrInvalidParameter`、切り捨て対象の長いpasswordを `RustCryptoErrInvalidLength`、不正hash形式を `RustCryptoErrInvalidPasswordHashFormat`、検証失敗を `RustCryptoErrVerificationFailed`、出力不足を `RustCryptoErrOutputTooShort`、乱数生成失敗を `RustCryptoErrRandomFailed` とする。
+- FFI公開APIにはRustの `String`、`Result`、`Vec`、Rust参照、trait objectを出さない。Rust側は入力を借用し、Nim側が所有する出力バッファへ書き込む。
+- Rust側のpanicはFFI境界の外へ漏らさない。既存モジュールと同じく入力検証を先に行い、必要に応じて `catch_unwind` で整数エラーへ変換する。
+- `passwordhash.nim` は前回コミット時点へ戻し、既存の `passwordHashValidate` / `passwordHashCanonicalize` だけをPHC string用として残す。bcrypt用には `bcrypt.nim` で `Bcrypt.validateHash(...)` のようにmarker typeで名前空間を分ける。
+- ルートモジュール `rustcrypto` からalgorithm配下がexportされている場合、`import rustcrypto` だけで `Bcrypt.hashPassword(...)` を使えることを確認する。
+- テスト方針はTDDに従う。まずRust側で既知のbcrypt hashに対するverify成功/失敗、cost範囲外、72バイト以上のpassword、不正hash、短い出力バッファを確認する。次にNim側で高水準APIのhash/verify round-trip、改ざん失敗、72バイト以上のpassword例外、`cost` / `needsRehash` を確認する。
+- 既知ベクトルは、`bcrypt` packageのテストで使われている `$2b$04$EGdrhbKUv8Oc9vGiXX0HQOxSg445d458Muh7DAHskb6QbtCvdxcie` と `correctbatteryhorsestapler` を使う。
+- README/docsの説明では、新規パスワード保存ではArgon2idを優先し、bcryptは既存システム互換または利用者が明示的に選ぶ場合の高レベルAPIとして示す。
+- 実装では、プロジェクトルール `SYW-DEPS-001` に従い、`/application/src/rustcrypto-ffi` で `cargo add bcrypt` を実行して依存を追加した。
+- Rust側では `src/rustcrypto-ffi/src/bcrypt.rs` を追加し、`rustcrypto_bcrypt_hash_password`、`rustcrypto_bcrypt_verify_password`、`rustcrypto_bcrypt_validate_hash`、`rustcrypto_bcrypt_cost` を公開した。
+- Nim側では `src/nim-rustcrypto/src/rustcrypto/algorithm/ffi.nim` に低水準procを追加し、`src/nim-rustcrypto/src/rustcrypto/algorithm/bcrypt.nim` に `Bcrypt.hashPassword`、`Bcrypt.verifyPassword`、`Bcrypt.validateHash`、`Bcrypt.cost`、`Bcrypt.needsRehash` を追加した。
+- `nimble buildRustFfiLocal` でRust静的アーカイブをローカル同期し、Nimテストが新しいFFIをリンクできるようにした。

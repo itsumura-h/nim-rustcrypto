@@ -8,6 +8,7 @@ import ./rustcrypto/algorithm/schnorr
 import ./rustcrypto/algorithm/p256
 import ./rustcrypto/algorithm/ed25519
 import ./rustcrypto/algorithm/rsa
+import ./rustcrypto/algorithm/bcrypt
 import ./rustcrypto/bitcoin
 import ./rustcrypto/lightning
 import ./rustcrypto/ethereum
@@ -23,6 +24,7 @@ export schnorr
 export p256
 export ed25519
 export rsa
+export bcrypt
 export bitcoin
 export lightning
 export ethereum

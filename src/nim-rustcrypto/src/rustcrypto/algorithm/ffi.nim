@@ -64,6 +64,7 @@ const
   RustCryptoErrInvalidPasswordHashFormat* = 16.cint
   RustCryptoErrInvalidCertificate* = 17.cint
   RustCryptoErrDecryptionFailed* = 18.cint
+  RustCryptoErrRandomFailed* = 19.cint
   RustCryptoErrPanic* = -1.cint
   Secp256k1PublicKeyFormatUncompressed* = 0.cint
   Secp256k1PublicKeyFormatCompressed* = 1.cint
@@ -72,6 +73,11 @@ const
   ScryptMaxOkmLen* = 137_438_953_440
   Argon2idMinHashLen* = 4
   Argon2idMaxHashLen* = 4_294_967_295
+  BcryptHashLen* = 60
+  BcryptMinCost* = 4
+  BcryptMaxCost* = 31
+  BcryptDefaultCost* = 12
+  BcryptMaxPasswordLen* = 71
 
 proc sha256Raw*(
     input: ptr uint8,
@@ -173,6 +179,33 @@ proc passwordHashCanonicalizeRaw*(
     outputLen: csize_t,
     writtenLen: ptr csize_t,
   ): cint {.cdecl, importc: "rustcrypto_password_hash_canonicalize".}
+
+proc bcryptHashPasswordRaw*(
+    password: ptr uint8,
+    passwordLen: csize_t,
+    cost: cuint,
+    output: ptr uint8,
+    outputLen: csize_t,
+    writtenLen: ptr csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_bcrypt_hash_password".}
+
+proc bcryptVerifyPasswordRaw*(
+    password: ptr uint8,
+    passwordLen: csize_t,
+    hash: ptr uint8,
+    hashLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_bcrypt_verify_password".}
+
+proc bcryptValidateHashRaw*(
+    hash: ptr uint8,
+    hashLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_bcrypt_validate_hash".}
+
+proc bcryptCostRaw*(
+    hash: ptr uint8,
+    hashLen: csize_t,
+    cost: ptr cuint,
+  ): cint {.cdecl, importc: "rustcrypto_bcrypt_cost".}
 
 proc hkdfSha256ExtractRaw*(
     salt: ptr uint8,

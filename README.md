@@ -7,7 +7,7 @@ Nim bindings to RustCrypto through a small Rust FFI static library. High-level A
 
 ## Features (summary)
 
-Hashing (SHA-256, SHA3-256, Keccak-256, BLAKE2), HMAC, HKDF, PBKDF2, scrypt, Argon2id, AEAD (ChaCha20-Poly1305, AES-256-GCM, AES-256-GCM-SIV), secp256k1 (ECDSA, Schnorr, recoverable ECDSA), Ed25519, NIST P-256 / P-384 ECDSA, RSA (sign/verify, OAEP, PKCS#1 v1.5), X.509 minimal parsing, PKCS#8 / SPKI / PEM for supported keys, plus **Bitcoin**, **Lightning (BOLT-11 signing)**, **Ethereum**, and **JWT** helpers.
+Hashing (SHA-256, SHA3-256, Keccak-256, BLAKE2), HMAC, HKDF, PBKDF2, scrypt, Argon2id, bcrypt, AEAD (ChaCha20-Poly1305, AES-256-GCM, AES-256-GCM-SIV), secp256k1 (ECDSA, Schnorr, recoverable ECDSA), Ed25519, NIST P-256 / P-384 ECDSA, RSA (sign/verify, OAEP, PKCS#1 v1.5), X.509 minimal parsing, PKCS#8 / SPKI / PEM for supported keys, plus **Bitcoin**, **Lightning (BOLT-11 signing)**, **Ethereum**, and **JWT** helpers.
 
 ## Installation
 
@@ -40,6 +40,7 @@ Per-primitive and per-protocol guides (English):
 - [PBKDF2-HMAC-SHA256](docs/pbkdf2.md)
 - [scrypt](docs/scrypt.md)
 - [Argon2id](docs/argon2.md)
+- [bcrypt](docs/bcrypt.md)
 - [PHC string validate / canonicalize](docs/password-hash-phc.md)
 
 ### AEAD
