@@ -1,42 +1,53 @@
-import std/[os, strutils]
+import std/[os]
 
 import ./rustcrypto_ffi_paths
 
 when not defined(linux) or not defined(amd64):
   {.error: "rustcrypto FFI local sync currently supports only Linux x86_64.".}
 else:
-  let packageRoot = packageRoot(currentSourcePath)
-  let version = versionFromNimble(packageRoot)
-  let sourceRoot = packageRoot.parentDir
-  let sourceRelease = sourceRoot / "rustcrypto-ffi" / "target" / "release" / RustCryptoArchiveName
-  let sourceDebug = sourceRoot / "rustcrypto-ffi" / "target" / "debug" / RustCryptoArchiveName
+  proc pickExistingArchive(candidates: openArray[string]): string =
+    for candidate in candidates:
+      if fileExists(candidate):
+        return candidate
+    ""
 
-  var sourceArchive = ""
-  if fileExists(sourceRelease):
-    sourceArchive = sourceRelease
-  elif fileExists(sourceDebug):
-    sourceArchive = sourceDebug
+  proc syncArchive(
+      sourceArchive: string;
+      packageRoot: string;
+      version: string;
+      targetId: string;
+      archiveName: string,
+  ) =
+    let modulePath = moduleVendorArchivePath(packageRoot, targetId, archiveName)
+    let cachePath = cacheArchivePath(version, targetId, archiveName)
 
-  if sourceArchive.len == 0:
-    stderr.writeLine("rustcrypto FFI archive not found in target/release or target/debug.")
+    createDir(modulePath.parentDir)
+    copyFile(sourceArchive, modulePath)
+
+    createDir(cachePath.parentDir)
+    copyFile(sourceArchive, cachePath)
+
+    echo modulePath
+
+  let resolvedPackageRoot = packageRoot(currentSourcePath)
+  let version = versionFromNimble(resolvedPackageRoot)
+  let sourceRoot = resolvedPackageRoot.parentDir
+
+  let linuxSourceArchive = pickExistingArchive([
+    sourceRoot / "rustcrypto-ffi" / "target" / "release" / RustCryptoCargoArchiveName,
+    sourceRoot / "rustcrypto-ffi" / "target" / "debug" / RustCryptoCargoArchiveName,
+  ])
+  if linuxSourceArchive.len == 0:
+    stderr.writeLine("rustcrypto FFI linux archive not found in target/release or target/debug.")
     quit(QuitFailure)
 
-  let vendorPath = vendorArchivePath(packageRoot)
-  let moduleRoot =
-    if dirExists(packageRoot / "src" / "rustcrypto"):
-      packageRoot / "src" / "rustcrypto"
-    else:
-      packageRoot / "rustcrypto"
-  let moduleVendorPath = moduleRoot / "vendor" / "rustcrypto-ffi" / RustCryptoTargetId / RustCryptoArchiveName
-  let cachePath = cacheArchivePath(version)
+  let wasmSourceArchive = pickExistingArchive([
+    sourceRoot / "rustcrypto-ffi" / "target" / RustCryptoWasmTargetId / "release" / RustCryptoCargoArchiveName,
+    sourceRoot / "rustcrypto-ffi" / "target" / RustCryptoWasmTargetId / "debug" / RustCryptoCargoArchiveName,
+  ])
+  if wasmSourceArchive.len == 0:
+    stderr.writeLine("rustcrypto FFI wasm archive not found in target/wasm32-unknown-unknown/release or target/wasm32-unknown-unknown/debug.")
+    quit(QuitFailure)
 
-  createDir(vendorPath.parentDir)
-  copyFile(sourceArchive, vendorPath)
-
-  createDir(moduleVendorPath.parentDir)
-  copyFile(sourceArchive, moduleVendorPath)
-
-  createDir(cachePath.parentDir)
-  copyFile(sourceArchive, cachePath)
-
-  echo vendorPath
+  syncArchive(linuxSourceArchive, resolvedPackageRoot, version, RustCryptoTargetId, RustCryptoArchiveName)
+  syncArchive(wasmSourceArchive, resolvedPackageRoot, version, RustCryptoWasmTargetId, RustCryptoWasmArchiveName)

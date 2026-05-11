@@ -2,7 +2,10 @@ import std/[os, osproc, strutils]
 
 const
   RustCryptoTargetId* = "linux-x86_64"
-  RustCryptoArchiveName* = "librust_crypto_ffi.a"
+  RustCryptoCargoArchiveName* = "librust_crypto_ffi.a"
+  RustCryptoArchiveName* = "librust_crypto_ffi-linux-x86_64.a"
+  RustCryptoWasmTargetId* = "wasm32-unknown-unknown"
+  RustCryptoWasmArchiveName* = "librust_crypto_ffi-wasm32-unknown-unknown.a"
 
 proc packageRoot*(scriptSourcePath: string): string =
   var dir = scriptSourcePath.parentDir
@@ -13,6 +16,15 @@ proc packageRoot*(scriptSourcePath: string): string =
     if parent == dir:
       return ""
     dir = parent
+
+proc moduleRoot*(packageRoot: string): string =
+  if dirExists(packageRoot / "src" / "rustcrypto"):
+    packageRoot / "src" / "rustcrypto"
+  else:
+    packageRoot / "rustcrypto"
+
+proc moduleVendorArchivePath*(packageRoot: string; targetId, archiveName: string): string =
+  moduleRoot(packageRoot) / "vendor" / "rustcrypto-ffi" / targetId / archiveName
 
 proc versionFromNimble*(packageRoot: string): string =
   let nimblePath = packageRoot / "rustcrypto.nimble"
@@ -25,13 +37,22 @@ proc versionFromNimble*(packageRoot: string): string =
         return trimmed[firstQuote + 1 ..< lastQuote]
   raise newException(ValueError, "failed to parse version from " & nimblePath)
 
-proc moduleVendorArchivePath*(packageRoot: string): string =
-  let moduleRoot =
-    if dirExists(packageRoot / "src" / "rustcrypto"):
-      packageRoot / "src" / "rustcrypto"
+proc cacheRoot*(version: string): string =
+  let base =
+    if getEnv("XDG_CACHE_HOME").len > 0:
+      getEnv("XDG_CACHE_HOME")
     else:
-      packageRoot / "rustcrypto"
-  moduleRoot / "vendor" / "rustcrypto-ffi" / RustCryptoTargetId / RustCryptoArchiveName
+      getHomeDir() / ".cache"
+  base / "rustcrypto" / "ffi" / ("v" & version)
+
+proc cacheArchivePath*(version: string; targetId, archiveName: string): string =
+  cacheRoot(version) / targetId / archiveName
+
+proc cacheArchivePath*(version: string): string =
+  cacheArchivePath(version, RustCryptoTargetId, RustCryptoArchiveName)
+
+proc moduleVendorArchivePath*(packageRoot: string): string =
+  moduleVendorArchivePath(packageRoot, RustCryptoTargetId, RustCryptoArchiveName)
 
 proc vendorArchivePath*(packageRoot: string): string =
   let moduleVendor = moduleVendorArchivePath(packageRoot)
@@ -43,17 +64,6 @@ proc vendorArchivePath*(packageRoot: string): string =
     return rootVendor
 
   moduleVendor
-
-proc cacheRoot*(version: string): string =
-  let base =
-    if getEnv("XDG_CACHE_HOME").len > 0:
-      getEnv("XDG_CACHE_HOME")
-    else:
-      getHomeDir() / ".cache"
-  base / "rustcrypto" / "ffi" / ("v" & version)
-
-proc cacheArchivePath*(version: string): string =
-  cacheRoot(version) / RustCryptoTargetId / RustCryptoArchiveName
 
 proc repositorySlug*(packageRoot: string): string =
   let overrideRepo = getEnv("RUSTCRYPTO_GITHUB_REPOSITORY")
@@ -90,6 +100,18 @@ proc repositorySlug*(packageRoot: string): string =
 
 proc releaseBaseUrl*(repositorySlug: string; version: string): string =
   "https://github.com/" & repositorySlug & "/releases/download/v" & version
+
+proc releaseArchiveFileName*(version: string; targetId: string): string =
+  "rustcrypto-ffi-v" & version & "-" & targetId & ".tar.gz"
+
+proc releaseChecksumFileName*(version: string; targetId: string): string =
+  releaseArchiveFileName(version, targetId) & ".sha256"
+
+proc releaseArchiveUrl*(repositorySlug: string; version: string; targetId: string): string =
+  releaseBaseUrl(repositorySlug, version) & "/" & releaseArchiveFileName(version, targetId)
+
+proc releaseChecksumUrl*(repositorySlug: string; version: string; targetId: string): string =
+  releaseBaseUrl(repositorySlug, version) & "/" & releaseChecksumFileName(version, targetId)
 
 proc resolveWritableArchivePath*(packageRoot: string; version: string): string =
   let modulePath = moduleVendorArchivePath(packageRoot)

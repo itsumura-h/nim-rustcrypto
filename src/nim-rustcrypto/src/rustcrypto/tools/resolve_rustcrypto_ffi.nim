@@ -1,10 +1,10 @@
-import std/[os, osproc, strutils]
+import std/[os, osproc]
 
 import ./rustcrypto_ffi_paths
 
-let packageRoot = packageRoot(currentSourcePath)
-let version = versionFromNimble(packageRoot)
-let vendorPath = vendorArchivePath(packageRoot)
+let resolvedPackageRoot = packageRoot(currentSourcePath)
+let version = versionFromNimble(resolvedPackageRoot)
+let vendorPath = vendorArchivePath(resolvedPackageRoot)
 let cachePath = cacheArchivePath(version)
 
 when defined(linux) and defined(amd64):
@@ -13,10 +13,10 @@ when defined(linux) and defined(amd64):
   elif fileExists(cachePath):
     echo cachePath
   else:
-    let fetchScript = currentSourcePath.parentDir / "fetch_rustcrypto_ffi.sh"
+    let fetchTool = currentSourcePath.parentDir / "fetch_rustcrypto_ffi.nim"
     let fetchResult = execCmdEx(
-      "sh " & quoteShell(fetchScript) & " " & quoteShell(packageRoot),
-      workingDir = packageRoot,
+      "nim r --hints:off --warnings:off " & quoteShell(fetchTool) & " -- " & quoteShell(resolvedPackageRoot),
+      workingDir = resolvedPackageRoot,
       options = {poUsePath, poStdErrToStdOut},
     )
     if fetchResult.exitCode == 0 and fileExists(vendorPath):

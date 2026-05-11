@@ -1,0 +1,144 @@
+---
+description: 34-a-for-wasm32-unknown-unknownブランチでの開発時に読み込む
+alwaysApply: false
+---
+34-a-for-wasm32-unknown-unknownブランチルール
+===
+
+このブランチで実装することは以下の通りです。
+- Rust FFI静的アーカイブの出力ターゲットに `wasm32-unknown-unknown` を追加する
+- Nim側で `when defined(wasm32)` の時に、`wasm32-unknown-unknown` 用のRust FFI静的アーカイブをリンクする
+- 静的アーカイブのファイル名をターゲットごとに区別できるようにする
+- 既存Linux x86_64向け静的アーカイブと、新規Wasm向け静的アーカイブを同じvendor/release設計で扱えるようにする
+- `/application/src/nim-rustcrypto/src/rustcrypto/tools` 配下の取得・同期ツールはLinux開発環境専用の補助ツールなので、このブランチのWasm対応対象外にする
+- アプリ利用側へ `--passL` やRustビルド手順を漏らさない方針を維持する
+- 既存のRust FFI ABI、Nim公開API、暗号アルゴリズム本体は、このブランチの主目的に必要な範囲以外では変更しない
+
+このブランチでは `wasm32-unknown-unknown` の静的アーカイブ配布を追加する。実行環境としてのブラウザ、WASI、Node.js、JavaScript glue code、wasm-bindgen対応は対象外とする。Nimが `wasm32` としてコンパイルされる時に、Rust由来のWasm用アーカイブをリンクできる状態を目標にする。
+
+## 進捗
+- [x] `.cursor/rules/project.mdc` を読み、FFI、ビルド、Nimラッパー、静的アーカイブ出力ルールを確認する
+- [x] `.cursor/rules/branch.mdc` を読み、ブランチルールの形式と記録方針を確認する
+- [x] 現在ブランチ `34-a-for-wasm32-unknown-unknown` に対応する既存ブランチルールがないことを確認する
+- [x] 既存の `27-rust-build-in-actions` と `29-fix-release` のブランチルールを読み、vendor、Release asset、Nimble install設計を確認する
+- [x] `src/nim-rustcrypto/src/rustcrypto/tools` 配下はLinux開発環境専用ツールであり、Wasm対応の実装対象外にする方針を確認する
+- [x] `src/nim-rustcrypto/src/rustcrypto/algorithm/ffi.nim` を読み、現在はLinux amd64以外をコンパイル時エラーにしていることを確認する
+- [x] `.github/workflows/release.yml` を読み、現在のRelease asset生成とvendor同期もLinux x86_64固定であることを確認する
+- [x] Rust公式の `wasm32-unknown-unknown` ターゲット資料とRust Linkage資料を確認し、WasmターゲットではOS前提や標準ライブラリ機能に制限があることを設計へ反映する
+- [x] 実装方針と設計をこのブランチルールに記録する
+- [x] `wasm32-unknown-unknown` で `staticlib` が期待どおり `.a` を生成できるか、最初に最小検証する
+- [x] `wasm32-unknown-unknown` ビルドで失敗する依存関係やAPIがある場合、対象APIのfeature gate、依存feature、またはWasm非対応APIの扱いを設計に追記する
+- [x] `ffi.nim` 側でターゲットIDとアーカイブファイル名を決定する
+- [x] Linux x86_64向けのアーカイブファイル名を新命名へ移行する
+- [x] Wasm向けのアーカイブファイル名、vendor配置、Release asset名を追加する
+- [x] Nim側で `defined(wasm32)` の時に `wasm32-unknown-unknown` 用アーカイブを解決してリンクする
+- [x] Release workflowでLinux x86_64と `wasm32-unknown-unknown` の両方の静的アーカイブを生成し、Release assetに含める
+- [x] Linux x86_64の既存Nimテストが新命名後も通ることを確認する
+- [x] Wasm向けは少なくともRust側のtarget buildと、Nim側のcompile/link相当の検証を追加する
+
+## 参考資料
+- Rust `wasm32-unknown-unknown` platform support: https://doc.rust-lang.org/rustc/platform-support/wasm32-unknown-unknown.html
+- Rust Reference Linkage: https://doc.rust-lang.org/reference/linkage.html
+- Rust Blog: C ABI Changes for `wasm32-unknown-unknown`: https://blog.rust-lang.org/2025/04/04/c-abi-changes-for-wasm32-unknown-unknown/
+- Nim Manual: https://nim-lang.org/docs/manual.html
+- Nim compile-time symbols: https://nim-lang.org/docs/nimc.html
+- Nimble .nimble file reference: https://nim-lang.github.io/nimble/nimble-reference.html
+- GitHub Actions workflow syntax: https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax
+- GitHub Actions Rust build/test: https://docs.github.com/en/actions/tutorials/build-and-test-code/rust
+
+## 調査結果・設計まとめ
+- 現在のRust crateは `src/rustcrypto-ffi/Cargo.toml` で `crate-type = ["staticlib"]`、`name = "rust_crypto_ffi"` を指定している。成果物をNimパッケージへ同封する時は、Cargoのデフォルト出力名をそのまま使わず、必ず環境を明記したアーカイブ名へリネームする。
+- `/application/src/nim-rustcrypto/src/rustcrypto/tools` 配下はLinux開発環境でのみ動く取得・同期用ツールであり、このブランチではWasm対応の対象外とする。Wasm向けの通常リンク解決は `ffi.nim` とvendor配置、CI/Release生成物で扱う。
+- 現在の `ffi.nim` は `when not defined(linux) or not defined(amd64)` でLinux amd64以外をコンパイル時エラーにしている。Wasm対応ではここを `linux/amd64` と `wasm32` の2経路に分ける必要がある。
+- `.github/workflows/release.yml` は現在Linux x86_64向けの成果物をvendorへコピーし、`rustcrypto-ffi-v{version}-linux-x86_64.tar.gz` を作成している。Wasm対応ではmatrixまたは明示stepで `--target wasm32-unknown-unknown` を追加し、Linux/Wasmのどちらも環境名を含むファイル名で保存する。
+- Rust公式資料では `wasm32-unknown-unknown` はホスト由来のimportを持たないWebAssembly向けターゲットであり、標準ライブラリは提供されるがOSやランダム性、ファイルシステム、スレッドなどの機能には制限がある。既存FFI内の乱数生成APIや証明書/鍵生成系がWasmでそのままビルドできるかは、実装の最初に必ず検証する。
+- Rust BlogのC ABI変更記事により、`wasm32-unknown-unknown` の `extern "C"` ABIはRustバージョンによって注意が必要である。FFI公開関数は既存どおり整数、ポインタ、長さだけに抑え、構造体や複雑なABIを新たに公開しない。
+- Wasmでは `bcrypt` が `getrandom 0.4` を引くため、依存を切り離して `bcrypt_wasm` のスタブを用意した。Wasm向けは `RUSTCRYPTO_ERR_RANDOM_FAILED` を返し、Linux向け実装とABI名だけを揃える。
+- `aead` 系、`ecdsa` 系、`rsa` 系、`password-hash` 系の crate は default feature のままだと `getrandom` を引くため、Wasm向けには default feature を外し、必要最小限の feature に寄せた。
+
+### ターゲットIDとファイル名の設計
+- ターゲットIDは既存の `linux-x86_64` を維持し、新規に `wasm32-unknown-unknown` を追加する。
+- 静的アーカイブ名はターゲットを含む名前へ変更する。
+  - Linux x86_64: `librust_crypto_ffi-linux-x86_64.a`
+  - Wasm: `librust_crypto_ffi-wasm32-unknown-unknown.a`
+- Cargoが生成するデフォルト出力名は配布物・vendor・Release assetでは使わない。コピーまたは同期する段階で、必ずターゲット別ファイル名へリネームする。
+- vendor配置は以下を正規配置とする。
+  - `src/nim-rustcrypto/src/rustcrypto/vendor/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi-linux-x86_64.a`
+  - `src/nim-rustcrypto/src/rustcrypto/vendor/rustcrypto-ffi/wasm32-unknown-unknown/librust_crypto_ffi-wasm32-unknown-unknown.a`
+- 旧来の環境名なしアーカイブ名は、後方互換探索先としても使わない。Linux x86_64もWasmも、リンク対象は必ずターゲット付きファイル名にする。
+- Release asset名は既存形式を維持し、ターゲットIDで分ける。
+  - `rustcrypto-ffi-v{version}-linux-x86_64.tar.gz`
+  - `rustcrypto-ffi-v{version}-wasm32-unknown-unknown.tar.gz`
+- tar.gz内部構造は以下にする。
+  - `rustcrypto-ffi/linux-x86_64/librust_crypto_ffi-linux-x86_64.a`
+  - `rustcrypto-ffi/wasm32-unknown-unknown/librust_crypto_ffi-wasm32-unknown-unknown.a`
+
+### Nim側ターゲット解決設計
+- `/application/src/nim-rustcrypto/src/rustcrypto/tools` 配下はLinux開発環境専用ツールなので、このブランチでは変更対象にしない。
+- `ffi.nim` に、コンパイル時ターゲットからRustCrypto target idとarchive nameを決める仕組みを置く。
+- 想定する分岐は以下とする。
+  ```nim
+  when defined(linux) and defined(amd64):
+    const RustCryptoTargetId* = "linux-x86_64"
+    const RustCryptoArchiveName* = "librust_crypto_ffi-linux-x86_64.a"
+  elif defined(wasm32):
+    const RustCryptoTargetId* = "wasm32-unknown-unknown"
+    const RustCryptoArchiveName* = "librust_crypto_ffi-wasm32-unknown-unknown.a"
+  else:
+    {.error: "rustcrypto FFI static archive does not support this target yet.".}
+  ```
+- `ffi.nim` はLinux amd64とWasm32を許可する。未対応ターゲットでは、静的アーカイブ欠落ではなく「未対応ターゲット」として明示的に失敗させる。
+- `ffi.nim` は `currentSourcePath` から見た `../vendor/rustcrypto-ffi/{targetId}/{archiveName}` を直接組み立て、`{.passL: rustCryptoStaticLib.}` に閉じ込める。アプリ利用側へリンク指定を要求しない。
+- Wasmビルド時にLinux用パスを誤って返してはならない。`defined(wasm32)` の時は `wasm32-unknown-unknown` 以外のvendorパスを使わない。
+- 環境名なしアーカイブ名へのfallbackは作らない。
+- Wasmコンパイル時は `ffi.nim` が `currentSourcePath` 基準の vendor パスを直接使う。Linux向けの `resolve_rustcrypto_ffi.nim` は使わない。
+
+### Rust/Wasmビルド設計
+- 実装の最初に以下を検証した。
+  1. `rustup target add wasm32-unknown-unknown`
+  2. `cd /application/src/rustcrypto-ffi`
+  3. `cargo build --release --lib --target wasm32-unknown-unknown`
+  4. 生成された静的アーカイブを `librust_crypto_ffi-wasm32-unknown-unknown.a` としてvendorへ配置できるか確認する
+- `staticlib` はWasmターゲットで `.a` を生成できた。
+- `bcrypt` はWasmで `getrandom 0.4` を引くため、Wasmでは依存を切り離し、`bcrypt_wasm` のスタブにした。
+- `aead` 系、`ecdsa` 系、`rsa` 系、`password-hash` 系の crate は default feature をそのまま使うと `getrandom` を引いたため、Wasm向けには default feature を外して必要最小限の feature に寄せた。
+- 乱数を必要とするRust FFI関数は `cfg(not(target_arch = "wasm32"))` に分け、Wasmでは明示的に `RUSTCRYPTO_ERR_RANDOM_FAILED` を返す。
+- Wasm向けにFFI関数を減らしても、既存Linux x86_64のABIと動作を壊していない。
+- `panic = abort` は今回不要だったため未変更。FFI境界へpanicを漏らさないルールは維持した。
+
+### GitHub Actions設計
+- Release workflowはLinux x86_64と `wasm32-unknown-unknown` を両方ビルドする。
+- Rust toolchain setup後に `rustup target add wasm32-unknown-unknown` を実行する。
+- Linux x86_64のビルドは既存どおり `cargo build --release --lib` を使う。
+- Wasmのビルドは `cargo build --release --lib --target wasm32-unknown-unknown` を使う。
+- 生成物の存在確認はターゲットごとに行う。
+  - Linux x86_64向けビルド成果物を `librust_crypto_ffi-linux-x86_64.a` としてコピーできること
+  - Wasm向けビルド成果物を `librust_crypto_ffi-wasm32-unknown-unknown.a` としてコピーできること
+- vendor同期時にターゲット付きファイル名へリネームする。
+- Release asset作成はターゲットごとに行い、それぞれ `.sha256` を作成する。
+- Linux x86_64の既存consumer検証は維持する。Wasm向けconsumer検証はNimのWasm toolchainとリンカ要件が絡むため、まずはRust target buildとNim compile/link相当を最小受け入れ条件にする。
+- PR用の `.github/workflows/test.yml` がDocker内 `test.sh` を呼ぶ設計なら、Wasm build検証をDocker内に入れるか、Release workflow側だけに入れるかを実装時に決める。通常PRで検出したいので、最終的にはPR CIでもWasm target buildを走らせる。
+
+### リリース設計
+- `/application/src/nim-rustcrypto/src/rustcrypto/tools` 配下の `fetch_rustcrypto_ffi.*` と `sync_local_rustcrypto_ffi.nim` はLinux開発環境専用ツールとして維持し、Wasm対応対象には含めない。
+- `archive_file_name` は `rustcrypto-ffi-v{version}-{targetId}.tar.gz` とする。
+- checksum生成はLinux x86_64とWasmの両方で必須にする。
+- Release assetが存在しない場合に、Wasm向けだけtools配下のfallbackでビルドする導線は作らない。Wasm向け成果物はCI/Releaseで生成し、vendorまたはRelease assetとして明示的に扱う。
+
+### 受け入れ条件
+- Linux x86_64で既存のNimテストが通る。
+- Linux x86_64のリンク対象が `librust_crypto_ffi-linux-x86_64.a` になる。
+- `wasm32` 定義時のNimリンク対象が `librust_crypto_ffi-wasm32-unknown-unknown.a` になる。
+- Linux x86_64向けとWasm向けのvendor/Release assetが、ターゲットIDとファイル名で明確に区別される。
+- `cargo build --release --lib --target wasm32-unknown-unknown` が成功し、Wasm向け静的アーカイブが生成される。
+- Release workflowで `rustcrypto-ffi-v{version}-linux-x86_64.tar.gz` と `rustcrypto-ffi-v{version}-wasm32-unknown-unknown.tar.gz` の両方が生成される。
+- Linux x86_64の既存利用者導線を壊さない。既存の `rustcrypto FFI static archive is not available` は、Linux x86_64通常導線では発生しない。
+- 未対応ターゲット、静的アーカイブ欠落、Release asset取得失敗、Wasm依存関係ビルド失敗は、それぞれ原因が読めるエラーメッセージにする。
+
+### 実装時の注意
+- このブランチルール作成時点では実装に進まない。
+- 実装時も `git add`、`git commit` は行わない。
+- Rustビルドは必ず `/application/src/rustcrypto-ffi` で実行する。
+- NimビルドとNimble検証は必ず `/application/src/nim-rustcrypto` または一時利用側プロジェクトで実行する。
+- Wasm対応では、Linux x86_64用を含めて環境名なしアーカイブ名へのfallbackを作らない。生成物とリンク対象はターゲット付きファイル名に統一する。
+- `wasm32-unknown-unknown` のビルド結果が静的アーカイブとして成立しない場合は、実装を進めず、この設計書を更新してから方針確認する。

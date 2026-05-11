@@ -7,6 +7,10 @@ echo "==> Rust tests"
 cd "$repo_root/src/rustcrypto-ffi"
 cargo test
 cargo build --release --lib
+rustup target add wasm32-unknown-unknown
+cargo build --release --lib --target wasm32-unknown-unknown
+test -s target/release/librust_crypto_ffi.a
+test -s target/wasm32-unknown-unknown/release/librust_crypto_ffi.a
 
 echo "==> Sync Rust static library"
 cd "$repo_root/src/nim-rustcrypto"

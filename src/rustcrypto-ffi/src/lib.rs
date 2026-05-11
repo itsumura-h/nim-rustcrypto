@@ -4,7 +4,10 @@ mod aead_common;
 mod aes_gcm;
 mod aes_gcm_siv;
 mod argon2;
+#[cfg(not(target_arch = "wasm32"))]
 mod bcrypt;
+#[cfg(target_arch = "wasm32")]
+mod bcrypt_wasm;
 mod blake2;
 mod chacha20poly1305;
 mod ed25519;
@@ -21,6 +24,10 @@ mod schnorr;
 mod scrypt;
 mod secp256k1;
 mod x509;
+
+#[cfg(target_arch = "wasm32")]
+#[allow(unused_imports)]
+pub(crate) use bcrypt_wasm as bcrypt;
 
 pub const RUSTCRYPTO_OK: c_int = 0;
 pub const RUSTCRYPTO_ERR_NULL_OUTPUT: c_int = 1;
