@@ -1,8 +1,6 @@
 import std/[os, strutils]
 
-when not defined(linux) or not defined(amd64):
-  {.error: "rustcrypto FFI static archive currently supports only Linux x86_64.".}
-else:
+when defined(linux) and defined(amd64):
   const rustCryptoResolveScript = currentSourcePath.parentDir.parentDir / "tools" / "resolve_rustcrypto_ffi.nim"
   const rustCryptoStaticLib* = staticExec(
     "nim r --hints:off --warnings:off " & rustCryptoResolveScript
@@ -12,6 +10,18 @@ else:
     {.error: "rustcrypto FFI static archive is not available. Automatic download from GitHub Release failed; run `nimble fetchRustFfi` or `nimble buildRustFfiLocal` from `/application/src/nim-rustcrypto`.".}
 
   {.passL: rustCryptoStaticLib.}
+elif defined(wasm32):
+  const rustCryptoStaticLib* =
+    currentSourcePath.parentDir.parentDir / "vendor" / "rustcrypto-ffi" /
+    "wasm32-unknown-unknown" / "librust_crypto_ffi-wasm32-unknown-unknown.a"
+
+  static:
+    if not fileExists(rustCryptoStaticLib):
+      {.error: "rustcrypto FFI static archive is not available for wasm32-unknown-unknown. Place src/rustcrypto/vendor/rustcrypto-ffi/wasm32-unknown-unknown/librust_crypto_ffi-wasm32-unknown-unknown.a before compiling.".}
+
+  {.passL: rustCryptoStaticLib.}
+else:
+  {.error: "rustcrypto FFI static archive currently supports only Linux x86_64 and wasm32-unknown-unknown.".}
 
 const
   SHA256DigestLen* = 32

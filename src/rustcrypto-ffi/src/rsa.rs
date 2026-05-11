@@ -1,3 +1,5 @@
+#[cfg(target_arch = "wasm32")]
+use crate::RUSTCRYPTO_ERR_RANDOM_FAILED;
 use crate::{
     RUSTCRYPTO_ERR_DECRYPTION_FAILED, RUSTCRYPTO_ERR_INVALID_LENGTH,
     RUSTCRYPTO_ERR_INVALID_PARAMETER, RUSTCRYPTO_ERR_NULL_INPUT_WITH_DATA,
@@ -5,7 +7,12 @@ use crate::{
     RUSTCRYPTO_ERR_VERIFICATION_FAILED, RUSTCRYPTO_OK, aead_common,
 };
 use core::ffi::c_int;
+#[cfg(not(target_arch = "wasm32"))]
 use rand_core::OsRng;
+#[cfg(not(target_arch = "wasm32"))]
+use rsa::pss::SigningKey as PssSigningKey;
+#[cfg(not(target_arch = "wasm32"))]
+use rsa::signature::hazmat::RandomizedPrehashSigner;
 use rsa::{
     Oaep, Pkcs1v15Encrypt, RsaPrivateKey, RsaPublicKey,
     pkcs1v15::{
@@ -13,13 +20,11 @@ use rsa::{
         VerifyingKey as Pkcs1v15VerifyingKey,
     },
     pkcs8::{DecodePrivateKey, DecodePublicKey, EncodePrivateKey, EncodePublicKey},
-    pss::{
-        Signature as PssSignature, SigningKey as PssSigningKey, VerifyingKey as PssVerifyingKey,
-    },
+    pss::{Signature as PssSignature, VerifyingKey as PssVerifyingKey},
     sha2::{Digest, Sha256},
     signature::{
         SignatureEncoding,
-        hazmat::{PrehashSigner, PrehashVerifier, RandomizedPrehashSigner},
+        hazmat::{PrehashSigner, PrehashVerifier},
     },
     traits::PublicKeyParts,
 };
@@ -92,6 +97,7 @@ fn map_sign_verify_error(err: rsa::errors::Error) -> c_int {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn map_encrypt_error(err: rsa::errors::Error) -> c_int {
     match err {
         rsa::errors::Error::MessageTooLong => RUSTCRYPTO_ERR_INVALID_LENGTH,
@@ -119,10 +125,19 @@ fn digest_message(message: *const u8, message_len: usize) -> Result<[u8; 32], c_
 }
 
 fn derive_pss_signature(private_key: &RsaPrivateKey, digest: &[u8]) -> Result<PssSignature, c_int> {
-    let signing_key = PssSigningKey::<Sha256>::new(private_key.clone());
-    signing_key
-        .sign_prehash_with_rng(&mut OsRng, digest)
-        .map_err(|_| RUSTCRYPTO_ERR_INVALID_PARAMETER)
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (private_key, digest);
+        return Err(crate::RUSTCRYPTO_ERR_RANDOM_FAILED);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let signing_key = PssSigningKey::<Sha256>::new(private_key.clone());
+        signing_key
+            .sign_prehash_with_rng(&mut OsRng, digest)
+            .map_err(|_| RUSTCRYPTO_ERR_INVALID_PARAMETER)
+    }
 }
 
 fn verify_pss_signature(
@@ -427,24 +442,33 @@ pub(crate) fn rsa_oaep_sha256_encrypt_impl(
         Err(err) => return err,
     };
 
-    let padding = match label {
-        Some(label) => Oaep::new_with_label::<Sha256, _>(label),
-        None => Oaep::new::<Sha256>(),
-    };
-    let ciphertext = match public_key.encrypt(&mut OsRng, padding, plaintext) {
-        Ok(ciphertext) => ciphertext,
-        Err(err) => return map_encrypt_error(err),
-    };
-
-    let output = match aead_common::output_buffer(output, output_len, ciphertext.len()) {
-        Ok(output) => output,
-        Err(err) => return err,
-    };
-    output.copy_from_slice(&ciphertext);
-    unsafe {
-        *written_len = ciphertext.len();
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (plaintext, public_key, label, output_len);
+        return RUSTCRYPTO_ERR_RANDOM_FAILED;
     }
-    RUSTCRYPTO_OK
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let padding = match label {
+            Some(label) => Oaep::new_with_label::<Sha256, _>(label),
+            None => Oaep::new::<Sha256>(),
+        };
+        let ciphertext = match public_key.encrypt(&mut OsRng, padding, plaintext) {
+            Ok(ciphertext) => ciphertext,
+            Err(err) => return map_encrypt_error(err),
+        };
+
+        let output = match aead_common::output_buffer(output, output_len, ciphertext.len()) {
+            Ok(output) => output,
+            Err(err) => return err,
+        };
+        output.copy_from_slice(&ciphertext);
+        unsafe {
+            *written_len = ciphertext.len();
+        }
+        RUSTCRYPTO_OK
+    }
 }
 
 pub(crate) fn rsa_oaep_sha256_decrypt_impl(
@@ -520,19 +544,28 @@ pub(crate) fn rsa_pkcs1v15_encrypt_impl(
         Ok(public_key) => public_key,
         Err(err) => return err,
     };
-    let ciphertext = match public_key.encrypt(&mut OsRng, Pkcs1v15Encrypt, plaintext) {
-        Ok(ciphertext) => ciphertext,
-        Err(err) => return map_encrypt_error(err),
-    };
-    let output = match aead_common::output_buffer(output, output_len, ciphertext.len()) {
-        Ok(output) => output,
-        Err(err) => return err,
-    };
-    output.copy_from_slice(&ciphertext);
-    unsafe {
-        *written_len = ciphertext.len();
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (plaintext, public_key, output_len);
+        return RUSTCRYPTO_ERR_RANDOM_FAILED;
     }
-    RUSTCRYPTO_OK
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let ciphertext = match public_key.encrypt(&mut OsRng, Pkcs1v15Encrypt, plaintext) {
+            Ok(ciphertext) => ciphertext,
+            Err(err) => return map_encrypt_error(err),
+        };
+        let output = match aead_common::output_buffer(output, output_len, ciphertext.len()) {
+            Ok(output) => output,
+            Err(err) => return err,
+        };
+        output.copy_from_slice(&ciphertext);
+        unsafe {
+            *written_len = ciphertext.len();
+        }
+        RUSTCRYPTO_OK
+    }
 }
 
 pub(crate) fn rsa_pkcs1v15_decrypt_impl(
