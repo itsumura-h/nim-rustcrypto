@@ -4,18 +4,22 @@ const rustCryptoResolveScript = currentSourcePath.parentDir.parentDir / "tools" 
 
 when defined(linux) and defined(amd64):
   const rustCryptoTargetArg = "linux-x86_64"
+elif defined(wasi) or defined(rustcryptoWasi):
+  const rustCryptoTargetArg = "wasm32-wasip1"
 elif defined(wasm32):
   const rustCryptoTargetArg = "wasm32-unknown-unknown"
 else:
-  {.error: "rustcrypto FFI static archive currently supports only Linux x86_64 and wasm32-unknown-unknown.".}
+  {.error: "rustcrypto FFI static archive currently supports only Linux x86_64, wasm32-unknown-unknown, and wasm32-wasip1.".}
 
 const rustCryptoStaticLib* = staticExec(
-  "nim r --hints:off --warnings:off " & rustCryptoResolveScript & " -- " & rustCryptoTargetArg & " 2>/dev/null"
+  "nim r --hints:off --warnings:off " & rustCryptoResolveScript & " -- " & rustCryptoTargetArg
 ).strip
 
 when rustCryptoStaticLib.len == 0:
   when defined(linux) and defined(amd64):
     {.error: "rustcrypto FFI static archive is not available for Linux x86_64. Run `nimble fetchRustFfi` or `nimble buildRustFfiLocal` from `/application/src/nim-rustcrypto`.".}
+  elif defined(wasi) or defined(rustcryptoWasi):
+    {.error: "rustcrypto FFI static archive is not available for wasm32-wasip1. Run `nimble fetchRustFfi` from `/application/src/nim-rustcrypto`, or place the wasm32-wasip1 vendor/cache archive before compiling.".}
   elif defined(wasm32):
     {.error: "rustcrypto FFI static archive is not available for wasm32-unknown-unknown. Run `nimble fetchRustFfi` from `/application/src/nim-rustcrypto`, or place the vendor/cache archive before compiling.".}
 

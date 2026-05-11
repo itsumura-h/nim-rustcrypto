@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.1.2"
+version       = "0.1.3"
 author        = "Anonymous"
 description   = "A new awesome nimble package"
 license       = "MIT"
@@ -28,5 +28,8 @@ when defined(linux) and defined(amd64):
     exec fetchRustFfiCommand()
 
 task buildRustFfiLocal, "Build Rust FFI static archive locally and sync it":
+  exec "rustup target add wasm32-unknown-unknown wasm32-wasip1"
   exec "cd ../rustcrypto-ffi && cargo build --release --lib"
+  exec "cd ../rustcrypto-ffi && cargo build --release --lib --target wasm32-unknown-unknown"
+  exec "cd ../rustcrypto-ffi && cargo build --release --lib --target wasm32-wasip1"
   exec "nim r --hints:off --warnings:off src/rustcrypto/tools/sync_local_rustcrypto_ffi.nim"

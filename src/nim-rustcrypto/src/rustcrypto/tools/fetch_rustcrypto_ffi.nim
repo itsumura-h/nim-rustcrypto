@@ -5,9 +5,11 @@ import ./rustcrypto_ffi_paths
 when not defined(linux) or not defined(amd64):
   {.error: "rustcrypto FFI download currently supports only Linux x86_64.".}
 else:
-  const
-    RustCryptoWasmTargetId = "wasm32-unknown-unknown"
-    RustCryptoWasmArchiveName = "librust_crypto_ffi-wasm32-unknown-unknown.a"
+  const targetSpecs = [
+    (RustCryptoTargetId, RustCryptoArchiveName),
+    (RustCryptoWasmTargetId, RustCryptoWasmArchiveName),
+    (RustCryptoWasiTargetId, RustCryptoWasiArchiveName),
+  ]
 
   proc runCommand(command: string; workingDir = ""): tuple[success: bool; output: string] =
     let commandResult = execCmdEx(
@@ -44,32 +46,23 @@ else:
     tempDirResult.output.strip
 
   proc moduleArchivesExist(packageRoot: string): bool =
-    let linuxArchive = moduleVendorArchivePath(packageRoot)
-    let wasmArchive = moduleVendorArchivePath(
-      packageRoot,
-      RustCryptoWasmTargetId,
-      RustCryptoWasmArchiveName,
-    )
-    fileExists(linuxArchive) and fileExists(wasmArchive)
+    for spec in targetSpecs:
+      if not fileExists(moduleVendorArchivePath(packageRoot, spec[0], spec[1])):
+        return false
+    true
 
   proc cacheArchivesExist(version: string): bool =
-    let linuxArchive = cacheArchivePath(version)
-    let wasmArchive = cacheArchivePath(version, RustCryptoWasmTargetId, RustCryptoWasmArchiveName)
-    fileExists(linuxArchive) and fileExists(wasmArchive)
+    for spec in targetSpecs:
+      if not fileExists(cacheArchivePath(version, spec[0], spec[1])):
+        return false
+    true
 
   proc copyCacheToModule(packageRoot: string; version: string) =
-    let linuxModuleArchive = moduleVendorArchivePath(packageRoot)
-    let wasmModuleArchive = moduleVendorArchivePath(
-      packageRoot,
-      RustCryptoWasmTargetId,
-      RustCryptoWasmArchiveName,
-    )
-    let linuxCacheArchive = cacheArchivePath(version)
-    let wasmCacheArchive = cacheArchivePath(version, RustCryptoWasmTargetId, RustCryptoWasmArchiveName)
-    createDir(linuxModuleArchive.parentDir)
-    createDir(wasmModuleArchive.parentDir)
-    copyFile(linuxCacheArchive, linuxModuleArchive)
-    copyFile(wasmCacheArchive, wasmModuleArchive)
+    for spec in targetSpecs:
+      let moduleArchive = moduleVendorArchivePath(packageRoot, spec[0], spec[1])
+      let cacheArchive = cacheArchivePath(version, spec[0], spec[1])
+      createDir(moduleArchive.parentDir)
+      copyFile(cacheArchive, moduleArchive)
 
   proc tryDownloadReleaseArchives(
       packageRoot: string;
@@ -82,48 +75,32 @@ else:
     let releaseRoot = workRoot / "release"
     createDir(releaseRoot)
 
-    let linuxChecksumFileName = releaseChecksumFileName(version, RustCryptoTargetId)
-    let wasmChecksumFileName = releaseChecksumFileName(version, RustCryptoWasmTargetId)
+    for spec in targetSpecs:
+      let checksumFileName = releaseChecksumFileName(version, spec[0])
+      let checksumPath = releaseRoot / checksumFileName
+      let archivePath = releaseRoot / releaseArchiveFileName(version, spec[0])
 
-    let linuxChecksumPath = releaseRoot / linuxChecksumFileName
-    let wasmChecksumPath = releaseRoot / wasmChecksumFileName
-    let linuxArchivePath = releaseRoot / releaseArchiveFileName(version, RustCryptoTargetId)
-    let wasmArchivePath = releaseRoot / releaseArchiveFileName(version, RustCryptoWasmTargetId)
+      if not downloadFile(releaseArchiveUrl(repositorySlugValue, version, spec[0]), archivePath):
+        return false
+      if not downloadFile(releaseChecksumUrl(repositorySlugValue, version, spec[0]), checksumPath):
+        return false
 
-    if not downloadFile(releaseArchiveUrl(repositorySlugValue, version, RustCryptoTargetId), linuxArchivePath):
-      return false
-    if not downloadFile(releaseChecksumUrl(repositorySlugValue, version, RustCryptoTargetId), linuxChecksumPath):
-      return false
-    if not downloadFile(releaseArchiveUrl(repositorySlugValue, version, RustCryptoWasmTargetId), wasmArchivePath):
-      return false
-    if not downloadFile(releaseChecksumUrl(repositorySlugValue, version, RustCryptoWasmTargetId), wasmChecksumPath):
-      return false
+    for spec in targetSpecs:
+      if not checksumFile(releaseRoot, releaseChecksumFileName(version, spec[0])):
+        return false
 
-    if not checksumFile(releaseRoot, linuxChecksumFileName):
-      return false
-    if not checksumFile(releaseRoot, wasmChecksumFileName):
-      return false
+    for spec in targetSpecs:
+      let archivePath = releaseRoot / releaseArchiveFileName(version, spec[0])
+      if not extractArchive(archivePath, vendorRoot):
+        return false
 
-    if not extractArchive(linuxArchivePath, vendorRoot):
-      return false
-    if not extractArchive(wasmArchivePath, vendorRoot):
-      return false
+    for spec in targetSpecs:
+      let moduleArchive = moduleVendorArchivePath(packageRoot, spec[0], spec[1])
+      let cacheArchive = cacheArchivePath(version, spec[0], spec[1])
+      if not copyArchive(moduleArchive, cacheArchive):
+        return false
 
-    let linuxModuleArchive = moduleVendorArchivePath(packageRoot)
-    let wasmModuleArchive = moduleVendorArchivePath(
-      packageRoot,
-      RustCryptoWasmTargetId,
-      RustCryptoWasmArchiveName,
-    )
-    let linuxCacheArchive = cacheArchivePath(version)
-    let wasmCacheArchive = cacheArchivePath(version, RustCryptoWasmTargetId, RustCryptoWasmArchiveName)
-
-    if not copyArchive(linuxModuleArchive, linuxCacheArchive):
-      return false
-    if not copyArchive(wasmModuleArchive, wasmCacheArchive):
-      return false
-
-    stdout.writeLine(linuxModuleArchive)
+    stdout.writeLine(moduleVendorArchivePath(packageRoot, RustCryptoTargetId, RustCryptoArchiveName))
     true
 
   proc tryBuildLocalArchive(
