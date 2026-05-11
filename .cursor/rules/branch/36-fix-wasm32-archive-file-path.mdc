@@ -1,0 +1,169 @@
+---
+description: 36-fix-wasm32-archive-file-pathブランチでの開発時に読み込む
+alwaysApply: false
+---
+36-fix-wasm32-archive-file-pathブランチルール
+===
+
+このブランチで実装することは以下の通りです。
+- `resolve_rustcrypto_ffi.nim` をLinux x86_64専用の解決器から、ターゲット引数を受け取る静的アーカイブ解決器へ拡張する
+- `resolve_rustcrypto_ffi.nim linux` または `resolve_rustcrypto_ffi.nim linux-x86_64` でLinux x86_64向け静的アーカイブのpathを返す
+- `resolve_rustcrypto_ffi.nim wasm` または `resolve_rustcrypto_ffi.nim wasm32-unknown-unknown` でWasm向け静的アーカイブのpathを返す
+- `ffi.nim` からLinux/Wasmそれぞれのコンパイルターゲットに応じて `resolve_rustcrypto_ffi.nim` を引数付きで呼び出す
+- GitHub Actions Release asset、Nimble install時のfetch、vendor/cache配置、`ffi.nim` のリンク解決で同じターゲットIDとアーカイブ名を使う
+- アプリ利用側へ `--passL` やRust静的アーカイブpath指定を漏らさない方針を維持する
+- 既存のRust FFI ABI、Nim公開API、暗号アルゴリズム本体は、このブランチの主目的に必要な範囲以外では変更しない
+
+このブランチでは、Wasm向け静的アーカイブそのもののビルド追加や暗号APIのWasm対応拡張ではなく、既にRelease workflow/fetch/vendorで扱われているLinux x86_64向けと `wasm32-unknown-unknown` 向けの静的アーカイブを、Nimコンパイル時に正しいpathへ解決することを主目的にする。
+
+## 進捗
+- [x] `.cursor/rules/project.mdc` を読み、FFI、ビルド、Nimラッパー、リンク指定をアプリ側へ漏らさない方針を確認する
+- [x] `.cursor/rules/branch.mdc` を読み、ブランチルールの形式と記録方針を確認する
+- [x] 現在ブランチ `36-fix-wasm32-archive-file-path` に対応する既存ブランチルールがないことを確認する
+- [x] `.github/workflows/release.yml` を読み、Linux x86_64と `wasm32-unknown-unknown` の静的アーカイブがターゲット別にビルド・vendor同期・Release asset化されていることを確認する
+- [x] `src/nim-rustcrypto/rustcrypto.nimble` を読み、Linux amd64の `before install` で `fetch_rustcrypto_ffi.nim` が走ることを確認する
+- [x] `src/nim-rustcrypto/src/rustcrypto/tools/fetch_rustcrypto_ffi.nim` を読み、Linux/Wasm両方のRelease assetを取得し、module vendorとcacheへ配置する設計を確認する
+- [x] `src/nim-rustcrypto/src/rustcrypto/tools/rustcrypto_ffi_paths.nim` を読み、Linux/WasmのターゲットID・アーカイブ名・vendor/cache path helperが存在することを確認する
+- [x] `src/nim-rustcrypto/src/rustcrypto/tools/resolve_rustcrypto_ffi.nim` を読み、現状はLinux amd64限定で、Wasm向け引数やpath解決を持たないことを確認する
+- [x] `src/nim-rustcrypto/src/rustcrypto/algorithm/ffi.nim` を読み、Linuxではresolverを使う一方、Wasmではvendor pathを直接組み立てていることを確認する
+- [x] Nim/Rust公式資料を確認し、`passL`、`staticExec`、`wasm32-unknown-unknown` の注意点を設計へ反映する
+- [x] 実装方針と設計をこのブランチルールに記録する
+- [x] `resolve_rustcrypto_ffi.nim` の引数仕様を実装する
+- [x] `resolve_rustcrypto_ffi.nim` からLinux x86_64向けpathを返す既存挙動を維持する
+- [x] `resolve_rustcrypto_ffi.nim` からWasm向けpathを返せるようにする
+- [x] `ffi.nim` のLinux/Wasm分岐を、どちらもresolver経由でpath解決する形に揃える
+- [x] Linux x86_64で既存Nimテストが通ることを確認する
+- [x] Wasm向けは少なくともresolver単体がWasm用vendor/cache pathを返すことを確認する
+
+## 参考資料
+- Nim Manual: https://nim-lang.org/docs/manual.html
+- Nim system module `staticExec`: https://nim-lang.org/docs/system.html
+- Nim Compiler User Guide: https://nim-lang.org/docs/nimc.html
+- Nimble .nimble file reference: https://nim-lang.github.io/nimble/nimble-reference.html
+- Rust `wasm32-unknown-unknown` platform support: https://doc.rust-lang.org/rustc/platform-support/wasm32-unknown-unknown.html
+- Rust Reference Linkage: https://doc.rust-lang.org/reference/linkage.html
+- Rust Blog: C ABI Changes for `wasm32-unknown-unknown`: https://blog.rust-lang.org/2025/04/04/c-abi-changes-for-wasm32-unknown-unknown/
+- GitHub Actions workflow syntax: https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax
+
+## 調査結果・設計まとめ
+- `.github/workflows/release.yml` はLinux x86_64と `wasm32-unknown-unknown` の両方をビルドしている。生成元は以下である。
+  - Linux x86_64: `src/rustcrypto-ffi/target/release/librust_crypto_ffi.a`
+  - Wasm: `src/rustcrypto-ffi/target/wasm32-unknown-unknown/release/librust_crypto_ffi.a`
+- Release workflowの正規vendor配置は以下である。
+  - Linux x86_64: `src/nim-rustcrypto/src/rustcrypto/vendor/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi-linux-x86_64.a`
+  - Wasm: `src/nim-rustcrypto/src/rustcrypto/vendor/rustcrypto-ffi/wasm32-unknown-unknown/librust_crypto_ffi-wasm32-unknown-unknown.a`
+- Release asset名はターゲットIDを含む。
+  - `rustcrypto-ffi-v{version}-linux-x86_64.tar.gz`
+  - `rustcrypto-ffi-v{version}-wasm32-unknown-unknown.tar.gz`
+- `fetch_rustcrypto_ffi.nim` はLinux amd64環境で実行される補助ツールだが、取得対象はLinux/Wasmの両方である。`moduleArchivesExist`、`cacheArchivesExist`、`copyCacheToModule`、`tryDownloadReleaseArchives` は両ターゲットのアーカイブを扱う。
+- `rustcrypto_ffi_paths.nim` にはLinux/Wasm両方の定数があるため、ターゲット別path解決はこのhelperへ寄せる。
+  - `RustCryptoTargetId = "linux-x86_64"`
+  - `RustCryptoArchiveName = "librust_crypto_ffi-linux-x86_64.a"`
+  - `RustCryptoWasmTargetId = "wasm32-unknown-unknown"`
+  - `RustCryptoWasmArchiveName = "librust_crypto_ffi-wasm32-unknown-unknown.a"`
+- 現在の `resolve_rustcrypto_ffi.nim` は `vendorArchivePath(resolvedPackageRoot)` と `cacheArchivePath(version)` を使うため、Linux x86_64の既定pathしか返せない。また `when defined(linux) and defined(amd64)` の外では空文字を返す。
+- 現在の `ffi.nim` はLinux x86_64では `staticExec("nim r ... resolve_rustcrypto_ffi.nim")` を使い、Wasmでは `currentSourcePath` からvendor pathを直接組み立てている。このため、Wasm向けはcacheやfetch済み配置の共通解決を通らず、探索ルールがLinuxとずれている。
+- Nim公式資料では `{.passL.}` はリンカへ追加パラメータを渡せるため、最終的な静的アーカイブpathは引き続き `ffi.nim` 内の `{.passL: rustCryptoStaticLib.}` に閉じ込める。
+- Nimの `staticExec` はコンパイル時に外部コマンド結果を得られるため、`ffi.nim` からresolverを引数付きで実行し、そのstdoutを `const rustCryptoStaticLib` として使う設計を維持する。
+- Rust公式資料では `wasm32-unknown-unknown` はOS前提を持たないWebAssemblyターゲットである。今回の変更はビルド済み静的アーカイブのpath解決に限定し、Wasm実行環境、JavaScript glue、wasm-bindgen、WASI対応は対象外にする。
+
+### 目標状態
+- Linux x86_64向けNimコンパイル時は、resolverが `linux-x86_64/librust_crypto_ffi-linux-x86_64.a` を返す。
+- Wasm向けNimコンパイル時は、resolverが `wasm32-unknown-unknown/librust_crypto_ffi-wasm32-unknown-unknown.a` を返す。
+- `ffi.nim` はLinux/Wasmのどちらでも同じresolverを使い、ターゲットごとの差分はresolver引数とエラーメッセージに閉じ込める。
+- vendorにアーカイブがあればvendorを優先し、なければcacheを使う。Linux x86_64では既存どおりfetchを試せる。
+- Wasm向けpath解決でもLinux x86_64向けアーカイブをfallbackとして返してはならない。
+- 未対応ターゲット、未対応resolver引数、静的アーカイブ欠落は、それぞれ原因が読めるエラーにする。
+- `nim r ... -- target` で resolver を呼ぶときは、Nim が `--` を引数として渡すため、resolver 側でこれを無視して実際の target 引数を拾う必要がある。
+
+### `resolve_rustcrypto_ffi.nim` 引数設計
+- resolverは第1引数でターゲットを受け取る。
+- 受け入れる値は以下とする。
+  - Linux x86_64: `linux`, `linux-x86_64`
+  - Wasm: `wasm`, `wasm32`, `wasm32-unknown-unknown`
+- 引数省略時は後方互換のためLinux x86_64として扱う。ただし `ffi.nim` からは必ず明示引数付きで呼ぶ。
+- 未対応引数はstderrへ説明を出し、stdoutには空文字を出すか何も出さず、終了コードを失敗にする。
+- resolver内部では、引数を正規化した `targetId` と `archiveName` に変換する。
+  - Linux x86_64: `RustCryptoTargetId`, `RustCryptoArchiveName`
+  - Wasm: `RustCryptoWasmTargetId`, `RustCryptoWasmArchiveName`
+- `vendorArchivePath(packageRoot)` はLinux固定helperなので、ターゲット可変の主経路では使わない。代わりに `moduleVendorArchivePath(packageRoot, targetId, archiveName)` を使う。
+- `cacheArchivePath(version)` もLinux固定helperなので、ターゲット可変の主経路では使わない。代わりに `cacheArchivePath(version, targetId, archiveName)` を使う。
+
+### 探索順序設計
+- 正規探索順序は以下にする。
+  1. module vendor: `moduleVendorArchivePath(packageRoot, targetId, archiveName)`
+  2. cache: `cacheArchivePath(version, targetId, archiveName)`
+  3. fetch後のmodule vendor
+  4. fetch後のcache
+- root直下の `packageRoot/vendor/rustcrypto-ffi/...` は、現状Linux固定の互換探索として `vendorArchivePath` に残っているが、このブランチの主設計には含めない。Wasm向けに古い互換探索を増やして探索面を広げない。
+- Linux x86_64では、module vendor/cacheにない場合、既存どおり `fetch_rustcrypto_ffi.nim` を呼び出してGitHub Release asset取得を試す。
+- Wasm向けでも、開発ホストがLinux amd64でresolverを実行している限り、fetch toolはLinux/Wasm両方を取得するため利用可能である。`ffi.nim` からのWasmビルド時もresolver実行プロセス自体はホストNimで動くため、hostがLinux amd64ならfetchを試してよい。
+- hostがLinux amd64でない場合は、現行 `fetch_rustcrypto_ffi.nim` の制約に従い、fetch fallbackに依存しない。vendor/cacheに見つからなければ空pathとして失敗させる。
+- fetch実行後も、要求されたtargetのアーカイブだけを検査して返す。fetchがLinux/Wasm両方を取得しても、Wasm要求時にLinux pathを返してはならない。
+
+### `ffi.nim` 設計
+- `ffi.nim` はコンパイルターゲットごとにresolver引数を決める。
+  ```nim
+  when defined(linux) and defined(amd64):
+    const rustCryptoTargetArg = "linux-x86_64"
+  elif defined(wasm32):
+    const rustCryptoTargetArg = "wasm32-unknown-unknown"
+  else:
+    {.error: "rustcrypto FFI static archive currently supports only Linux x86_64 and wasm32-unknown-unknown.".}
+  ```
+- `rustCryptoStaticLib` はLinux/Wasm共通で以下のような形にする。
+  ```nim
+  const rustCryptoStaticLib* = staticExec(
+    "nim r --hints:off --warnings:off " & rustCryptoResolveScript & " -- " & rustCryptoTargetArg
+  ).strip
+  ```
+- `rustCryptoStaticLib.len == 0` のエラーはtarget別に読むことができる文言にする。
+  - Linux x86_64: `nimble fetchRustFfi` または `nimble buildRustFfiLocal` を案内する
+  - Wasm: `nimble fetchRustFfi`、Release asset、またはvendor配置を案内する
+- `ffi.nim` からWasm用vendor pathを直接組み立てる分岐は削除し、Linux/Wasmともresolver経由に統一する。
+- `{.passL: rustCryptoStaticLib.}` は共通化し、アプリ側へリンク指定を漏らさない。
+
+### `fetch_rustcrypto_ffi.nim` との関係
+- `fetch_rustcrypto_ffi.nim` はLinux amd64 host専用の取得ツールとして維持する。
+- `fetch_rustcrypto_ffi.nim` はすでにLinux/Wasm両方のRelease assetを取得する設計なので、今回の主変更では取得対象を増やさない。
+- `tryBuildLocalArchive` は現状Linux向けだけをローカルビルドするfallbackである。今回の主目的はpath解決修正なので、Wasmローカルビルドfallback追加は必須にしない。
+- resolverからfetchを呼ぶ場合、fetch成功後にstdoutへLinux pathが出ても、resolverはそのstdoutに依存せず、自分で要求targetのmodule vendor/cacheを再検査して返す。
+- fetchがLinux/Wasmの片方だけ失敗する状態を避けるため、fetch tool側の「両方存在して成功」という既存方針は維持する。
+
+### 検証設計
+- 静的解析として、以下のresolver単体確認を行う。
+  ```bash
+  cd /application/src/nim-rustcrypto
+  nim r --hints:off --warnings:off src/rustcrypto/tools/resolve_rustcrypto_ffi.nim -- linux-x86_64
+  nim r --hints:off --warnings:off src/rustcrypto/tools/resolve_rustcrypto_ffi.nim -- wasm32-unknown-unknown
+  ```
+- 上記の出力がそれぞれターゲット別の正規ファイル名で終わることを確認する。
+  - `.../linux-x86_64/librust_crypto_ffi-linux-x86_64.a`
+  - `.../wasm32-unknown-unknown/librust_crypto_ffi-wasm32-unknown-unknown.a`
+- Linux x86_64の回帰確認として `/application/src/nim-rustcrypto` で `nimble test -y` を実行する。
+- Wasm向けはNimのWasmビルド・リンカ設定が環境依存になりやすいため、まずresolver単体でWasm pathを返すことを最低条件にする。既存CIにWasm compile/link検証がある場合は、それも合わせて通す。
+- vendor/cacheがない環境の確認では、fetch fallbackが走った後に要求targetのpathが返ることを確認する。ただしRelease asset未公開versionではfetchが失敗する可能性があるため、その場合は「未公開Release assetによる失敗」として記録する。
+
+### 受け入れ条件
+- `resolve_rustcrypto_ffi.nim -- linux-x86_64` がLinux x86_64向け静的アーカイブpathを返す。
+- `resolve_rustcrypto_ffi.nim -- wasm32-unknown-unknown` がWasm向け静的アーカイブpathを返す。
+- `ffi.nim` のLinux分岐とWasm分岐がどちらもresolver経由でリンクpathを決める。
+- Wasmコンパイル時にLinux x86_64向け `.a` を返すfallbackが存在しない。
+- Linux x86_64の既存Nimテストが通る。
+- 静的アーカイブ欠落時のエラー文が、対象ターゲットと回復手段を説明している。
+- Rust FFI ABI、Nim公開API、暗号アルゴリズム本体に不要な変更を入れない。
+
+### 実施結果
+- `nim r --hints:off --warnings:off src/rustcrypto/tools/resolve_rustcrypto_ffi.nim -- linux-x86_64` を実行し、`src/rustcrypto/vendor/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi-linux-x86_64.a` を返すことを確認した。
+- `nim r --hints:off --warnings:off src/rustcrypto/tools/resolve_rustcrypto_ffi.nim -- wasm32-unknown-unknown` を実行し、`src/rustcrypto/vendor/rustcrypto-ffi/wasm32-unknown-unknown/librust_crypto_ffi-wasm32-unknown-unknown.a` を返すことを確認した。
+- `nimble test -y` を `/application/src/nim-rustcrypto` で実行し、全テストが通ることを確認した。
+
+### 実装時の注意
+- このブランチルール作成時点では実装に進まない。
+- 実装時も `git add`、`git commit` は行わない。
+- Rustビルドは必ず `/application/src/rustcrypto-ffi` で実行する。
+- NimビルドとNimble検証は必ず `/application/src/nim-rustcrypto` または一時利用側プロジェクトで実行する。
+- `resolve_rustcrypto_ffi.nim` のstdoutは `ffi.nim` の `staticExec(...).strip` に直接使われるため、成功時のstdoutにはpath以外の説明を混ぜない。
+- エラーや診断はstderrへ出す。
+- `fetch_rustcrypto_ffi.nim` がstdoutへpathやcurl出力を出す可能性があるため、resolverはfetch実行結果のstdoutをそのまま返さず、fetch後に自前でpathを再解決してstdoutへ1行だけ出す。
+- `wasm32-unknown-unknown` はRust側のtarget名として扱い、Nimの `defined(wasm32)` と名前を混同しない。

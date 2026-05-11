@@ -1,27 +1,25 @@
 import std/[os, strutils]
 
+const rustCryptoResolveScript = currentSourcePath.parentDir.parentDir / "tools" / "resolve_rustcrypto_ffi.nim"
+
 when defined(linux) and defined(amd64):
-  const rustCryptoResolveScript = currentSourcePath.parentDir.parentDir / "tools" / "resolve_rustcrypto_ffi.nim"
-  const rustCryptoStaticLib* = staticExec(
-    "nim r --hints:off --warnings:off " & rustCryptoResolveScript
-  ).strip
-
-  when rustCryptoStaticLib.len == 0:
-    {.error: "rustcrypto FFI static archive is not available. Automatic download from GitHub Release failed; run `nimble fetchRustFfi` or `nimble buildRustFfiLocal` from `/application/src/nim-rustcrypto`.".}
-
-  {.passL: rustCryptoStaticLib.}
+  const rustCryptoTargetArg = "linux-x86_64"
 elif defined(wasm32):
-  const rustCryptoStaticLib* =
-    currentSourcePath.parentDir.parentDir / "vendor" / "rustcrypto-ffi" /
-    "wasm32-unknown-unknown" / "librust_crypto_ffi-wasm32-unknown-unknown.a"
-
-  static:
-    if not fileExists(rustCryptoStaticLib):
-      {.error: "rustcrypto FFI static archive is not available for wasm32-unknown-unknown. Place src/rustcrypto/vendor/rustcrypto-ffi/wasm32-unknown-unknown/librust_crypto_ffi-wasm32-unknown-unknown.a before compiling.".}
-
-  {.passL: rustCryptoStaticLib.}
+  const rustCryptoTargetArg = "wasm32-unknown-unknown"
 else:
   {.error: "rustcrypto FFI static archive currently supports only Linux x86_64 and wasm32-unknown-unknown.".}
+
+const rustCryptoStaticLib* = staticExec(
+  "nim r --hints:off --warnings:off " & rustCryptoResolveScript & " -- " & rustCryptoTargetArg & " 2>/dev/null"
+).strip
+
+when rustCryptoStaticLib.len == 0:
+  when defined(linux) and defined(amd64):
+    {.error: "rustcrypto FFI static archive is not available for Linux x86_64. Run `nimble fetchRustFfi` or `nimble buildRustFfiLocal` from `/application/src/nim-rustcrypto`.".}
+  elif defined(wasm32):
+    {.error: "rustcrypto FFI static archive is not available for wasm32-unknown-unknown. Run `nimble fetchRustFfi` from `/application/src/nim-rustcrypto`, or place the vendor/cache archive before compiling.".}
+
+{.passL: rustCryptoStaticLib.}
 
 const
   SHA256DigestLen* = 32
