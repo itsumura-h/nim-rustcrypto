@@ -979,7 +979,7 @@ dependencies = [
 
 [[package]]
 name = "rustcrypto-ffi"
-version = "0.1.0"
+version = "0.1.3"
 dependencies = [
  "aes-gcm",
  "aes-gcm-siv",
