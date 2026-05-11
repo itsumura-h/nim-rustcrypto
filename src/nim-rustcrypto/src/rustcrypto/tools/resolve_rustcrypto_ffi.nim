@@ -8,6 +8,8 @@ proc normalizeTarget(targetArg: string): tuple[targetId, archiveName: string] =
     (RustCryptoTargetId, RustCryptoArchiveName)
   of "wasm", "wasm32", "wasm32-unknown-unknown":
     (RustCryptoWasmTargetId, RustCryptoWasmArchiveName)
+  of "wasi", "wasm32-wasi", "wasm32-wasip1":
+    (RustCryptoWasiTargetId, RustCryptoWasiArchiveName)
   else:
     ("", "")
 
@@ -23,7 +25,7 @@ proc resolveArchivePath(packageRoot: string; version: string; targetArg: string)
   if targetId.len == 0:
     stderr.writeLine(
       "unsupported rustcrypto FFI target '" & targetArg & "'. " &
-      "Use linux, linux-x86_64, wasm, wasm32, or wasm32-unknown-unknown.",
+      "Use linux, linux-x86_64, wasm, wasm32, wasm32-unknown-unknown, wasi, wasm32-wasi, or wasm32-wasip1.",
     )
     return ""
 
@@ -42,7 +44,10 @@ proc resolveArchivePath(packageRoot: string; version: string; targetArg: string)
       workingDir = packageRoot,
       options = {poUsePath, poStdErrToStdOut},
     )
-    discard fetchResult
+    if fetchResult.exitCode != 0:
+      if fetchResult.output.len > 0:
+        stderr.write(fetchResult.output)
+      return ""
     if fileExists(modulePath):
       return modulePath
     if fileExists(cachePath):
@@ -51,7 +56,10 @@ proc resolveArchivePath(packageRoot: string; version: string; targetArg: string)
   return ""
 
 proc missingArchiveHint(targetId: string): string =
-  if targetId == RustCryptoWasmTargetId:
+  if targetId == RustCryptoWasiTargetId:
+    "Run `nimble fetchRustFfi` from `/application/src/nim-rustcrypto`, " &
+    "or copy the wasm32-wasip1 Release asset into vendor/cache before compiling."
+  elif targetId == RustCryptoWasmTargetId:
     "Run `nimble fetchRustFfi` from `/application/src/nim-rustcrypto`, " &
     "or copy the wasm32-unknown-unknown Release asset into vendor/cache before compiling."
   else:

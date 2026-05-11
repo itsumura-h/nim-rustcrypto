@@ -1,0 +1,214 @@
+---
+description: 38-add-wasm32-wasiブランチでの開発時に読み込む
+alwaysApply: false
+---
+38-add-wasm32-wasiブランチルール
+===
+
+このブランチで実装することは以下の通りです。
+- 既存の `linux-x86_64` と `wasm32-unknown-unknown` 向けRust FFI静的アーカイブ配布に加えて、WASI向けのビルド・配布・Nimリンク解決を追加する
+- Rustの現行安定版では旧 `wasm32-wasi` ターゲットが `wasm32-wasip1` へリネーム済みであるため、正規ターゲットIDは `wasm32-wasip1` とする
+- ユーザー要求や古い呼称としての `wasm32-wasi` は入力エイリアスとして受け入れてよいが、vendor配置、Release asset名、Cargo target、Nimリンク対象は `wasm32-wasip1` に統一する
+- `rustcrypto_ffi_paths.nim` にWASI向けターゲットID・アーカイブ名を追加し、Linux/Wasm unknown/WASIの3ターゲットを同じhelperで扱えるようにする
+- `resolve_rustcrypto_ffi.nim` をWASI向けターゲット引数に対応させ、WASI要求時にLinux用または `wasm32-unknown-unknown` 用アーカイブへfallbackしないようにする
+- `fetch_rustcrypto_ffi.nim` とRelease asset取得設計を3ターゲット対応に拡張し、Linux開発環境でWASI向けアーカイブも取得・cache/vendor配置できるようにする
+- `.github/workflows/release.yml` で `wasm32-wasip1` のRust target build、vendor同期、Release archive/checksum生成、Release asset uploadを追加する
+- `sync_local_rustcrypto_ffi.nim` はローカルビルド済みアーカイブ同期用として、WASI向け成果物も同期できるようにする
+- `ffi.nim` のコンパイルターゲット分岐は、Nim側でWASIを識別できる実際のcompile-time symbolを確認してから最小変更する。もし現行 Nim toolchain で自動検出できない場合は、明示 define を併用してよい
+- アプリ利用側へ `--passL` やRustビルド手順を漏らさない方針を維持する
+- 既存のRust FFI ABI、Nim公開API、暗号アルゴリズム本体は、このブランチの主目的に必要な範囲以外では変更しない
+
+このブランチでは、WASI実行ランタイム、WASI Preview 2/component model、JavaScript glue、wasm-bindgen対応は対象外とする。目的は、Rust FFI静的アーカイブをWASI Preview 1向けに追加生成し、Nimパッケージが既存2ターゲットと同じ配布・解決モデルで扱える状態にすることである。
+
+## 進捗
+- [x] `.cursor/rules/project.mdc` を読み、FFI、ビルド、Nimラッパー、静的アーカイブ出力ルールを確認する
+- [x] `.cursor/rules/branch.mdc` を読み、ブランチルールの形式と記録方針を確認する
+- [x] 現在ブランチ `38-add-wasm32-wasi` に対応する既存ブランチルールがないことを確認する
+- [x] `.cursor/rules/branch/34-a-for-wasm32-unknown-unknown.mdc` を読み、`wasm32-unknown-unknown` 追加時の設計を確認する
+- [x] `.cursor/rules/branch/36-fix-wasm32-archive-file-path.mdc` を読み、ターゲット別path解決とRelease asset設計を確認する
+- [x] `.github/workflows/release.yml` を読み、現在はLinux x86_64と `wasm32-unknown-unknown` の2ターゲットをビルド・配布していることを確認する
+- [x] `rustcrypto_ffi_paths.nim` を読み、ターゲットID・アーカイブ名・vendor/cache/Release path helperの現状を確認する
+- [x] `fetch_rustcrypto_ffi.nim` を読み、現状はLinux host専用ツールだが取得対象はLinux/Wasm unknownの2ターゲットであることを確認する
+- [x] `resolve_rustcrypto_ffi.nim` を読み、現状は `linux-x86_64` と `wasm32-unknown-unknown` のみ正規化できることを確認する
+- [x] `ffi.nim` を読み、現状はLinux x86_64と `defined(wasm32)` の2分岐であることを確認する
+- [x] Rust公式資料を確認し、旧 `wasm32-wasi` は `wasm32-wasip1` へリネーム済みであり、Rust 1.84以降のstableでは旧名が削除済みであることを設計へ反映する
+- [x] 実装方針と設計をこのブランチルールに記録する
+- [x] 実装開始前にNimのWASI向けcompile-time symbolを最小サンプルで確認する
+- [x] `cargo build --release --lib --target wasm32-wasip1` でRust FFI staticlibが生成できることを確認する
+- [x] `rustcrypto_ffi_paths.nim` にWASI向け定数を追加する
+- [x] `resolve_rustcrypto_ffi.nim` にWASI向け引数正規化と探索を追加する
+- [x] `fetch_rustcrypto_ffi.nim` の取得・展開・cache/vendor同期を3ターゲット対応にする
+- [x] `sync_local_rustcrypto_ffi.nim` のローカル同期対象にWASIを追加する
+- [x] `ffi.nim` でWASI向けNimコンパイル時に `wasm32-wasip1` をresolverへ渡す
+- [x] `.github/workflows/release.yml` にWASI向けtarget install、build、vendor同期、archive/checksum、uploadを追加する
+- [x] Linux x86_64の既存Nimテストが通ることを確認する
+- [x] resolver単体で3ターゲットそれぞれの正規アーカイブpathを返すことを確認する
+- [x] WASI向けは少なくともRust target buildと、Nim側のpath解決またはcompile/link相当の検証を行う
+- [x] ローカル Nim toolchain では `--os:wasi` が未対応だったため、`defined(wasi)` と `-d:rustcryptoWasi` の併用でWASI判定できるようにした
+
+## 参考資料
+- Rust `wasm32-wasip1` platform support: https://doc.rust-lang.org/stable/rustc/platform-support/wasm32-wasip1.html
+- Rust Blog: Changes to Rust's WASI targets: https://blog.rust-lang.org/2024/04/09/updates-to-rusts-wasi-targets/
+- Rust Platform Support: https://doc.rust-lang.org/rustc/platform-support.html
+- Rust `wasm32-unknown-unknown` platform support: https://doc.rust-lang.org/rustc/platform-support/wasm32-unknown-unknown.html
+- Rust Reference Linkage: https://doc.rust-lang.org/reference/linkage.html
+- Nim Manual: https://nim-lang.org/docs/manual.html
+- Nim Compiler User Guide: https://nim-lang.org/docs/nimc.html
+- Nimble .nimble file reference: https://nim-lang.github.io/nimble/nimble-reference.html
+- GitHub Actions workflow syntax: https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax
+
+## 調査結果・設計まとめ
+- 現在のRelease workflowは、Linux x86_64、`wasm32-unknown-unknown`、`wasm32-wasip1` の3ターゲットをビルドしている。
+  - Linux x86_64: `src/rustcrypto-ffi/target/release/librust_crypto_ffi.a`
+  - Wasm unknown: `src/rustcrypto-ffi/target/wasm32-unknown-unknown/release/librust_crypto_ffi.a`
+  - WASI: `src/rustcrypto-ffi/target/wasm32-wasip1/release/librust_crypto_ffi.a`
+- 現在の正規vendor配置は以下である。
+  - `src/nim-rustcrypto/src/rustcrypto/vendor/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi-linux-x86_64.a`
+  - `src/nim-rustcrypto/src/rustcrypto/vendor/rustcrypto-ffi/wasm32-unknown-unknown/librust_crypto_ffi-wasm32-unknown-unknown.a`
+  - `src/nim-rustcrypto/src/rustcrypto/vendor/rustcrypto-ffi/wasm32-wasip1/librust_crypto_ffi-wasm32-wasip1.a`
+- `rustcrypto_ffi_paths.nim` はターゲットIDとアーカイブ名をhelperへ渡せる設計になっているため、WASI向けも同じ形で追加できる。
+- `fetch_rustcrypto_ffi.nim` はLinux amd64 host専用の取得ツールである。これは維持しつつ、取得対象だけをLinux/Wasm unknown/WASIの3ターゲットに拡張する。
+- `resolve_rustcrypto_ffi.nim` は成功時stdoutを `ffi.nim` の `staticExec(...).strip` で直接使うため、成功時stdoutにはpath以外を出してはならない。診断はstderrに出す。
+- `ffi.nim` は現在 `defined(wasm32)` をすべて `wasm32-unknown-unknown` として扱う。WASI向けを追加する時は、NimがWASI targetをどのcompile-time symbolで表すかを確認し、unknownとWASIを区別できる場合のみ分岐を追加する。区別できない場合は、明示defineまたはNimコンパイルオプションによるターゲット選択設計を追加で検討する。
+- ローカル Nim toolchain では `--os:wasi` が未対応だったため、`ffi.nim` は `defined(wasi)` に加えて `-d:rustcryptoWasi` でも WASI を選べるようにした。正規ターゲット名は `wasm32-wasip1` に統一する。
+- Rust公式資料では、旧 `wasm32-wasi` は `wasm32-wasip1` へリネーム済みである。Rust BlogではRust 1.78で `wasm32-wasip1` がstableに追加され、Rust 1.84で旧 `wasm32-wasi` がstableから削除されたと説明されている。したがって、このブランチ名と要求文では `wasm32-wasi` と呼んでいるが、実装上の正規ターゲットは `wasm32-wasip1` とする。
+- `wasm32-wasip1` はWASI Preview 1向けのcore WebAssembly moduleを生成し、OS関連機能は `wasi_snapshot_preview1` module importを使う。`std` は含まれるが、thread/processなど一部機能は制限される。
+- Rust公式資料では `wasm32-wasip1` はWASI向けC/C++など他言語との相互運用を意図しており、ABI差分や不一致はbug扱いとされている。Nimとの静的リンク設計では `wasm32-unknown-unknown` よりWASIの方がC ABI相互運用に向く可能性がある。
+- `wasm32-wasip1` はrustupで配布されるため、通常は `rustup target add wasm32-wasip1` と `cargo build --target wasm32-wasip1` で開始できる。
+
+### ターゲットIDとファイル名の設計
+- 正規ターゲットIDは以下の3つにする。
+  - Linux x86_64: `linux-x86_64`
+  - Wasm unknown: `wasm32-unknown-unknown`
+  - WASI Preview 1: `wasm32-wasip1`
+- 旧 `wasm32-wasi` はCargo targetとして使わない。resolverなどの人間入力では互換エイリアスとして受け入れてよいが、内部正規化後は必ず `wasm32-wasip1` にする。
+- 静的アーカイブ名はターゲットIDを含める。
+  - Linux x86_64: `librust_crypto_ffi-linux-x86_64.a`
+  - Wasm unknown: `librust_crypto_ffi-wasm32-unknown-unknown.a`
+  - WASI Preview 1: `librust_crypto_ffi-wasm32-wasip1.a`
+- Cargoが生成するデフォルト出力名 `librust_crypto_ffi.a` は配布物・vendor・Release assetでは使わない。コピーまたは同期時に必ずターゲット別ファイル名へリネームする。
+- vendor配置は以下を正規配置とする。
+  - `src/nim-rustcrypto/src/rustcrypto/vendor/rustcrypto-ffi/linux-x86_64/librust_crypto_ffi-linux-x86_64.a`
+  - `src/nim-rustcrypto/src/rustcrypto/vendor/rustcrypto-ffi/wasm32-unknown-unknown/librust_crypto_ffi-wasm32-unknown-unknown.a`
+  - `src/nim-rustcrypto/src/rustcrypto/vendor/rustcrypto-ffi/wasm32-wasip1/librust_crypto_ffi-wasm32-wasip1.a`
+- Release asset名はターゲットIDで分ける。
+  - `rustcrypto-ffi-v{version}-linux-x86_64.tar.gz`
+  - `rustcrypto-ffi-v{version}-wasm32-unknown-unknown.tar.gz`
+  - `rustcrypto-ffi-v{version}-wasm32-wasip1.tar.gz`
+- tar.gz内部構造は以下にする。
+  - `rustcrypto-ffi/linux-x86_64/librust_crypto_ffi-linux-x86_64.a`
+  - `rustcrypto-ffi/wasm32-unknown-unknown/librust_crypto_ffi-wasm32-unknown-unknown.a`
+  - `rustcrypto-ffi/wasm32-wasip1/librust_crypto_ffi-wasm32-wasip1.a`
+- 環境名なしアーカイブ名や別ターゲットへのfallbackは作らない。
+
+### Rust/WASIビルド設計
+- Release workflowではRust toolchain setup後に以下を実行する。
+  ```bash
+  rustup target add wasm32-unknown-unknown wasm32-wasip1
+  ```
+- Rust側のWASI向けビルドは以下を正規コマンドにする。
+  ```bash
+  cd /application/src/rustcrypto-ffi
+  cargo build --release --lib --target wasm32-wasip1
+  test -s target/wasm32-wasip1/release/librust_crypto_ffi.a
+  ```
+- 実装開始直後に、現在の依存関係と `crate-type = ["staticlib"]` が `wasm32-wasip1` で `.a` を生成できるか確認する。
+- 既存Rustコードは `cfg(target_arch = "wasm32")` で乱数系APIをWasm向けスタブにしている。`wasm32-wasip1` も `target_arch = "wasm32"` に該当するため、最初の実装では `wasm32-unknown-unknown` と同じWasm制限側へ入る想定にする。
+- WASIではOS由来のrandomやfile APIを利用できる可能性があるが、このブランチでは暗号APIのWASIネイティブ乱数対応拡張は行わない。WASI向け配布を先に成立させ、乱数依存APIの有効化は別ブランチで扱う。
+- もし `wasm32-wasip1` でLinux専用依存やWasm unknown向けスタブ設計と異なるビルド失敗が出た場合、まずこの設計書に原因と方針を追記し、必要最小限のfeature/cfg変更に限定する。
+
+### Nim側ターゲット解決設計
+- `rustcrypto_ffi_paths.nim` に以下の定数を追加する。
+  ```nim
+  RustCryptoWasiTargetId* = "wasm32-wasip1"
+  RustCryptoWasiArchiveName* = "librust_crypto_ffi-wasm32-wasip1.a"
+  ```
+- `resolve_rustcrypto_ffi.nim` のターゲット正規化は以下を受け入れる。
+  - Linux x86_64: `linux`, `linux-x86_64`
+  - Wasm unknown: `wasm`, `wasm32`, `wasm32-unknown-unknown`
+  - WASI Preview 1: `wasi`, `wasm32-wasi`, `wasm32-wasip1`
+- `wasm32-wasi` を受け取った場合も、返すpathは `wasm32-wasip1/librust_crypto_ffi-wasm32-wasip1.a` にする。
+- 探索順序は既存resolverと同じにする。
+  1. module vendor
+  2. cache
+  3. Linux amd64 hostであればfetch tool実行後のmodule vendor
+  4. Linux amd64 hostであればfetch tool実行後のcache
+- WASI向け要求時に、Linux x86_64や `wasm32-unknown-unknown` のアーカイブを返してはならない。
+- `ffi.nim` はNimコンパイルターゲットからresolver引数を決める。候補設計は以下だが、実装前にNim compilerの実際のsymbolを確認する。
+  ```nim
+  when defined(linux) and defined(amd64):
+    const rustCryptoTargetArg = "linux-x86_64"
+  elif defined(wasi):
+    const rustCryptoTargetArg = "wasm32-wasip1"
+  elif defined(wasm32):
+    const rustCryptoTargetArg = "wasm32-unknown-unknown"
+  else:
+    {.error: "rustcrypto FFI static archive currently supports only Linux x86_64, wasm32-unknown-unknown, and wasm32-wasip1.".}
+  ```
+- Nimが `defined(wasi)` のような明確なsymbolを提供しない場合は、`-d:rustcryptoWasi` のような明示defineでWASI archiveを選ぶ案を検討する。その場合も既存 `defined(wasm32)` の既定挙動は `wasm32-unknown-unknown` のまま維持する。
+- `{.passL: rustCryptoStaticLib.}` は引き続き `ffi.nim` に閉じ込め、アプリ利用側にリンク指定を要求しない。
+
+### fetch/sync設計
+- `fetch_rustcrypto_ffi.nim` は3ターゲットすべてのRelease archiveとchecksumを取得する。
+- `moduleArchivesExist` と `cacheArchivesExist` はLinux/Wasm unknown/WASIの3ファイルが揃っている時だけ成功にする。
+- `copyCacheToModule` は3ターゲットすべてをmodule vendorへコピーする。
+- `tryDownloadReleaseArchives` は3ターゲットのtar.gzとsha256を取得し、checksum検証後に同じvendor rootへ展開する。
+- `tryBuildLocalArchive` は既存どおりLinux向けだけの最終fallbackとして維持してよい。WASIローカルビルドfallbackは、このブランチの必須条件にはしない。
+- `sync_local_rustcrypto_ffi.nim` はローカルに存在する3ターゲットのCargo成果物を、module vendorとcacheへ同期する。WASI成果物がない場合は、WASI向けの欠落が分かるstderrにする。
+
+### GitHub Actions設計
+- `Add Rust wasm target` stepは、`wasm32-unknown-unknown` と `wasm32-wasip1` の両方を追加する。
+- `Build Rust static library` stepは以下の3成果物を検証する。
+  - `target/release/librust_crypto_ffi.a`
+  - `target/wasm32-unknown-unknown/release/librust_crypto_ffi.a`
+  - `target/wasm32-wasip1/release/librust_crypto_ffi.a`
+- `Sync Rust static library to Nim vendor tree` stepはWASI向けvendor directoryを作り、`librust_crypto_ffi-wasm32-wasip1.a` としてコピーする。
+- `Run Nim tests` とLinux consumer install検証は既存どおり維持する。
+- consumer install検証では、インストール済みパッケージ内に3ターゲットのvendor archiveが存在することを確認する。
+- `Stage release archive` stepは3ターゲット分のtar.gzとsha256を生成する。
+- `Upload GitHub Release asset` stepはWASI向けtar.gzとsha256もfilesに含める。
+
+### 検証設計
+- Rust側は以下を確認する。
+  ```bash
+  cd /application/src/rustcrypto-ffi
+  cargo build --release --lib --target wasm32-wasip1
+  test -s target/wasm32-wasip1/release/librust_crypto_ffi.a
+  ```
+- resolver単体は以下を確認する。
+  ```bash
+  cd /application/src/nim-rustcrypto
+  nim r --hints:off --warnings:off src/rustcrypto/tools/resolve_rustcrypto_ffi.nim -- linux-x86_64
+  nim r --hints:off --warnings:off src/rustcrypto/tools/resolve_rustcrypto_ffi.nim -- wasm32-unknown-unknown
+  nim r --hints:off --warnings:off src/rustcrypto/tools/resolve_rustcrypto_ffi.nim -- wasm32-wasip1
+  nim r --hints:off --warnings:off src/rustcrypto/tools/resolve_rustcrypto_ffi.nim -- wasm32-wasi
+  ```
+- resolver出力はそれぞれ以下で終わることを確認する。
+  - `.../linux-x86_64/librust_crypto_ffi-linux-x86_64.a`
+  - `.../wasm32-unknown-unknown/librust_crypto_ffi-wasm32-unknown-unknown.a`
+  - `.../wasm32-wasip1/librust_crypto_ffi-wasm32-wasip1.a`
+  - `.../wasm32-wasip1/librust_crypto_ffi-wasm32-wasip1.a`
+- Linux x86_64の回帰確認として `/application/src/nim-rustcrypto` で `nimble test -y` を実行する。
+- WASI向けNim compile/link検証はNim toolchainのWASI対応とリンカ設定に依存するため、まずはNimのcompile-time symbol確認、resolver path確認、Rust target buildを最低条件にする。既存環境でWASI compile/linkが可能なら追加で検証する。
+
+### 受け入れ条件
+- `cargo build --release --lib --target wasm32-wasip1` が成功し、WASI向け静的アーカイブが生成される。
+- Release workflowで `rustcrypto-ffi-v{version}-linux-x86_64.tar.gz`、`rustcrypto-ffi-v{version}-wasm32-unknown-unknown.tar.gz`、`rustcrypto-ffi-v{version}-wasm32-wasip1.tar.gz` の3つが生成される。
+- 各Release archiveの `.sha256` が生成され、upload対象に含まれる。
+- vendor/cache配置が3ターゲットでターゲットID付きファイル名に統一される。
+- `resolve_rustcrypto_ffi.nim -- wasm32-wasip1` と `resolve_rustcrypto_ffi.nim -- wasm32-wasi` が、どちらもWASI向け正規pathを返す。
+- WASI向けpath解決でLinux x86_64または `wasm32-unknown-unknown` のアーカイブへfallbackしない。
+- Linux x86_64の既存Nimテストが通る。
+- 既存の `linux-x86_64` と `wasm32-unknown-unknown` のRelease asset名、vendor配置、resolver入力の互換性を壊さない。
+- アプリ利用側へ `--passL` やRust静的アーカイブpath指定を漏らさない。
+
+### 実装時の注意
+- このブランチルール作成時点では実装に進まない。
+- 実装時も `git add`、`git commit` は行わない。
+- Rustビルドは必ず `/application/src/rustcrypto-ffi` で実行する。
+- NimビルドとNimble検証は必ず `/application/src/nim-rustcrypto` または一時利用側プロジェクトで実行する。
+- `wasm32-wasi` は古い呼称として扱い、Cargo targetやRelease assetの正規名に使わない。
+- `wasm32-wasip1` と `wasm32-unknown-unknown` はどちらも `target_arch = "wasm32"` なので、Rust側cfgを追加する場合は `target_os = "wasi"` や `target_env = "p1"` の利用可否を確認してから使う。
+- `target_env = "p1"` はRust 1.80以降で設定されるため、古いRust toolchain互換が必要になった場合はこの設計を見直す。
+- `fetch_rustcrypto_ffi.nim` やresolverの成功時stdoutには、`ffi.nim` が使うpath以外を混ぜない。
+- WASI対応で乱数利用APIを有効化するかどうかは、このブランチの主目的から外す。必要になった場合は別途設計する。

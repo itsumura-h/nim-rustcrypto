@@ -6,6 +6,8 @@ const
   RustCryptoArchiveName* = "librust_crypto_ffi-linux-x86_64.a"
   RustCryptoWasmTargetId* = "wasm32-unknown-unknown"
   RustCryptoWasmArchiveName* = "librust_crypto_ffi-wasm32-unknown-unknown.a"
+  RustCryptoWasiTargetId* = "wasm32-wasip1"
+  RustCryptoWasiArchiveName* = "librust_crypto_ffi-wasm32-wasip1.a"
 
 proc packageRoot*(scriptSourcePath: string): string =
   var dir = scriptSourcePath.parentDir
