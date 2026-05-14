@@ -90,6 +90,13 @@ const
   BcryptMaxCost* = 31
   BcryptDefaultCost* = 12
   BcryptMaxPasswordLen* = 71
+  Bls12381ScalarLen* = 32
+  Bls12381G1CompressedLen* = 48
+  Bls12381G1UncompressedLen* = 96
+  Bls12381G2CompressedLen* = 96
+  Bls12381G2UncompressedLen* = 192
+  BlsPointFormatUncompressed* = 0.cint
+  BlsPointFormatCompressed* = 1.cint
 
 proc sha256Raw*(
     input: ptr uint8,
@@ -932,3 +939,207 @@ proc rsaPkcs1v15DecryptRaw*(
     outputLen: csize_t,
     writtenLen: ptr csize_t,
   ): cint {.cdecl, importc: "rustcrypto_rsa_pkcs1v15_decrypt".}
+
+proc bls12_381ScalarValidateRaw*(
+    scalar: ptr uint8,
+    scalarLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_bls12_381_scalar_validate".}
+
+proc bls12_381ScalarRandomRaw*(
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_bls12_381_scalar_random".}
+
+proc bls12_381ScalarAddRaw*(
+    lhs: ptr uint8,
+    lhsLen: csize_t,
+    rhs: ptr uint8,
+    rhsLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_bls12_381_scalar_add".}
+
+proc bls12_381ScalarMulRaw*(
+    lhs: ptr uint8,
+    lhsLen: csize_t,
+    rhs: ptr uint8,
+    rhsLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_bls12_381_scalar_mul".}
+
+proc bls12_381ScalarInvertRaw*(
+    scalar: ptr uint8,
+    scalarLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_bls12_381_scalar_invert".}
+
+proc bls12_381G1GeneratorRaw*(
+    output: ptr uint8,
+    outputLen: csize_t,
+    compressed: cint,
+  ): cint {.cdecl, importc: "rustcrypto_bls12_381_g1_generator".}
+
+proc bls12_381G2GeneratorRaw*(
+    output: ptr uint8,
+    outputLen: csize_t,
+    compressed: cint,
+  ): cint {.cdecl, importc: "rustcrypto_bls12_381_g2_generator".}
+
+proc bls12_381G1ValidateRaw*(
+    point: ptr uint8,
+    pointLen: csize_t,
+    compressed: cint,
+  ): cint {.cdecl, importc: "rustcrypto_bls12_381_g1_validate".}
+
+proc bls12_381G2ValidateRaw*(
+    point: ptr uint8,
+    pointLen: csize_t,
+    compressed: cint,
+  ): cint {.cdecl, importc: "rustcrypto_bls12_381_g2_validate".}
+
+proc bls12_381G1AddRaw*(
+    lhs: ptr uint8,
+    lhsLen: csize_t,
+    rhs: ptr uint8,
+    rhsLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    compressed: cint,
+  ): cint {.cdecl, importc: "rustcrypto_bls12_381_g1_add".}
+
+proc bls12_381G2AddRaw*(
+    lhs: ptr uint8,
+    lhsLen: csize_t,
+    rhs: ptr uint8,
+    rhsLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    compressed: cint,
+  ): cint {.cdecl, importc: "rustcrypto_bls12_381_g2_add".}
+
+proc bls12_381G1NegRaw*(
+    point: ptr uint8,
+    pointLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    compressed: cint,
+  ): cint {.cdecl, importc: "rustcrypto_bls12_381_g1_neg".}
+
+proc bls12_381G2NegRaw*(
+    point: ptr uint8,
+    pointLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    compressed: cint,
+  ): cint {.cdecl, importc: "rustcrypto_bls12_381_g2_neg".}
+
+proc bls12_381G1MulRaw*(
+    point: ptr uint8,
+    pointLen: csize_t,
+    scalar: ptr uint8,
+    scalarLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    compressed: cint,
+  ): cint {.cdecl, importc: "rustcrypto_bls12_381_g1_mul".}
+
+proc bls12_381G2MulRaw*(
+    point: ptr uint8,
+    pointLen: csize_t,
+    scalar: ptr uint8,
+    scalarLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+    compressed: cint,
+  ): cint {.cdecl, importc: "rustcrypto_bls12_381_g2_mul".}
+
+proc bls12_381PairingEqRaw*(
+    g1Lhs: ptr uint8,
+    g1LhsLen: csize_t,
+    g2Lhs: ptr uint8,
+    g2LhsLen: csize_t,
+    g1Rhs: ptr uint8,
+    g1RhsLen: csize_t,
+    g2Rhs: ptr uint8,
+    g2RhsLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_bls12_381_pairing_eq".}
+
+proc bls12_381PairingProductIsIdentityRaw*(
+    g1Points: ptr uint8,
+    g1PointsLen: csize_t,
+    g2Points: ptr uint8,
+    g2PointsLen: csize_t,
+    pairCount: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_bls12_381_pairing_product_is_identity".}
+
+proc bls12_381SignaturePrivateKeyFromSeedRaw*(
+    seed: ptr uint8,
+    seedLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_bls12_381_signature_private_key_from_seed".}
+
+proc bls12_381SignaturePrivateKeyGenerateRaw*(
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_bls12_381_signature_private_key_generate".}
+
+proc bls12_381SignaturePrivateKeyFromDecimalStringRaw*(
+    input: ptr uint8,
+    inputLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_bls12_381_signature_private_key_from_decimal_string".}
+
+proc bls12_381SignaturePublicKeyRaw*(
+    privateKey: ptr uint8,
+    privateKeyLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_bls12_381_signature_public_key".}
+
+proc bls12_381SignatureHashRaw*(
+    message: ptr uint8,
+    messageLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_bls12_381_signature_hash".}
+
+proc bls12_381SignatureSignRaw*(
+    message: ptr uint8,
+    messageLen: csize_t,
+    privateKey: ptr uint8,
+    privateKeyLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_bls12_381_signature_sign".}
+
+proc bls12_381SignatureAggregateRaw*(
+    signatures: ptr uint8,
+    signaturesLen: csize_t,
+    signatureCount: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_bls12_381_signature_aggregate".}
+
+proc bls12_381SignatureVerifyRaw*(
+    signature: ptr uint8,
+    signatureLen: csize_t,
+    hashes: ptr uint8,
+    hashesLen: csize_t,
+    publicKeys: ptr uint8,
+    publicKeysLen: csize_t,
+    pairCount: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_bls12_381_signature_verify".}
+
+proc bls12_381SignatureVerifyMessagesRaw*(
+    signature: ptr uint8,
+    signatureLen: csize_t,
+    messages: ptr ptr uint8,
+    messageLens: ptr csize_t,
+    messageCount: csize_t,
+    publicKeys: ptr uint8,
+    publicKeysLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_bls12_381_signature_verify_messages".}
