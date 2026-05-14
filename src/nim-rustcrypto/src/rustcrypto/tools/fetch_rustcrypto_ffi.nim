@@ -2,14 +2,18 @@ import std/[os, osproc, strutils]
 
 import ./rustcrypto_ffi_paths
 
-when not defined(linux) or not defined(amd64):
-  {.error: "rustcrypto FFI download currently supports only Linux x86_64.".}
+when not ((defined(linux) and defined(amd64)) or (defined(macosx) and defined(arm64))):
+  {.error: "rustcrypto FFI download currently supports only Linux x86_64 and macOS arm64.".}
 else:
-  const targetSpecs = [
-    (RustCryptoTargetId, RustCryptoArchiveName),
-    (RustCryptoWasmTargetId, RustCryptoWasmArchiveName),
-    (RustCryptoWasiTargetId, RustCryptoWasiArchiveName),
-  ]
+  const targetSpecs =
+    when defined(linux) and defined(amd64):
+      [
+        (RustCryptoTargetId, RustCryptoArchiveName),
+        (RustCryptoWasmTargetId, RustCryptoWasmArchiveName),
+        (RustCryptoWasiTargetId, RustCryptoWasiArchiveName),
+      ]
+    else:
+      [(RustCryptoMacosArm64TargetId, RustCryptoMacosArm64ArchiveName)]
 
   proc runCommand(command: string; workingDir = ""): tuple[success: bool; output: string] =
     let commandResult = execCmdEx(
@@ -25,7 +29,10 @@ else:
     runCommand("curl -fsSL -o " & quoteShell(destination) & " " & quoteShell(url)).success
 
   proc checksumFile(workingDir: string; checksumFileName: string): bool =
-    runCommand("sha256sum -c " & quoteShell(checksumFileName), workingDir).success
+    when defined(macosx):
+      runCommand("shasum -a 256 -c " & quoteShell(checksumFileName), workingDir).success
+    else:
+      runCommand("sha256sum -c " & quoteShell(checksumFileName), workingDir).success
 
   proc extractArchive(archivePath: string; destinationDir: string): bool =
     createDir(destinationDir)
@@ -100,7 +107,9 @@ else:
       if not copyArchive(moduleArchive, cacheArchive):
         return false
 
-    stdout.writeLine(moduleVendorArchivePath(packageRoot, RustCryptoTargetId, RustCryptoArchiveName))
+    stdout.writeLine(
+      moduleVendorArchivePath(packageRoot, targetSpecs[0][0], targetSpecs[0][1]),
+    )
     true
 
   proc tryBuildLocalArchive(
@@ -109,29 +118,32 @@ else:
       repoSlug: string;
       workRoot: string,
   ): bool =
-    let sourceCloneDir = workRoot / "source"
-    let sourceRepoUrl = "https://github.com/" & repoSlug & ".git"
-    if not runCommand("git clone --depth 1 " & quoteShell(sourceRepoUrl) & " " & quoteShell(sourceCloneDir)).success:
-      return false
+    when defined(linux) and defined(amd64):
+      let sourceCloneDir = workRoot / "source"
+      let sourceRepoUrl = "https://github.com/" & repoSlug & ".git"
+      if not runCommand("git clone --depth 1 " & quoteShell(sourceRepoUrl) & " " & quoteShell(sourceCloneDir)).success:
+        return false
 
-    let sourceRoot = sourceCloneDir / "src" / "rustcrypto-ffi"
-    if not runCommand("cargo build --release --lib", sourceRoot).success:
-      return false
+      let sourceRoot = sourceCloneDir / "src" / "rustcrypto-ffi"
+      if not runCommand("cargo build --release --lib", sourceRoot).success:
+        return false
 
-    let builtArchive = sourceRoot / "target" / "release" / RustCryptoCargoArchiveName
-    if not fileExists(builtArchive):
-      stderr.writeLine("rustcrypto FFI archive was not built at " & builtArchive)
-      return false
+      let builtArchive = sourceRoot / "target" / "release" / RustCryptoCargoArchiveName
+      if not fileExists(builtArchive):
+        stderr.writeLine("rustcrypto FFI archive was not built at " & builtArchive)
+        return false
 
-    let linuxModuleArchive = moduleVendorArchivePath(packageRoot)
-    let linuxCacheArchive = cacheArchivePath(version)
-    if not copyArchive(builtArchive, linuxModuleArchive):
-      return false
-    if not copyArchive(builtArchive, linuxCacheArchive):
-      return false
+      let linuxModuleArchive = moduleVendorArchivePath(packageRoot)
+      let linuxCacheArchive = cacheArchivePath(version)
+      if not copyArchive(builtArchive, linuxModuleArchive):
+        return false
+      if not copyArchive(builtArchive, linuxCacheArchive):
+        return false
 
-    stdout.writeLine(linuxModuleArchive)
-    true
+      stdout.writeLine(linuxModuleArchive)
+      true
+    else:
+      false
 
   proc main() =
     let rootArg = if paramCount() >= 1: paramStr(1).strip else: ""
@@ -149,12 +161,16 @@ else:
       discard runCommand("rm -rf " & quoteShell(workRoot))
 
     if moduleArchivesExist(resolvedPackageRoot):
-      stdout.writeLine(moduleVendorArchivePath(resolvedPackageRoot))
+      stdout.writeLine(
+        moduleVendorArchivePath(resolvedPackageRoot, targetSpecs[0][0], targetSpecs[0][1]),
+      )
       quit(QuitSuccess)
 
     if cacheArchivesExist(version):
       copyCacheToModule(resolvedPackageRoot, version)
-      stdout.writeLine(moduleVendorArchivePath(resolvedPackageRoot))
+      stdout.writeLine(
+        moduleVendorArchivePath(resolvedPackageRoot, targetSpecs[0][0], targetSpecs[0][1]),
+      )
       quit(QuitSuccess)
 
     if tryDownloadReleaseArchives(resolvedPackageRoot, version, repoSlug, workRoot):

@@ -15,7 +15,7 @@ permissions:
   contents: write
 
 jobs:
-  build-release-asset:
+  build-release-asset-linux:
     runs-on: ubuntu-latest
 
     steps:
@@ -171,3 +171,111 @@ jobs:
             src/rustcrypto-ffi/dist/rustcrypto-ffi-v${{ steps.version.outputs.version }}-wasm32-wasip1.tar.gz
             src/rustcrypto-ffi/dist/rustcrypto-ffi-v${{ steps.version.outputs.version }}-wasm32-wasip1.tar.gz.sha256
           generate_release_notes: true
+
+  build-release-macos-arm64:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Nim toolchain
+        uses: jiro4989/setup-nim-action@v2
+        with:
+          nim-version: "2.0.x"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Print Nim versions
+        run: |
+          nim -v
+          nimble -v
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ] && [ -n "${INPUT_VERSION:-}" ]; then
+            VERSION="$INPUT_VERSION"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Run Rust tests
+        run: |
+          cd src/rustcrypto-ffi
+          cargo test
+
+      - name: Build Rust static library (Apple Silicon)
+        run: |
+          cd src/rustcrypto-ffi
+          cargo build --release --lib
+          test -s target/release/librust_crypto_ffi.a
+
+      - name: Sync Rust static library to Nim vendor tree
+        run: |
+          cd src/nim-rustcrypto
+          nim r --hints:off --warnings:off src/rustcrypto/tools/sync_local_rustcrypto_ffi.nim
+
+      - name: Run Nim tests
+        run: |
+          cd src/nim-rustcrypto
+          nimble test -y
+
+      - name: Verify Nimble consumer install (macOS arm64)
+        shell: bash
+        run: |
+          set -eu
+          consumer_dir="$(mktemp -d)"
+          package_dir="$PWD/src/nim-rustcrypto"
+          export NIMBLE_DIR="$consumer_dir/.nimble"
+          mkdir -p "$consumer_dir/app"
+          cd "$consumer_dir/app"
+          cat > consumer.nimble <<EOF
+          version = "0.1.0"
+          author = "CI"
+          description = "rustcrypto consumer smoke test"
+          license = "MIT"
+          srcDir = "."
+          bin = @["main"]
+          requires "nim >= 2.0.0"
+          EOF
+          cat > main.nim <<EOF
+          import rustcrypto/algorithm/sha256
+
+          doAssert sha256Hex("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+          EOF
+          (cd "$package_dir" && nimble install -y)
+          printf '%s\n' 'requires "rustcrypto >= 0.1.0"' >> consumer.nimble
+          nimble c -r -y main.nim
+          installed_dir="$(nimble path rustcrypto | tail -n 1)"
+          test -s "$installed_dir/rustcrypto/vendor/rustcrypto-ffi/macos-arm64/librust_crypto_ffi-macos-arm64.a"
+
+      - name: Stage macOS arm64 release archive
+        shell: bash
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          archive_dir="src/rustcrypto-ffi/dist"
+          mkdir -p "$archive_dir/rustcrypto-ffi/macos-arm64"
+          cp src/rustcrypto-ffi/target/release/librust_crypto_ffi.a \
+            "$archive_dir/rustcrypto-ffi/macos-arm64/librust_crypto_ffi-macos-arm64.a"
+          tar -C "$archive_dir" -czf "$archive_dir/rustcrypto-ffi-v${version}-macos-arm64.tar.gz" rustcrypto-ffi/macos-arm64
+          (cd "$archive_dir" && shasum -a 256 "rustcrypto-ffi-v${version}-macos-arm64.tar.gz" > "rustcrypto-ffi-v${version}-macos-arm64.tar.gz.sha256")
+
+      - name: Upload GitHub Release asset (macOS arm64)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: v${{ steps.version.outputs.version }}
+          files: |
+            src/rustcrypto-ffi/dist/rustcrypto-ffi-v${{ steps.version.outputs.version }}-macos-arm64.tar.gz
+            src/rustcrypto-ffi/dist/rustcrypto-ffi-v${{ steps.version.outputs.version }}-macos-arm64.tar.gz.sha256
+          generate_release_notes: false
