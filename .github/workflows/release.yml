@@ -184,9 +184,6 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Add Rust wasm targets
-        run: rustup target add wasm32-unknown-unknown wasm32-wasip1
-
       - name: Install Nim toolchain
         uses: jiro4989/setup-nim-action@v2
         with:
@@ -221,10 +218,6 @@ jobs:
           cd src/rustcrypto-ffi
           cargo build --release --lib
           test -s target/release/librust_crypto_ffi.a
-          cargo build --release --lib --target wasm32-unknown-unknown
-          test -s target/wasm32-unknown-unknown/release/librust_crypto_ffi.a
-          cargo build --release --lib --target wasm32-wasip1
-          test -s target/wasm32-wasip1/release/librust_crypto_ffi.a
 
       - name: Sync Rust static library to Nim vendor tree
         run: |
@@ -264,8 +257,6 @@ jobs:
           nimble c -r -y main.nim
           installed_dir="$(nimble path rustcrypto | tail -n 1)"
           test -s "$installed_dir/rustcrypto/vendor/rustcrypto-ffi/macos-arm64/librust_crypto_ffi-macos-arm64.a"
-          test -s "$installed_dir/rustcrypto/vendor/rustcrypto-ffi/wasm32-unknown-unknown/librust_crypto_ffi-wasm32-unknown-unknown.a"
-          test -s "$installed_dir/rustcrypto/vendor/rustcrypto-ffi/wasm32-wasip1/librust_crypto_ffi-wasm32-wasip1.a"
 
       - name: Stage macOS arm64 release archive
         shell: bash

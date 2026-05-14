@@ -28,18 +28,7 @@ when (defined(linux) and defined(amd64)) or (defined(macosx) and defined(arm64))
     exec fetchRustFfiCommand()
 
 task buildRustFfiLocal, "Build Rust FFI static archive locally and sync it":
-  when defined(macosx) and defined(arm64):
-    exec "rustup target add wasm32-unknown-unknown wasm32-wasip1"
-    exec "cd ../rustcrypto-ffi && cargo build --release --lib"
-    exec "cd ../rustcrypto-ffi && cargo build --release --lib --target wasm32-unknown-unknown"
-    exec "cd ../rustcrypto-ffi && cargo build --release --lib --target wasm32-wasip1"
-    exec "nim r --hints:off --warnings:off src/rustcrypto/tools/sync_local_rustcrypto_ffi.nim"
-  elif defined(linux) and defined(amd64):
-    exec "rustup target add wasm32-unknown-unknown wasm32-wasip1"
-    exec "cd ../rustcrypto-ffi && cargo build --release --lib"
-    exec "cd ../rustcrypto-ffi && cargo build --release --lib --target wasm32-unknown-unknown"
-    exec "cd ../rustcrypto-ffi && cargo build --release --lib --target wasm32-wasip1"
-    exec "nim r --hints:off --warnings:off src/rustcrypto/tools/sync_local_rustcrypto_ffi.nim"
-  else:
-    echo "rustcrypto FFI local build supports only Linux x86_64 and macOS arm64 hosts."
-    quit(QuitFailure)
+  exec "rustup target add wasm32-unknown-unknown wasm32-wasip1"
+  exec "cd ../rustcrypto-ffi && cargo build --release --lib"
+  exec "cd ../rustcrypto-ffi && cargo build --release --lib --target wasm32-unknown-unknown"
+  exec "cd ../rustcrypto-ffi && cargo build --release --lib --target wasm32-wasip1"

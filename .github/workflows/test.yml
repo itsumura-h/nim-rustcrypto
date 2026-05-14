@@ -29,7 +29,7 @@ jobs:
         if: always()
         run: docker compose down --remove-orphans
 
-  # Apple Silicon 上でネイティブ Rust / wasm / wasi の静的ライブラリをビルドし、Nim テストまで通す。
+  # Apple Silicon 上で Rust（ネイティブ）と Nim（nimble test）のみ動作確認する。wasm / wasi は別ジョブに任せる。
   macos-arm64-smoke:
     name: macOS arm64 (Apple Silicon)
     runs-on: macos-14
@@ -41,33 +41,26 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Add Rust wasm targets
-        run: rustup target add wasm32-unknown-unknown wasm32-wasip1
-
       - name: Install Nim toolchain
         uses: jiro4989/setup-nim-action@v2
         with:
           nim-version: "2.0.x"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Rust build and Nim tests (native Apple Silicon)
+      - name: Rust tests and Nim tests (Apple Silicon native)
         run: |
           set -euo pipefail
           cd "$GITHUB_WORKSPACE/src/rustcrypto-ffi"
           cargo test
           cargo build --release --lib
-          cargo build --release --lib --target wasm32-unknown-unknown
-          cargo build --release --lib --target wasm32-wasip1
           test -s target/release/librust_crypto_ffi.a
-          test -s target/wasm32-unknown-unknown/release/librust_crypto_ffi.a
-          test -s target/wasm32-wasip1/release/librust_crypto_ffi.a
           cd "$GITHUB_WORKSPACE/src/nim-rustcrypto"
           nim r --hints:off --warnings:off src/rustcrypto/tools/sync_local_rustcrypto_ffi.nim
           nimble test -y
 
   # wasm32-wasip1: Rust 静的ライブラリのビルドに加え、WASI SDK + Nim（--cpu:wasm32 --os:any）で
-  # rustcrypto FFI をリンクできることを検証する。WASI SDK の入れ方は nicp_cdk の手順に倣う。
-  # 参照: https://github.com/itsumura-h/nicp_cdk （WASI SDK インストール）
+  # `ci/rustcrypto_exec_smoke.nim` を wasm にコンパイルし、当該ターゲットで rustcrypto（FFI）がリンクできることを検証する。
+  # WASI SDK の入れ方は nicp_cdk の手順に倣う。参照: https://github.com/itsumura-h/nicp_cdk （WASI SDK インストール）
   wasm32-wasip1-smoke:
     name: wasm32-wasip1 (WASI staticlib + Nim)
     runs-on: ubuntu-latest
@@ -121,13 +114,13 @@ jobs:
           cp "$GITHUB_WORKSPACE/src/rustcrypto-ffi/target/wasm32-wasip1/release/librust_crypto_ffi.a" \
             "$vend/librust_crypto_ffi-wasm32-wasip1.a"
 
-      - name: Nim compile smoke (wasm32-wasip1 + rustcrypto FFI)
+      - name: Nim exec smoke → wasm32-wasip1 (ci/rustcrypto_exec_smoke.nim)
         shell: bash
         run: |
           set -euo pipefail
           : "${WASI_SDK_PATH:?WASI_SDK_PATH must be set}"
-          smoke="$GITHUB_WORKSPACE/src/nim-rustcrypto/ci/wasi_sha256_smoke.nim"
-          out="${RUNNER_TEMP}/wasi_sha256_smoke.wasm"
+          smoke="$GITHUB_WORKSPACE/src/nim-rustcrypto/ci/rustcrypto_exec_smoke.nim"
+          out="${RUNNER_TEMP}/rustcrypto_exec_smoke.wasm"
           nim c --cpu:wasm32 --os:any --cc:clang \
             --clang.exe:"clang" \
             --clang.linkerexe:"clang" \

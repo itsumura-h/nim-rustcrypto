@@ -24,6 +24,7 @@ alwaysApply: false
 - [x] Nim の macOS / arm64 判定に関する実装上の前提を設計対象として確認した
 - [x] `rustcrypto_ffi_paths.nim` / `resolve_rustcrypto_ffi.nim` / `ffi.nim` / `fetch_rustcrypto_ffi.nim` / `sync_local_rustcrypto_ffi.nim` / `rustcrypto.nimble` を macOS arm64 対応で更新した
 - [x] `release.yml` に `macos-14` ジョブ、`test.yml` に `macos-arm64-smoke` を追加した
+- [x] `test.yml` の `macos-arm64-smoke` は Apple Silicon 上の Rust / Nim（ネイティブ）のみ検証し、wasm / wasi は Linux 側ジョブに任せる
 - [x] `resolve` から `fetch` を呼ぶ際の `nim r` 引数で `--` が package ルートと誤解釈されないよう修正した（`fetch` 側で `--` をスキップ、`resolve` 側は `--` なしでも可）
 - [x] Linux 上で `./test.sh` を実行し Nim テストまで成功を確認した
 - [ ] macOS 実機での最終確認は CI / 利用者環境に委ねる
