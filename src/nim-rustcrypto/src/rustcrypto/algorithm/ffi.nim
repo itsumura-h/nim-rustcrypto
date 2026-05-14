@@ -8,8 +8,12 @@ elif defined(wasi) or defined(rustcryptoWasi):
   const rustCryptoTargetArg = "wasm32-wasip1"
 elif defined(wasm32):
   const rustCryptoTargetArg = "wasm32-unknown-unknown"
+elif defined(macosx) and defined(arm64):
+  const rustCryptoTargetArg = "macos-arm64"
+elif defined(macosx):
+  {.error: "rustcrypto FFI on macOS is supported only on Apple Silicon (arm64). macOS x86_64 is not supported.".}
 else:
-  {.error: "rustcrypto FFI static archive currently supports only Linux x86_64, wasm32-unknown-unknown, and wasm32-wasip1.".}
+  {.error: "rustcrypto FFI static archive currently supports only Linux x86_64, macOS arm64, wasm32-unknown-unknown, and wasm32-wasip1.".}
 
 const rustCryptoStaticLib* = staticExec(
   "nim r --hints:off --warnings:off " & rustCryptoResolveScript & " -- " & rustCryptoTargetArg
@@ -18,6 +22,8 @@ const rustCryptoStaticLib* = staticExec(
 when rustCryptoStaticLib.len == 0:
   when defined(linux) and defined(amd64):
     {.error: "rustcrypto FFI static archive is not available for Linux x86_64. Run `nimble fetchRustFfi` or `nimble buildRustFfiLocal` from `/application/src/nim-rustcrypto`.".}
+  elif defined(macosx) and defined(arm64):
+    {.error: "rustcrypto FFI static archive is not available for macOS arm64. Run `nimble fetchRustFfi` or `nimble buildRustFfiLocal` from `/application/src/nim-rustcrypto`, or place the macos-arm64 vendor/cache archive before compiling.".}
   elif defined(wasi) or defined(rustcryptoWasi):
     {.error: "rustcrypto FFI static archive is not available for wasm32-wasip1. Run `nimble fetchRustFfi` from `/application/src/nim-rustcrypto`, or place the wasm32-wasip1 vendor/cache archive before compiling.".}
   elif defined(wasm32):

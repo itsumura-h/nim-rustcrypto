@@ -26,3 +26,37 @@ jobs:
       - name: Stop compose services
         if: always()
         run: docker compose down --remove-orphans
+
+  macos-arm64-smoke:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Add Rust wasm targets
+        run: rustup target add wasm32-unknown-unknown wasm32-wasip1
+
+      - name: Install Nim toolchain
+        uses: jiro4989/setup-nim-action@v2
+        with:
+          nim-version: "2.0.x"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Rust build and Nim tests (native Apple Silicon)
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/src/rustcrypto-ffi"
+          cargo test
+          cargo build --release --lib
+          cargo build --release --lib --target wasm32-unknown-unknown
+          cargo build --release --lib --target wasm32-wasip1
+          test -s target/release/librust_crypto_ffi.a
+          test -s target/wasm32-unknown-unknown/release/librust_crypto_ffi.a
+          test -s target/wasm32-wasip1/release/librust_crypto_ffi.a
+          cd "$GITHUB_WORKSPACE/src/nim-rustcrypto"
+          nim r --hints:off --warnings:off src/rustcrypto/tools/sync_local_rustcrypto_ffi.nim
+          nimble test -y

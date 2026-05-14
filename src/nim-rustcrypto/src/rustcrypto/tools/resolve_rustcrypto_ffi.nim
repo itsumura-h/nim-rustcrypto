@@ -6,6 +6,8 @@ proc normalizeTarget(targetArg: string): tuple[targetId, archiveName: string] =
   case targetArg.strip.toLowerAscii
   of "", "linux", "linux-x86_64":
     (RustCryptoTargetId, RustCryptoArchiveName)
+  of "macos-arm64", "darwin-arm64", "apple-silicon", "aarch64-apple-darwin":
+    (RustCryptoMacosArm64TargetId, RustCryptoMacosArm64ArchiveName)
   of "wasm", "wasm32", "wasm32-unknown-unknown":
     (RustCryptoWasmTargetId, RustCryptoWasmArchiveName)
   of "wasi", "wasm32-wasi", "wasm32-wasip1":
@@ -25,7 +27,7 @@ proc resolveArchivePath(packageRoot: string; version: string; targetArg: string)
   if targetId.len == 0:
     stderr.writeLine(
       "unsupported rustcrypto FFI target '" & targetArg & "'. " &
-      "Use linux, linux-x86_64, wasm, wasm32, wasm32-unknown-unknown, wasi, wasm32-wasi, or wasm32-wasip1.",
+      "Use linux, linux-x86_64, macos-arm64, aarch64-apple-darwin, wasm, wasm32, wasm32-unknown-unknown, wasi, wasm32-wasi, or wasm32-wasip1.",
     )
     return ""
 
@@ -37,10 +39,10 @@ proc resolveArchivePath(packageRoot: string; version: string; targetArg: string)
   if fileExists(cachePath):
     return cachePath
 
-  when defined(linux) and defined(amd64):
+  when (defined(linux) and defined(amd64)) or (defined(macosx) and defined(arm64)):
     let fetchTool = currentSourcePath.parentDir / "fetch_rustcrypto_ffi.nim"
     let fetchResult = execCmdEx(
-      "nim r --hints:off --warnings:off " & quoteShell(fetchTool) & " -- " & quoteShell(packageRoot),
+      "nim r --hints:off --warnings:off " & quoteShell(fetchTool) & " " & quoteShell(packageRoot),
       workingDir = packageRoot,
       options = {poUsePath, poStdErrToStdOut},
     )
@@ -62,13 +64,26 @@ proc missingArchiveHint(targetId: string): string =
   elif targetId == RustCryptoWasmTargetId:
     "Run `nimble fetchRustFfi` from `/application/src/nim-rustcrypto`, " &
     "or copy the wasm32-unknown-unknown Release asset into vendor/cache before compiling."
+  elif targetId == RustCryptoMacosArm64TargetId:
+    "Run `nimble fetchRustFfi` or `nimble buildRustFfiLocal` from `/application/src/nim-rustcrypto`, " &
+    "or copy the macos-arm64 Release asset into vendor/cache before compiling."
   else:
     "Run `nimble fetchRustFfi` or `nimble buildRustFfiLocal` from `/application/src/nim-rustcrypto`."
 
 let resolvedPackageRoot = packageRoot(currentSourcePath)
 let version = versionFromNimble(resolvedPackageRoot)
 let rawTargetArg = firstTargetArg()
-let targetArg = if rawTargetArg.len > 0: rawTargetArg else: "linux-x86_64"
+let defaultTargetArg = when defined(linux) and defined(amd64):
+    "linux-x86_64"
+  elif defined(macosx) and defined(arm64):
+    "macos-arm64"
+  elif defined(wasi) or defined(rustcryptoWasi):
+    "wasm32-wasip1"
+  elif defined(wasm32):
+    "wasm32-unknown-unknown"
+  else:
+    "linux-x86_64"
+let targetArg = if rawTargetArg.len > 0: rawTargetArg else: defaultTargetArg
 let resolvedArchivePath = resolveArchivePath(resolvedPackageRoot, version, targetArg)
 
 if resolvedArchivePath.len > 0:

@@ -1,0 +1,79 @@
+---
+description: 42-build-for-arm64ブランチでの開発時に読み込む
+alwaysApply: false
+---
+42-build-for-arm64ブランチルール
+===
+
+このブランチで実装することは以下の通りです。
+- Apple Silicon の MacBook で native build できる `macos-arm64` 向け Rust FFI 静的アーカイブを追加する
+- Rust の Cargo target は `aarch64-apple-darwin` を使い、Nim 側の正規ターゲットIDは `macos-arm64` に統一する
+- 既存の `linux-x86_64` / `wasm32-unknown-unknown` / `wasm32-wasip1` の導線を壊さない
+- macOS arm64 でも `nimble install` と `nimble buildRustFfiLocal` が成立するようにする
+- GitHub Actions で macOS arm64 runner を使った build / smoke test を追加する
+- 既存の Rust FFI ABI、暗号アルゴリズム本体、Nim の高水準 API には触れない
+
+このブランチでは macOS x86_64 は対象外とする。目的は Apple Silicon MacBook で RustCrypto FFI を build でき、Nim 側から正しい静的アーカイブを選べる状態にすることにある。
+
+## 進捗
+- [x] `.cursor/rules/project.mdc` を読み、FFI、build、Nim ラッパー、静的アーカイブ出力ルールを確認した
+- [x] `.cursor/rules/branch.mdc` を読み、ブランチルールの形式と記録方針を確認した
+- [x] 現在ブランチ `42-build-for-arm64` に対応する既存ブランチルールがないことを確認した
+- [x] 既存の `.github/workflows/release.yml`、`.github/workflows/test.yml`、`src/nim-rustcrypto/rustcrypto.nimble`、`src/nim-rustcrypto/src/rustcrypto/algorithm/ffi.nim`、`src/nim-rustcrypto/src/rustcrypto/tools/*`、`src/rustcrypto-ffi/Cargo.toml` を読み、現状の build 導線を確認した
+- [x] Rust の `aarch64-apple-darwin` と GitHub-hosted macOS arm64 runner の公式資料を確認した
+- [x] Nim の macOS / arm64 判定に関する実装上の前提を設計対象として確認した
+- [x] `rustcrypto_ffi_paths.nim` / `resolve_rustcrypto_ffi.nim` / `ffi.nim` / `fetch_rustcrypto_ffi.nim` / `sync_local_rustcrypto_ffi.nim` / `rustcrypto.nimble` を macOS arm64 対応で更新した
+- [x] `release.yml` に `macos-14` ジョブ、`test.yml` に `macos-arm64-smoke` を追加した
+- [x] `resolve` から `fetch` を呼ぶ際の `nim r` 引数で `--` が package ルートと誤解釈されないよう修正した（`fetch` 側で `--` をスキップ、`resolve` 側は `--` なしでも可）
+- [x] Linux 上で `./test.sh` を実行し Nim テストまで成功を確認した
+- [ ] macOS 実機での最終確認は CI / 利用者環境に委ねる
+
+## 参考資料
+- Rust `*-apple-darwin` platform support: https://doc.rust-lang.org/stable/rustc/platform-support/apple-darwin.html
+- Rust platform support index: https://doc.rust-lang.org/rustc/platform-support.html
+- GitHub-hosted runners reference: https://docs.github.com/en/actions/reference/runners/github-hosted-runners
+- GitHub Actions runner selection: https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job
+- Nim `system` module: https://nim-lang.org/docs/system.html
+- Nim Compiler User Guide: https://nim-lang.org/docs/nimc.html
+- Existing workflow: [`.github/workflows/release.yml`](/application/.github/workflows/release.yml)
+- Existing workflow: [`.github/workflows/test.yml`](/application/.github/workflows/test.yml)
+- Existing Nim FFI entry: [`src/nim-rustcrypto/src/rustcrypto/algorithm/ffi.nim`](/application/src/nim-rustcrypto/src/rustcrypto/algorithm/ffi.nim)
+- Existing path helper: [`src/nim-rustcrypto/src/rustcrypto/tools/rustcrypto_ffi_paths.nim`](/application/src/nim-rustcrypto/src/rustcrypto/tools/rustcrypto_ffi_paths.nim)
+- Existing Rust crate: [`src/rustcrypto-ffi/Cargo.toml`](/application/src/rustcrypto-ffi/Cargo.toml)
+
+## 調査結果・設計まとめ
+- 現状の正規ターゲットは `linux-x86_64`、`wasm32-unknown-unknown`、`wasm32-wasip1` の 3 つで、macOS arm64 は未対応である。
+- Rust 側の macOS arm64 ビルド target は `aarch64-apple-darwin` を使うのが正しい。GitHub-hosted runners では `macos-14` が arm64 である。
+- このブランチの正規ターゲットIDは `macos-arm64` とする。Cargo target triple は `aarch64-apple-darwin`、Nim の vendor 配置、Release asset 名、checksum 名はすべて `macos-arm64` に統一する。
+- ファイル名の正規形は `librust_crypto_ffi-macos-arm64.a` とする。Cargo が出す `librust_crypto_ffi.a` は配布物の正規名にしない。
+- Release asset の正規形は `rustcrypto-ffi-v{version}-macos-arm64.tar.gz` とする。Linux / wasm / wasi の asset 名は現状のまま維持する。
+- `resolve_rustcrypto_ffi.nim` は `macos-arm64` を正規化できるようにし、macOS arm64 要求時に Linux 版へ fallback してはならない。
+- `ffi.nim` は macOS arm64 で `macos-arm64` のアーカイブをリンクする。Intel Mac は対象外なので、`macosx` だが arm64 でない環境は明示エラーにする。
+- `rustcrypto.nimble` の `before install` と `fetchRustFfi` は、Linux amd64 だけでなく macOS arm64 でも動くようにする必要がある。macOS では `sha256sum` ではなく、OS に応じた checksum 検証手段へ分岐する。
+- `buildRustFfiLocal` と local sync は host-aware にし、macOS arm64 では host native archive を `macos-arm64` として vendor/cache に同期する。
+- GitHub Actions は Linux job と macOS arm64 job に分ける。Linux job は既存の Linux / wasm / wasi を回し、macOS arm64 job は native build と smoke test に集中する。
+- `test.yml` の Docker Compose 経由の検証は Linux 継続とし、macOS arm64 は別 job で直接 `nim` / `cargo` を使って検証する。
+- 変更範囲は build / release / install / path resolution に限定し、暗号 API、FFI ABI、テストベクトル、README の機能説明は必要最小限の追記に留める。
+
+### 実装方針
+- まず `rustcrypto_ffi_paths.nim` に macOS arm64 用の target id と archive name を追加し、すべての path 生成をそこに集約する。
+- 次に `resolve_rustcrypto_ffi.nim` で macOS arm64 を正規ターゲットとして扱い、vendor / cache / fetch の順序を host ごとに整理する。
+- `ffi.nim` は `defined(macosx)` と arm64 判定で `macos-arm64` を選ぶ。判定 symbol がツールチェイン依存なら、実装前に最小サンプルで確認する。
+- `fetch_rustcrypto_ffi.nim` は host ごとの checksum 手段を持たせ、macOS arm64 でも Release asset から静的アーカイブを取得できるようにする。
+- `sync_local_rustcrypto_ffi.nim` は host native archive を `macos-arm64` として同期できるようにし、Linux-only 前提を外す。
+- `.github/workflows/release.yml` は macOS arm64 runner を追加し、Apple Silicon 向け native archive を生成して Release asset に含める。
+- `.github/workflows/test.yml` には macOS arm64 の smoke job を追加し、Linux の Docker Compose 経路とは独立に回す。
+
+### 受け入れ条件
+- Apple Silicon MacBook で Rust FFI の native build が成功する。
+- macOS arm64 で Nim パッケージを install したとき、`macos-arm64` の静的アーカイブを正しくリンクする。
+- Linux x86_64、`wasm32-unknown-unknown`、`wasm32-wasip1` の既存導線が壊れない。
+- Release workflow で Linux / macOS arm64 の成果物が別々の asset として出力される。
+- 既存の `rustcrypto FFI static archive is not available` のエラーは、未対応ターゲットではなく、足りない asset や vendor 欠落の文脈で読めるままにする。
+
+### 実装時の注意
+- 実装済み（上記進捗参照）。
+- 実装時も `git add`、`git commit` は行わない。
+- Apple Silicon の macOS runner は arm64 だが、community action は arm64 非対応の可能性があるため、`setup-nim-action` が使えない場合の代替手段を最初から用意する。
+- macOS x86_64 を巻き込んだ universal binary 化はこのブランチの対象外とする。
+- もし `macosx` / `arm64` の Nim 判定が想定と違ったら、まず設計を更新してから実装に入る。
