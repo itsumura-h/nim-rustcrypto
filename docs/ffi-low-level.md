@@ -6,7 +6,11 @@ This module binds the static Rust archive and exposes `importc` C ABI functions 
 
 ## Platform
 
-The Nim package currently resolves the static library for **Linux x86_64** only; other targets fail at compile time with an error from `ffi.nim`.
+Supported targets are defined in `ffi.nim` (for example Linux x86_64, `wasm32-unknown-unknown`, and `wasm32-wasip1`); other combinations fail at compile time with an error from that module.
+
+## BLS12-381 (`rustcrypto_bls12_381_*`)
+
+Length constants are exported from `ffi.nim` as `Bls12381ScalarLen` (32), `Bls12381G1CompressedLen` (48), `Bls12381G2CompressedLen` (96), and the corresponding uncompressed sizes. Curve points use `BlsPointFormatCompressed` / `BlsPointFormatUncompressed` with the `*_g1_*` / `*_g2_*` functions. Signature helpers use the `rustcrypto_bls12_381_signature_*` prefix. Prefer the high-level `rustcrypto/algorithm/bls` module when possible.
 
 ## Typical pattern
 

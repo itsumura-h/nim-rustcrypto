@@ -7,7 +7,7 @@ Nim bindings to RustCrypto through a small Rust FFI static library. High-level A
 
 ## Features (summary)
 
-Hashing (SHA-256, SHA3-256, Keccak-256, BLAKE2), HMAC, HKDF, PBKDF2, scrypt, Argon2id, bcrypt, AEAD (ChaCha20-Poly1305, AES-256-GCM, AES-256-GCM-SIV), secp256k1 (ECDSA, Schnorr, recoverable ECDSA), Ed25519, NIST P-256 / P-384 ECDSA, RSA (sign/verify, OAEP, PKCS#1 v1.5), X.509 minimal parsing, PKCS#8 / SPKI / PEM for supported keys, plus **Bitcoin**, **Lightning (BOLT-11 signing)**, **Ethereum**, and **JWT** helpers.
+Hashing (SHA-256, SHA3-256, Keccak-256, BLAKE2), HMAC, HKDF, PBKDF2, scrypt, Argon2id, bcrypt, AEAD (ChaCha20-Poly1305, AES-256-GCM, AES-256-GCM-SIV), secp256k1 (ECDSA, Schnorr, recoverable ECDSA), Ed25519, NIST P-256 / P-384 ECDSA, **BLS12-381** (low-level curve/pairing plus `bls-signatures`-style minimal BLS signing), RSA (sign/verify, OAEP, PKCS#1 v1.5), X.509 minimal parsing, PKCS#8 / SPKI / PEM for supported keys, plus **Bitcoin**, **Lightning (BOLT-11 signing)**, **Ethereum**, and **JWT** helpers.
 
 ## Installation
 
@@ -57,6 +57,7 @@ Per-primitive and per-protocol guides (English):
 - [Ed25519](docs/ed25519.md)
 - [P-256 ECDSA](docs/p256-ecdsa.md)
 - [P-384 ECDSA](docs/p384-ecdsa.md)
+- [BLS12-381 (curve / pairing / minimal BLS)](docs/bls12-381.md)
 
 ### RSA and certificates
 

@@ -8,6 +8,7 @@ mod argon2;
 mod bcrypt;
 #[cfg(target_arch = "wasm32")]
 mod bcrypt_wasm;
+mod bls;
 mod blake2;
 mod chacha20poly1305;
 mod ed25519;
@@ -118,3 +119,8 @@ pub const BCRYPT_MIN_COST: u32 = 4;
 pub const BCRYPT_MAX_COST: u32 = 31;
 pub const BCRYPT_DEFAULT_COST: u32 = 12;
 pub const BCRYPT_MAX_PASSWORD_LEN: usize = 71;
+pub const BLS12_381_SCALAR_LEN: usize = bls::BLS12_381_SCALAR_LEN;
+pub const BLS12_381_G1_COMPRESSED_LEN: usize = bls::BLS12_381_G1_COMPRESSED_LEN;
+pub const BLS12_381_G1_UNCOMPRESSED_LEN: usize = bls::BLS12_381_G1_UNCOMPRESSED_LEN;
+pub const BLS12_381_G2_COMPRESSED_LEN: usize = bls::BLS12_381_G2_COMPRESSED_LEN;
+pub const BLS12_381_G2_UNCOMPRESSED_LEN: usize = bls::BLS12_381_G2_UNCOMPRESSED_LEN;

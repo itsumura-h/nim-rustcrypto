@@ -8,6 +8,7 @@ import ./algorithm/test_ed25519
 import ./algorithm/test_hkdf
 import ./algorithm/test_hmac
 import ./algorithm/test_p256
+import ./algorithm/test_bls
 import ./algorithm/test_p384
 import ./algorithm/test_passwordhash
 import ./algorithm/test_pbkdf2

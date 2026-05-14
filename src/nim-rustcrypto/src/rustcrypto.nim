@@ -6,6 +6,7 @@ import ./rustcrypto/algorithm/hmac
 import ./rustcrypto/algorithm/secp256k1
 import ./rustcrypto/algorithm/schnorr
 import ./rustcrypto/algorithm/p256
+import ./rustcrypto/algorithm/bls
 import ./rustcrypto/algorithm/ed25519
 import ./rustcrypto/algorithm/rsa
 import ./rustcrypto/algorithm/bcrypt
@@ -22,6 +23,7 @@ export hmac
 export secp256k1
 export schnorr
 export p256
+export bls
 export ed25519
 export rsa
 export bcrypt

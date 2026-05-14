@@ -1,0 +1,205 @@
+---
+description: 40-add-blsブランチでの開発時に読み込む
+alwaysApply: false
+---
+40-add-blsブランチルール
+===
+
+このブランチで実装することは以下の通りです。
+- Rust側で `bls12_381` crateを利用し、BLS12-381のG1/G2/GT/ScalarとpairingをC ABI互換FFIとして公開する
+- Nim側では `rustcrypto/algorithm/bls.nim` を追加し、algorithm配下の低レベルBLS12-381処理として利用できるようにする
+- Nim側のBLS実装は、既存のalgorithm配下モジュールと同様に、Rust FFI呼び出し、型、長さ定数、エラー処理を閉じ込める
+- 低レベルBLS12-381 APIを使い、`bls-signatures` 0.15.0が提供する `PrivateKey`、`PublicKey`、`Signature`、`aggregate`、`hash`、`verify`、`verify_messages` 相当の高水準BLS署名APIをNim側に提供する
+- 既存のsecp256k1、P-256/P-384、Ed25519、RSA、X.509 APIを壊さずにBLS12-381 APIを追加する
+
+このブランチでは、ユーザー指定の `bls` はBLS12-381曲線およびpairing低レベル処理を指すものとして扱う。
+`bls12_381` crateはBLS署名プロトコルそのものではなく、BLS12-381曲線、Scalar、G1/G2/GT、pairingを提供するcrateであるため、Rust側は低レベル曲線演算とpairingを土台にする。
+Nim側の正規公開面には、その低レベルAPIに加えて `bls-signatures` 0.15.0互換のBLS署名APIを載せる。
+
+このブランチでは、`bls-signatures` 0.15.0相当のBLS署名、署名集約、hash-to-G2、集約検証を対象に含める。
+Proof of Possession、Ethereum consensus仕様の署名検証、KZG commitment、trusted setup、任意domain separation tagを受ける汎用hash-to-curve、`bls-signatures` 以外のserialization形式の全プロトコル互換保証は対象外とする。
+ただし、将来それらを追加できるよう、G1/G2/Scalar/pairingの低レベルAPI名と型名はBLS署名プロトコル名と衝突しないように設計する。
+
+## 進捗
+- [x] `.cursor/rules/project.mdc` を読み、FFI、ビルド、TDD、依存追加ルールを確認する
+- [x] `.cursor/rules/branch.mdc` を読み、ブランチルールの形式と記録方針を確認する
+- [x] 現在ブランチ `40-add-bls` に対応する既存ブランチルールがないことを確認する
+- [x] `bls12_381` crateの最新安定版、feature、提供APIの概要を調査する
+- [x] `bls-signatures` 0.15.0の公開API、serialization、hash-to-G2、集約検証の概要を調査する
+- [x] 既存のRust/Nim algorithm配下構成、FFI定数、エラーコード、型first API方針を確認する
+- [x] 実装方針と設計をこのブランチルールに記録する
+- [x] 依存追加が必要なcrateを `cargo add` で追加する
+- [x] Rust側でBLS12-381用の長さ定数を追加する
+- [x] Rust側に `src/rustcrypto-ffi/src/bls.rs` を追加する
+- [x] Rust側にScalar正規化、加算、乗算、反転、乱数生成または入力検証APIを実装する
+- [x] Rust側にG1/G2の圧縮・非圧縮エンコード検証、加算、negation、Scalar乗算APIを実装する
+- [x] Rust側にG1/G2 generator出力APIを実装する
+- [x] Rust側にpairing比較APIを実装する
+- [x] Rust側に `bls-signatures` 互換の鍵生成、公開鍵導出、hash-to-G2、署名、署名集約、検証APIを実装する
+- [x] Rust側でNULLポインタ、不正長、不正Scalar、不正G1/G2、不正GT、短い出力バッファを整数エラーコードで返す
+- [x] Rust側のpanicをFFI境界の外へ漏らさない
+- [x] Rust側テストでgenerator、identity、加算、Scalar乗算、pairingの双線形性、不正入力失敗を確認する
+- [x] Rust側テストで `bls-signatures` 相当APIの鍵生成、署名、単体検証、集約、重複メッセージ拒否、serialization round-tripを確認する
+- [x] Rustでビルドし、`librust_crypto_ffi.a` を出力する
+- [x] Nim側にBLS12-381用の長さ定数、低水準FFI proc、公開型を追加する
+- [x] Nim側に `src/nim-rustcrypto/src/rustcrypto/algorithm/bls.nim` を追加する
+- [x] Nim側にScalar、G1、G2、pairing比較の低レベルAPIを追加する
+- [x] Nim側に `bls-signatures` 相当の `Bls.generatePrivateKey`、`Bls.privateKeyFromSeed`、`Bls.publicKey`、`Bls.sign`、`Bls.hash`、`Bls.aggregate`、`Bls.verify`、`Bls.verifyMessages` を追加する
+- [x] Nim側verify系APIは数学的な不一致を `false` として返し、呼び出し方の誤りは例外にする
+- [x] Nim側テストでRust側と同等の正常系、改ざん失敗、不正入力を確認する
+- [x] Nim側テストで `bls-signatures` 相当APIの鍵生成、署名、単体検証、集約、重複メッセージ拒否、serialization round-tripを確認する
+- [x] READMEとdocsにBLS12-381低レベルAPI、BLS署名API、`bls-signatures` 互換範囲、対象外範囲を追記する
+
+## 参考資料
+- `bls12_381` crate: https://crates.io/crates/bls12_381
+- `bls12_381` crate documentation: https://docs.rs/bls12_381/latest/bls12_381/
+- `bls12_381` 0.8.0 crate metadata: https://docs.rs/crate/bls12_381/0.8.0
+- `bls-signatures` crate documentation: https://docs.rs/bls-signatures/latest/bls_signatures/
+- `bls-signatures` 0.15.0 crate metadata: https://docs.rs/crate/bls-signatures/0.15.0
+- `bls-signatures` source: https://docs.rs/bls-signatures/latest/src/bls_signatures/
+- zkcrypto `bls12_381` repository: https://github.com/zkcrypto/bls12_381
+- BLS12-381 for the rest of us: https://hackmd.io/@benjaminion/bls12-381
+- IETF hash-to-curve RFC 9380: https://www.rfc-editor.org/rfc/rfc9380
+- IETF BLS signatures draft: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature
+- Ethereum consensus specs, BLS signatures: https://github.com/ethereum/consensus-specs
+- Rust Reference Linkage: https://doc.rust-lang.org/reference/linkage.html
+- Nim Manual: https://nim-lang.org/docs/manual.html
+- Nim system module: https://nim-lang.org/docs/system.html
+
+## 調査結果・設計まとめ
+- 2026-05-14時点の調査では、`bls12_381` の最新安定版は0.8.0である。
+- `bls12_381` 0.8.0はBLS12-381 pairing-friendly elliptic curve constructionの実装であり、`Scalar`、`G1Affine`、`G1Projective`、`G2Affine`、`G2Projective`、`Gt`、`Bls12`、`pairing`、`multi_miller_loop` を提供する。
+- `bls12_381` 0.8.0のdefault featureには `bits`、`groups`、`pairings`、`alloc` が含まれる。`bls-signatures` 相当の `hash` と `sign` を実現するには `hash_to_curve` APIが必要になるため、このブランチではBLS署名互換用途に限って `experimental` featureの採用を検討する。
+- `bls12_381` crateのドキュメントには、実装は未監査であり利用者責任で使う旨が明記されている。このブランチではREADMEまたはdocsにも低レベルAPIであること、監査済みBLS署名ライブラリではないことを明記する。
+- `bls-signatures` 0.15.0は `PrivateKey`、`PublicKey`、`Signature`、`Serialize` trait、`aggregate`、`hash`、`verify`、`verify_messages` を公開している。
+- `bls-signatures` 0.15.0の `PrivateKey::new` は32バイト以上の入力鍵素材からHKDF-SHA256でdeterministic private keyを生成し、`PrivateKey::generate` は32バイト乱数を鍵素材にして `new` と同じ処理を行う。
+- `bls-signatures` 0.15.0の `PrivateKey::sign` は `signature = hash_into_g2(message) * sk`、`PrivateKey::public_key` は `pk = g1 * sk` である。
+- `bls-signatures` 0.15.0の `hash` は `BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_NUL_` ciphersuiteでメッセージをG2へhashする。
+- `bls-signatures` 0.15.0の `verify` は `e(g1, signature) == product(e(pk_i, hash_i))` を確認し、空入力、件数不一致、単体検証でのidentity public key、重複hashを失敗にする。
+- `bls-signatures` 0.15.0の `verify_messages` は各messageを `hash` してから `verify` と同等の検証を行う。重複メッセージはrogue-key attack対策として失敗にする。
+- `bls-signatures` 0.15.0のserializationは、private keyが32バイトScalar表現、public keyがG1 compressed 48バイト、signatureがG2 compressed 96バイトである。Nim側もこの3種類を固定長型として公開する。
+- 依存追加はプロジェクトルール `SYW-DEPS-001` に従い、`Cargo.toml` 手編集ではなく `/application/src/rustcrypto-ffi` で `cargo add bls12_381@0.8.0` を使う。hash-to-G2実装で必要な場合は、同じくCLIで `ff`、`group`、`pairing`、`hkdf`、`sha2` などのfeature/依存を調整する。
+- `bls12_381` 0.8.0は `rand_core` 0.6を依存に持つ。既存の非wasm向け `rand_core = 0.6.4` と揃えられる見込みだが、wasm32対応では乱数生成APIを最小化またはcfg分岐する。
+- `Bls` というNim marker typeはBLS12-381低レベル名前空間と `bls-signatures` 相当APIの両方で使う。署名型は `BlsPrivateKey`、`BlsPublicKey`、`BlsSignature` とし、低レベルG1/G2型とは別名にする。
+- Rust側実装ファイルは `src/rustcrypto-ffi/src/bls.rs` に分離する。`lib.rs` には `mod bls;`、長さ定数、必要なエラーコードだけを追加する。
+- Nim側実装ファイルは `src/nim-rustcrypto/src/rustcrypto/algorithm/bls.nim` とする。低水準FFI procは既存方針に合わせて `src/nim-rustcrypto/src/rustcrypto/algorithm/ffi.nim` に集約する。
+- Nim側公開APIは、プロジェクトルール `SYW-API-001` に合わせて `Bls.scalarAdd(...)`、`Bls.g1Add(...)`、`Bls.pairingEq(...)`、`Bls.sign(...)`、`Bls.verifyMessages(...)` のような marker type + type-first の static 関数風APIを正規面にする。
+
+### データ表現
+- Scalarは32バイト **little-endian** canonical encodingを基本にする（`bls12_381::Scalar` / `bls-signatures` のwire形式に合わせる）。旧メモの big-endian 記述は誤り。
+- G1圧縮形式は48バイト、G1非圧縮形式は96バイトとする。
+- G2圧縮形式は96バイト、G2非圧縮形式は192バイトとする。
+- `bls-signatures` 相当APIでは、`BlsPrivateKey` は32バイト、`BlsPublicKey` はG1 compressed 48バイト、`BlsSignature` と `BlsMessageHash` はG2 compressed 96バイトとする。
+- GTの外部公開形式は初期実装では作らない。GT要素の一般的な安定バイト表現をFFI公開面として固定すると後から変更しづらいため、pairing結果の比較APIを先に公開する。
+- G1/G2のidentityは、`bls12_381` crateのエンコード/デコードが扱える範囲で許容する。ただし署名検証など将来のプロトコルAPIではidentityを拒否する可能性があるため、低レベルAPIのdocsに用途別検証が必要であることを書く。
+- compressed/uncompressedの選択は既存P-256/P-384と同様、FFIでは `format` または `compressed` 引数で明示する。Nim側では固定長型を分ける。
+
+### Rust FFI API設計
+- FFI公開APIは、C ABI互換のポインタ、長さ、整数、固定長バッファだけにする。Rustの `Result`、`Vec`、`String`、参照、trait、crate固有型は公開しない。
+- Rust側はすべてのFFI公開関数でpanicを境界外へ漏らさない。既存実装と同様に `catch_unwind` を使い、panic時は `RUSTCRYPTO_ERR_PANIC` を返す。
+- 出力バッファ所有権はNim側が持つ。Rust側は入力を借用し、出力バッファへ固定長または `written_len` で指定される長さを書き込むだけにする。
+- Rust側FFI公開API案は以下とする。
+  - `rustcrypto_bls12_381_scalar_validate(scalar, scalar_len) -> c_int`
+  - `rustcrypto_bls12_381_scalar_random(output, output_len) -> c_int`
+  - `rustcrypto_bls12_381_scalar_add(lhs, lhs_len, rhs, rhs_len, output, output_len) -> c_int`
+  - `rustcrypto_bls12_381_scalar_mul(lhs, lhs_len, rhs, rhs_len, output, output_len) -> c_int`
+  - `rustcrypto_bls12_381_scalar_invert(scalar, scalar_len, output, output_len) -> c_int`
+  - `rustcrypto_bls12_381_g1_generator(output, output_len, compressed) -> c_int`
+  - `rustcrypto_bls12_381_g2_generator(output, output_len, compressed) -> c_int`
+  - `rustcrypto_bls12_381_g1_validate(point, point_len, compressed) -> c_int`
+  - `rustcrypto_bls12_381_g2_validate(point, point_len, compressed) -> c_int`
+  - `rustcrypto_bls12_381_g1_add(lhs, lhs_len, rhs, rhs_len, output, output_len, compressed) -> c_int`
+  - `rustcrypto_bls12_381_g2_add(lhs, lhs_len, rhs, rhs_len, output, output_len, compressed) -> c_int`
+  - `rustcrypto_bls12_381_g1_neg(point, point_len, output, output_len, compressed) -> c_int`
+  - `rustcrypto_bls12_381_g2_neg(point, point_len, output, output_len, compressed) -> c_int`
+  - `rustcrypto_bls12_381_g1_mul(point, point_len, scalar, scalar_len, output, output_len, compressed) -> c_int`
+  - `rustcrypto_bls12_381_g2_mul(point, point_len, scalar, scalar_len, output, output_len, compressed) -> c_int`
+  - `rustcrypto_bls12_381_pairing_eq(g1_lhs, g1_lhs_len, g2_lhs, g2_lhs_len, g1_rhs, g1_rhs_len, g2_rhs, g2_rhs_len) -> c_int`
+  - `rustcrypto_bls12_381_pairing_product_is_identity(g1_points, g1_points_len, g2_points, g2_points_len, pair_count) -> c_int`
+  - `rustcrypto_bls12_381_signature_private_key_from_seed(seed, seed_len, output, output_len) -> c_int`
+  - `rustcrypto_bls12_381_signature_private_key_generate(output, output_len) -> c_int`
+  - `rustcrypto_bls12_381_signature_private_key_from_decimal_string(input, input_len, output, output_len) -> c_int`
+  - `rustcrypto_bls12_381_signature_public_key(private_key, private_key_len, output, output_len) -> c_int`
+  - `rustcrypto_bls12_381_signature_hash(message, message_len, output, output_len) -> c_int`
+  - `rustcrypto_bls12_381_signature_sign(message, message_len, private_key, private_key_len, output, output_len) -> c_int`
+  - `rustcrypto_bls12_381_signature_aggregate(signatures, signatures_len, signature_count, output, output_len) -> c_int`
+  - `rustcrypto_bls12_381_signature_verify(signature, signature_len, hashes, hashes_len, public_keys, public_keys_len, pair_count) -> c_int`
+  - `rustcrypto_bls12_381_signature_verify_messages(signature, signature_len, messages, message_lens, message_count, public_keys, public_keys_len) -> c_int`
+- `pairing_eq` は `pairing(g1_lhs, g2_lhs) == pairing(g1_rhs, g2_rhs)` のとき `RUSTCRYPTO_OK`、数学的に一致しないとき `RUSTCRYPTO_ERR_VERIFICATION_FAILED` を返す。
+- `pairing_product_is_identity` はBLS署名検証や集約検証の土台として、複数pairing積がidentityかどうかだけを返す。配列レイアウトはG1 compressed 48バイト連結、G2 compressed 96バイト連結を基本にし、初期実装で必要性を再確認する。
+- `signature_private_key_from_seed` は `bls-signatures` の `PrivateKey::new` 相当とし、32バイト未満のseedはpanicではなく `RUSTCRYPTO_ERR_INVALID_LENGTH` を返す。
+- `signature_private_key_generate` はRust側でOS乱数32バイトを生成し、`signature_private_key_from_seed` と同じHKDF処理でprivate keyを作る。wasm32で安全な乱数を利用できない場合はcfgで無効化し、`RUSTCRYPTO_ERR_RANDOM_FAILED` を返すかNim側で非対応にする。
+- `signature_private_key_from_decimal_string` は `bls-signatures` の `PrivateKey::from_string` 相当とし、10進文字列をScalarとして読む。文字列はUTF-8 bytesとして受け取り、Rustの `String` はFFI公開面に出さない。
+- `signature_hash` は `bls-signatures` の `hash` 相当とし、ciphersuite `BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_NUL_` を固定する。汎用DST入力APIはこのブランチでは作らない。
+- `signature_verify` はhash済みG2 compressed列とpublic key G1 compressed列を受け取り、空入力、件数不一致、identity public key、重複hashを `RUSTCRYPTO_ERR_VERIFICATION_FAILED` とする。
+- `signature_verify_messages` はメッセージ配列とpublic key列を受け取り、Rust側でhash-to-G2してから `signature_verify` と同等の検証を行う。メッセージ配列は `messages: *const *const u8` と `message_lens: *const usize` の形を基本にするが、NimからのFFI安定性を確認して最終決定する。
+- G1/G2入力のcompressed判定は初期実装では呼び出し側に明示させる。自動判定は、同じ長さでない形式だけに限定できる場合でも、曖昧さを避けるため正規APIにしない。
+- エラーコードは既存定数を優先して再利用する。NULL出力は `RUSTCRYPTO_ERR_NULL_OUTPUT`、短い出力バッファは `RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT`、長さ付きNULL入力は `RUSTCRYPTO_ERR_NULL_INPUT_WITH_DATA`、長さ不正は `RUSTCRYPTO_ERR_INVALID_LENGTH`、Scalar/G1/G2/format不正は `RUSTCRYPTO_ERR_INVALID_PARAMETER`、数学的不一致は `RUSTCRYPTO_ERR_VERIFICATION_FAILED` とする。
+- Scalarや点の不正をより明確に分ける必要が出た場合だけ、`RUSTCRYPTO_ERR_INVALID_SCALAR`、`RUSTCRYPTO_ERR_INVALID_POINT` の追加を検討する。既存Nimエラーマッピングへの影響を確認してから追加する。
+
+### Nim API設計
+- Nim側の長さ定数は以下を追加する。
+  - `Bls12381ScalarLen = 32`
+  - `Bls12381G1CompressedLen = 48`
+  - `Bls12381G1UncompressedLen = 96`
+  - `Bls12381G2CompressedLen = 96`
+  - `Bls12381G2UncompressedLen = 192`
+- Nim側の公開型は以下を基本にする。
+  - `Bls* = object`
+  - `BlsScalar* = array[Bls12381ScalarLen, byte]`
+  - `BlsG1Compressed* = array[Bls12381G1CompressedLen, byte]`
+  - `BlsG1Uncompressed* = array[Bls12381G1UncompressedLen, byte]`
+  - `BlsG2Compressed* = array[Bls12381G2CompressedLen, byte]`
+  - `BlsG2Uncompressed* = array[Bls12381G2UncompressedLen, byte]`
+  - `BlsPrivateKey* = array[Bls12381ScalarLen, byte]`
+  - `BlsPublicKey* = array[Bls12381G1CompressedLen, byte]`
+  - `BlsSignature* = array[Bls12381G2CompressedLen, byte]`
+  - `BlsMessageHash* = array[Bls12381G2CompressedLen, byte]`
+- Nim側公開API案は以下とする。
+  - `Bls.randomScalar(): BlsScalar`
+  - `Bls.scalarAdd(lhs, rhs: BlsScalar): BlsScalar`
+  - `Bls.scalarMul(lhs, rhs: BlsScalar): BlsScalar`
+  - `Bls.scalarInvert(value: BlsScalar): BlsScalar`
+  - `Bls.g1Generator(_: typedesc[BlsG1Compressed]): BlsG1Compressed`
+  - `Bls.g2Generator(_: typedesc[BlsG2Compressed]): BlsG2Compressed`
+  - `Bls.g1Add(lhs, rhs: BlsG1Compressed): BlsG1Compressed`
+  - `Bls.g2Add(lhs, rhs: BlsG2Compressed): BlsG2Compressed`
+  - `Bls.g1Neg(point: BlsG1Compressed): BlsG1Compressed`
+  - `Bls.g2Neg(point: BlsG2Compressed): BlsG2Compressed`
+  - `Bls.g1Mul(point: BlsG1Compressed, scalar: BlsScalar): BlsG1Compressed`
+  - `Bls.g2Mul(point: BlsG2Compressed, scalar: BlsScalar): BlsG2Compressed`
+  - `Bls.pairingEq(g1Lhs: BlsG1Compressed, g2Lhs: BlsG2Compressed, g1Rhs: BlsG1Compressed, g2Rhs: BlsG2Compressed): bool`
+  - `Bls.privateKeyFromSeed(seed: openArray[byte]): BlsPrivateKey`
+  - `Bls.generatePrivateKey(): BlsPrivateKey`
+  - `Bls.privateKeyFromDecimalString(value: string): BlsPrivateKey`
+  - `Bls.publicKey(privateKey: BlsPrivateKey): BlsPublicKey`
+  - `Bls.hash(message: openArray[byte]): BlsMessageHash`
+  - `Bls.sign(message: openArray[byte], privateKey: BlsPrivateKey): BlsSignature`
+  - `Bls.aggregate(signatures: openArray[BlsSignature]): BlsSignature`
+  - `Bls.verify(signature: BlsSignature, hashes: openArray[BlsMessageHash], publicKeys: openArray[BlsPublicKey]): bool`
+  - `Bls.verifyMessages(signature: BlsSignature, messages: openArray[seq[byte]], publicKeys: openArray[BlsPublicKey]): bool`
+  - `Bls.verify(message: openArray[byte], publicKey: BlsPublicKey, signature: BlsSignature): bool`
+- Nim側ではcompressed型を正規面とする。uncompressedは相互運用やデバッグ用途として必要になった場合に追加し、初期公開面を広げすぎない。
+- `Bls.verify(message, publicKey, signature)` は `bls-signatures` の `PublicKey::verify` 相当として提供し、内部では `verifyMessages` と同じ検証方針を使う。
+- `Bls.aggregate` は空配列を例外にする。これは `bls-signatures` の `aggregate` が空入力を `Error::ZeroSizedInput` とする挙動に合わせる。
+- `Bls.privateKeyFromSeed` は32バイト未満を例外にする。`bls-signatures` のpanic挙動はNim公開APIには出さない。
+- `Bls.verify` と `Bls.verifyMessages` は、空入力、件数不一致、identity public key、重複hashまたは重複message、pairing不一致を `false` にする。入力の形が壊れている場合は例外にする。
+- Nim verify系APIでは `RUSTCRYPTO_ERR_VERIFICATION_FAILED` を `false` に変換する。NULL入力、不正長、不正点、不正Scalar、出力不足、panicは例外にする。
+- 既存の `$`、`fromHex...`、`bytesToHexString`、`fromHexDigest` のパターンに合わせ、BLS型にもhex変換補助を追加する。
+
+### テスト方針
+- Rust側テストは最初に実装する。`SYW-DEV-001` に従い、Rustテスト、Rust静的アーカイブ出力、Nimラッパー、Nimテストの順に進める。
+- Scalarテストでは、1、2、order - 1相当の境界、非canonical入力、短い入力、長い入力を確認する。
+- G1/G2テストでは、generator出力のvalidate成功、generator + identity、generator + generator、generator * 2、negationとの加算がidentityになることを確認する。
+- pairingテストでは、`e(g1, g2) == e(g1 * a, g2 * a^-1)` のような双線形性、`e(g1, g2) != e(g1 * 2, g2)` の不一致、改ざん点の失敗を確認する。
+- BLS署名テストでは、`bls-signatures` の公開テストに合わせて、固定seedからの鍵生成、sign、public key verify、aggregate、verify、verifyMessages、同一メッセージ集約の拒否を確認する。
+- `PrivateKey::new` 相当のテストでは、32バイト未満seedをpanicではなくエラーにすること、32バイト以上seedで決定論的に同じprivate keyになることを確認する。
+- serializationテストでは、private key 32バイト、public key 48バイト、signature 96バイトのround-tripを確認する。
+- Nim側テストはRust側で確認した性質をFFI経由で再確認する。暗号学的な不一致が `false`、呼び出し方の誤りが例外になることも確認する。
+- IETF BLS署名ドラフトまたはEthereum consensus specの完全互換ベクトルはこのブランチの必須条件にしない。`bls-signatures` 0.15.0相当APIとの互換挙動を優先して検証する。
+
+### README/docs更新方針
+- READMEのFeatures summaryにBLS12-381 low-level curve/pairingとBLS signatures compatible with `bls-signatures` style APIsを追記する。
+- docsには `docs/bls12-381.md` を追加し、対象範囲がG1/G2/Scalar/pairingと `bls-signatures` 相当BLS署名APIであることを明記する。
+- `docs/ffi-low-level.md` には追加したFFI関数と長さ定数を追記する。
+- 監査済み署名実装ではないこと、hash-to-G2のciphersuiteは `bls-signatures` 互換用に固定すること、compressed形式を正規面にすることを書く。
