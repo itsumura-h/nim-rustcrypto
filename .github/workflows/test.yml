@@ -50,7 +50,7 @@ jobs:
       - name: Rust tests and Nim tests (Apple Silicon native)
         run: |
           set -euo pipefail
-          cd "$GITHUB_WORKSPACE/src/rustcrypto-ffi"
+          cd "$GITHUB_WORKSPACE"
           ./test.sh
 
   # wasm32-wasip1: Rust 静的ライブラリのビルドに加え、WASI SDK + Nim（--cpu:wasm32 --os:any）で
