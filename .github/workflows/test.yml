@@ -7,7 +7,9 @@ permissions:
   contents: read
 
 jobs:
-  docker-compose-test:
+  # Linux x86_64 上の開発用 Docker イメージで、既存の test.sh（Rust + wasm/wasi クロスビルド + Nim）を実行する。
+  linux-x86_64-docker-compose:
+    name: Linux x86_64 (Docker)
     runs-on: ubuntu-latest
 
     steps:
@@ -27,7 +29,9 @@ jobs:
         if: always()
         run: docker compose down --remove-orphans
 
+  # Apple Silicon 上でネイティブ Rust / wasm / wasi の静的ライブラリをビルドし、Nim テストまで通す。
   macos-arm64-smoke:
+    name: macOS arm64 (Apple Silicon)
     runs-on: macos-14
 
     steps:
@@ -60,3 +64,82 @@ jobs:
           cd "$GITHUB_WORKSPACE/src/nim-rustcrypto"
           nim r --hints:off --warnings:off src/rustcrypto/tools/sync_local_rustcrypto_ffi.nim
           nimble test -y
+
+  # wasm32-wasip1: Rust 静的ライブラリのビルドに加え、WASI SDK + Nim（--cpu:wasm32 --os:any）で
+  # rustcrypto FFI をリンクできることを検証する。WASI SDK の入れ方は nicp_cdk の手順に倣う。
+  # 参照: https://github.com/itsumura-h/nicp_cdk （WASI SDK インストール）
+  wasm32-wasip1-smoke:
+    name: wasm32-wasip1 (WASI staticlib + Nim)
+    runs-on: ubuntu-latest
+    env:
+      WASI_SDK_VER: "25"
+      WASI_SDK_VER_FULL: "25.0"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Add wasm32-wasip1 target
+        run: rustup target add wasm32-wasip1
+
+      - name: Build rustcrypto-ffi for wasm32-wasip1
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/src/rustcrypto-ffi"
+          cargo build --release --lib --target wasm32-wasip1
+          test -s target/wasm32-wasip1/release/librust_crypto_ffi.a
+
+      - name: Install WASI SDK (wasi-sdk)
+        shell: bash
+        run: |
+          set -euo pipefail
+          dest="${RUNNER_TEMP}/wasi-sdk"
+          mkdir -p "$dest"
+          curl -fsSL -o "$dest/wasi-sdk.tar.gz" \
+            "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VER}/wasi-sdk-${WASI_SDK_VER_FULL}-x86_64-linux.tar.gz"
+          tar -xzf "$dest/wasi-sdk.tar.gz" -C "$dest"
+          rm "$dest/wasi-sdk.tar.gz"
+          sdk_dir="$dest/wasi-sdk-${WASI_SDK_VER_FULL}-x86_64-linux"
+          echo "WASI_SDK_PATH=$sdk_dir" >> "$GITHUB_ENV"
+          echo "PATH=$sdk_dir/bin:$PATH" >> "$GITHUB_ENV"
+
+      - name: Install Nim toolchain
+        uses: jiro4989/setup-nim-action@v2
+        with:
+          nim-version: "2.0.x"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Stage wasm32-wasip1 vendor archive for Nim resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+          vend="$GITHUB_WORKSPACE/src/nim-rustcrypto/src/rustcrypto/vendor/rustcrypto-ffi/wasm32-wasip1"
+          mkdir -p "$vend"
+          cp "$GITHUB_WORKSPACE/src/rustcrypto-ffi/target/wasm32-wasip1/release/librust_crypto_ffi.a" \
+            "$vend/librust_crypto_ffi-wasm32-wasip1.a"
+
+      - name: Nim compile smoke (wasm32-wasip1 + rustcrypto FFI)
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${WASI_SDK_PATH:?WASI_SDK_PATH must be set}"
+          smoke="$GITHUB_WORKSPACE/src/nim-rustcrypto/ci/wasi_sha256_smoke.nim"
+          out="${RUNNER_TEMP}/wasi_sha256_smoke.wasm"
+          nim c --cpu:wasm32 --os:any --cc:clang \
+            --clang.exe:"clang" \
+            --clang.linkerexe:"clang" \
+            --passC:"--target=wasm32-wasip1" \
+            --passC:"--sysroot=${WASI_SDK_PATH}/share/wasi-sysroot" \
+            --passC:"-D_WASI_EMULATED_SIGNAL" \
+            --passL:"--target=wasm32-wasip1" \
+            --passL:"--sysroot=${WASI_SDK_PATH}/share/wasi-sysroot" \
+            --passL:"-fuse-ld=${WASI_SDK_PATH}/bin/wasm-ld" \
+            --passL:"-lwasi-emulated-signal" \
+            -d:release -d:useMalloc --mm:arc \
+            -d:rustcryptoWasi \
+            --path:"$GITHUB_WORKSPACE/src/nim-rustcrypto/src" \
+            --hints:off -o:"$out" "$smoke"
+          test -s "$out"
