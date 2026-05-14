@@ -51,12 +51,7 @@ jobs:
         run: |
           set -euo pipefail
           cd "$GITHUB_WORKSPACE/src/rustcrypto-ffi"
-          cargo test
-          cargo build --release --lib
-          test -s target/release/librust_crypto_ffi.a
-          cd "$GITHUB_WORKSPACE/src/nim-rustcrypto"
-          nim r --hints:off --warnings:off src/rustcrypto/tools/sync_local_rustcrypto_ffi.nim
-          nimble test -y
+          ./test.sh
 
   # wasm32-wasip1: Rust 静的ライブラリのビルドに加え、WASI SDK + Nim（--cpu:wasm32 --os:any）で
   # `ci/rustcrypto_exec_smoke.nim` を wasm にコンパイルし、当該ターゲットで rustcrypto（FFI）がリンクできることを検証する。
@@ -119,6 +114,8 @@ jobs:
         run: |
           set -euo pipefail
           : "${WASI_SDK_PATH:?WASI_SDK_PATH must be set}"
+          cd "$GITHUB_WORKSPACE/src/nim-rustcrypto"
+          nimble install -y
           smoke="$GITHUB_WORKSPACE/src/nim-rustcrypto/ci/rustcrypto_exec_smoke.nim"
           out="${RUNNER_TEMP}/rustcrypto_exec_smoke.wasm"
           nim c --cpu:wasm32 --os:any --cc:clang \

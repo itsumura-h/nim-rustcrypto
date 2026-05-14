@@ -27,6 +27,7 @@ alwaysApply: false
 - [x] `test.yml` の `macos-arm64-smoke` は Apple Silicon 上の Rust / Nim（ネイティブ）のみ検証し、wasm / wasi は Linux 側ジョブに任せる
 - [x] `resolve` から `fetch` を呼ぶ際の `nim r` 引数で `--` が package ルートと誤解釈されないよう修正した（`fetch` 側で `--` をスキップ、`resolve` 側は `--` なしでも可）
 - [x] Linux 上で `./test.sh` を実行し Nim テストまで成功を確認した
+- [x] `src/nim-rustcrypto/src/rustcrypto/algorithm/ffi.nim` の `currentSourcePath` 解決を文字列ベースに変更し、wasm32-wasip1 コンパイル時の `std/os` 依存を外した
 - [ ] macOS 実機での最終確認は CI / 利用者環境に委ねる
 
 ## 参考資料
@@ -50,6 +51,7 @@ alwaysApply: false
 - Release asset の正規形は `rustcrypto-ffi-v{version}-macos-arm64.tar.gz` とする。Linux / wasm / wasi の asset 名は現状のまま維持する。
 - `resolve_rustcrypto_ffi.nim` は `macos-arm64` を正規化できるようにし、macOS arm64 要求時に Linux 版へ fallback してはならない。
 - `ffi.nim` は macOS arm64 で `macos-arm64` のアーカイブをリンクする。Intel Mac は対象外なので、`macosx` だが arm64 でない環境は明示エラーにする。
+- `ffi.nim` の `currentSourcePath` 解決は `std/os` に依存させず、wasm32-wasip1 でもコンパイル可能な文字列ベースの簡易パス処理にする。
 - `rustcrypto.nimble` の `before install` と `fetchRustFfi` は、Linux amd64 だけでなく macOS arm64 でも動くようにする必要がある。macOS では `sha256sum` ではなく、OS に応じた checksum 検証手段へ分岐する。
 - `buildRustFfiLocal` と local sync は host-aware にし、macOS arm64 では host native archive を `macos-arm64` として vendor/cache に同期する。
 - GitHub Actions は Linux job と macOS arm64 job に分ける。Linux job は既存の Linux / wasm / wasi を回し、macOS arm64 job は native build と smoke test に集中する。
