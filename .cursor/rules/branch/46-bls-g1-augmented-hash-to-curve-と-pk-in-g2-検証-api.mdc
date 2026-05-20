@@ -1,0 +1,115 @@
+---
+description: 46-bls-g1-augmented-hash-to-curve-と-pk-in-g2-検証-apiブランチでの開発時に読み込む
+alwaysApply: false
+---
+46-bls-g1-augmented-hash-to-curve-と-pk-in-g2-検証-api ブランチルール
+===
+
+このブランチで実装することは以下の通りです。
+- 既存の `Bls.verify` / `Bls.hash` / `Bls.sign` が前提にしている `bls-signatures` 0.15 style、つまり minimal-pk-size 方式を壊さない
+- BLS12-381 の minimal-signature-size + message augmentation 方式に基づく汎用検証 API を追加する
+- 追加 API では公開鍵を G2 compressed 96 bytes、署名とメッセージハッシュを G1 compressed 48 bytes として扱う
+- 追加 API の hash-to-curve は `BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_AUG_` を固定 DST とし、AUG 方式に従って `publicKeyBytes || message` を G1 に hash する
+- 追加 API は marker type + type-first の static 関数風 API として Nim の正規公開面に追加する
+- Rust FFI 境界では C ABI 互換型のみを使い、panic を漏らさず、入力エラーと検証失敗を既存エラーコードで区別する
+
+このブランチでは、特定プロトコルの復号処理、transport secret key、encrypted key 構造、IBE、VRF、外部サービス呼び出しは実装対象外とする。
+対象は BLS12-381 の公開鍵 G2 / 署名 G1 / AUG hash-to-G1 の汎用検証 API 追加に限定する。
+
+## 進捗
+- [x] `.cursor/rules/project.mdc` を読み、FFI、ビルド、TDD、公開 API 設計ルールを確認する
+- [x] `.cursor/rules/branch.mdc` を読み、ブランチルールの形式と記録方針を確認する
+- [x] 現在ブランチ `46-bls-g1-augmented-hash-to-curve-と-pk-in-g2-検証-api` に対応する既存ブランチルールがないことを確認する
+- [x] G2 公開鍵 / G1 署名を使う BLS12-381 minimal-signature-size 方式の仕様と実装例を調査する
+- [x] G2 公開鍵 / G1 署名 / AUG hash-to-G1 の既存実装例を調査する
+- [x] IETF BLS signature draft の minimal-signature-size と message augmentation の仕様を確認する
+- [x] 既存 `Bls` 実装が minimal-pk-size / G1 public key / G2 signature 前提であることを確認する
+- [x] 実装方針と設計をこのブランチルールに記録する
+- [x] Rust 側テストを先に追加し、G2 公開鍵 / G1 署名 / AUG hash-to-G1 の期待挙動を固定する
+- [x] Rust FFI に G2 公開鍵 / G1 署名 / AUG hash-to-G1 の hash API と verify API を追加する
+- [x] Nim FFI import を追加する
+- [x] Nim 公開型と公開 API を追加する
+- [x] Nim 側テストを追加し、FFI 経由の正常系と失敗系を確認する
+- [x] README / docs に既存 BLS API との差分と追加 API の方式を追記する
+
+## 参考資料
+- IETF BLS signatures draft: https://www.ietf.org/archive/id/draft-irtf-cfrg-bls-signature-05.html
+- IETF hash-to-curve RFC 9380: https://www.rfc-editor.org/rfc/rfc9380
+- `bls12_381` crate documentation: https://docs.rs/bls12_381/latest/bls12_381/
+
+## 調査結果・設計まとめ
+
+### G2 公開鍵 / G1 署名 / AUG 方式の仕様理解
+- IETF draft の minimal-signature-size 方式では、公開鍵は G2、署名は G1 に置かれる。
+- IETF draft の message augmentation 方式では、署名・検証とも `PK || message` を CoreSign / CoreVerify に渡す。
+- 追加 API では ciphersuite / DST として `BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_AUG_` を使う。
+- 公開 API は特定プロトコル名を含めず、この署名方式の数学的検証を汎用 BLS 関数として提供する。
+- 既存の外部実装例は、固定テストベクトルを作る場合の相互確認材料としてのみ扱う。
+
+### BLS 署名方式の差分
+- 既存 `Bls.verify` は `bls-signatures` 0.15 style の minimal-pk-size 方式である。
+- 既存方式では public key は G1 compressed 48 bytes、signature と message hash は G2 compressed 96 bytes、DST は `BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_NUL_` である。
+- 追加方式は minimal-signature-size + message augmentation 方式である。
+- 追加方式では public key は G2 compressed 96 bytes、signature と message hash は G1 compressed 48 bytes、DST は `BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_AUG_` である。
+- IETF draft の message augmentation は、署名・検証とも `PK || message` を CoreSign / CoreVerify に渡す方式である。
+- 既存の G1 AUG 実装例でも、`publicKeyBytes || message` を hash-to-G1 へ渡し、G2 public key と G1 signature で pairing 検証している。
+- このため、追加 API では「message を直接 hash する API」と「AUG 方式で public key と message を連結して hash する API」を混同しない。
+
+### Rust FFI 設計
+- 既存の `src/rustcrypto-ffi/src/bls.rs` に、G1 AUG ciphersuite 用の固定 DST を追加する。
+  - `const AUG_G1_CSUITE: &[u8] = b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_AUG_";`
+- hash-to-G1 helper を追加する。
+  - `fn hash_to_g1_aug(public_key: &[u8], message: &[u8]) -> Result<G1Projective, c_int>`
+  - 入力は `public_key || message` とし、`G1Projective as HashToCurve<ExpandMsgXmd<Sha256Htc>>` を使う。
+  - `public_key` は必ず compressed G2 96 bytes の canonical bytes とする。
+- FFI 関数案は以下とする。
+  - `rustcrypto_bls12_381_signature_hash_g1_aug(public_key, public_key_len, message, message_len, output, output_len) -> c_int`
+  - `rustcrypto_bls12_381_signature_verify_g1_aug_hash(signature, signature_len, message_hash, message_hash_len, public_key, public_key_len) -> c_int`
+  - `rustcrypto_bls12_381_signature_verify_g1_aug_message(signature, signature_len, message, message_len, public_key, public_key_len) -> c_int`
+- `signature_hash_g1_aug` は public key G2 compressed 96 bytes と message bytes から AUG hash-to-G1 を計算し、G1 compressed 48 bytes を返す。
+- `signature_verify_g1_aug_hash` は hash 済み G1 compressed 48 bytes、signature G1 compressed 48 bytes、public key G2 compressed 96 bytes を受け取り、pairing で検証する。
+- `signature_verify_g1_aug_message` は Rust 側で `signature_hash_g1_aug` 相当を計算してから `signature_verify_g1_aug_hash` 相当を実行する。
+- pairing check は `e(signature, G2::generator()) == e(hash, public_key)` とする。
+- 実装上は `e(signature, -G2::generator()) * e(hash, public_key) == 1` または同値な Miller loop 積で確認する。
+- 既存 minimal-pk-size 実装の `verify_aggregate_impl` は G1/G2 の向きが逆なので再利用しない。G1 AUG 方式用に小さな専用 helper を追加する。
+- public key G2、signature G1、message hash G1 は compressed 形式のみを正規 API とする。
+- public key が identity の場合は検証失敗とする。signature または message hash の identity も検証失敗として扱う。
+- decode に失敗する不正 point / subgroup 外 point / 不正長は既存方針に合わせ、検証不一致ではなく入力エラーとして返す。
+- `RUSTCRYPTO_ERR_VERIFICATION_FAILED` は数学的に署名が一致しない場合に使う。
+- NULL 出力、出力不足、長さ付き NULL 入力、不正長、不正 point は既存 `aead_common` と既存 BLS 関数のエラー設計に合わせる。
+- FFI 公開面に `Vec<T>`、`String`、`Result<T, E>`、Rust reference、trait object は出さない。
+- 全 FFI 関数は `catch_unwind(AssertUnwindSafe(...))` で包み、panic を `RUSTCRYPTO_ERR_PANIC` に変換する。
+
+### Nim API 設計
+- 既存 `BlsPublicKey` / `BlsSignature` / `BlsMessageHash` は minimal-pk-size 用の型なので意味を変えない。
+- G1 AUG 方式用に別名の固定長型を追加する。
+  - `BlsAugG1PublicKey* = BlsG2Compressed`
+  - `BlsAugG1Signature* = BlsG1Compressed`
+  - `BlsAugG1MessageHash* = BlsG1Compressed`
+- 公開 API 案は以下とする。
+  - `proc hashAugG1*(T: type Bls; publicKey: BlsAugG1PublicKey; message: openArray[byte]): BlsAugG1MessageHash`
+  - `proc verifyAugG1*(T: type Bls; signature: BlsAugG1Signature; messageHash: BlsAugG1MessageHash; publicKey: BlsAugG1PublicKey): bool`
+  - `proc verifyAugG1Message*(T: type Bls; signature: BlsAugG1Signature; message: openArray[byte]; publicKey: BlsAugG1PublicKey): bool`
+- 命名は実装前に既存 API の読み味を再確認する。公開 API 名には特定プロトコル名を含めず、G1 AUG 方式であることが分かる名前にする。
+- `verifyAugG1Message` は G2 public key、message、G1 signature を受け取り、`publicKey || message` を hash-to-G1 して検証する。
+- `hashAugG1` は `publicKey || message` を hash-to-G1 するため、既存 `Bls.hash(message)` とは別物として docs に明記する。
+- Nim verify 系 API は既存方針に合わせ、署名不一致は `false`、入力形式エラーや FFI 呼び出しエラーは例外にする。
+- `fromHexG1Compressed` / `fromHexG2Compressed` は既存のものを再利用できるため、G1 AUG 専用 hex helper は必須にしない。
+- 必要であれば可読性のため `fromHexAugG1PublicKey` / `fromHexAugG1Signature` / `fromHexAugG1MessageHash` を追加するが、型 alias だけで十分か実装時に判断する。
+
+### テスト方針
+- 実装は TDD で進め、Rust 側テストを先に書く。
+- Rust 正常系では固定 scalar `sk` から `pk = G2::generator() * sk`、`hash = hash_to_g1_aug(pk_bytes, message)`、`signature = hash * sk` を作り、verify が成功することを確認する。
+- Rust 失敗系では message 改ざん、public key 改ざん、signature 改ざん、別 public key、identity public key、不正長、不正 point を確認する。
+- `signature_hash_g1_aug` の出力が `signature = hash * sk` の検証に使えることを確認する。
+- 可能なら独立実装で生成した固定ベクトルをテストに入れる。ネットワークや Node.js に依存するテストは通常テストに入れず、固定 bytes 化したベクトルだけを入れる。
+- Nim 側テストでは `Bls.verifyAugG1Message`、`Bls.hashAugG1` + `Bls.verifyAugG1` の両方を FFI 経由で確認する。
+- 既存 `Bls.verify` の roundtrip テストを残し、既存 minimal-pk-size API の挙動が変わっていないことを確認する。
+
+### docs 更新方針
+- `docs/bls12-381.md` に既存 API と G1 AUG 方式 API の違いを表で追記する。
+  - 既存: public key G1 48 bytes、signature/hash G2 96 bytes、DST `BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_NUL_`
+  - G1 AUG: public key G2 96 bytes、signature/hash G1 48 bytes、DST `BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_AUG_`
+- `docs/ffi-low-level.md` に追加 FFI 関数を追記する。
+- README の Features summary は、BLS12-381 の項目に G2 public key / G1 signature / AUG hash-to-G1 verification を短く追記する。
+- docs には特定プロトコルのための API ではなく、BLS12-381 minimal-signature-size + message augmentation 方式の汎用 API であることを明記する。

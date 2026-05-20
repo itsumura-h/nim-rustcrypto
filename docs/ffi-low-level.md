@@ -10,7 +10,17 @@ Supported targets are defined in `ffi.nim` (for example Linux x86_64, `wasm32-un
 
 ## BLS12-381 (`rustcrypto_bls12_381_*`)
 
-Length constants are exported from `ffi.nim` as `Bls12381ScalarLen` (32), `Bls12381G1CompressedLen` (48), `Bls12381G2CompressedLen` (96), and the corresponding uncompressed sizes. Curve points use `BlsPointFormatCompressed` / `BlsPointFormatUncompressed` with the `*_g1_*` / `*_g2_*` functions. Signature helpers use the `rustcrypto_bls12_381_signature_*` prefix. Prefer the high-level `rustcrypto/algorithm/bls` module when possible.
+Length constants are exported from `ffi.nim` as `Bls12381ScalarLen` (32), `Bls12381G1CompressedLen` (48), `Bls12381G2CompressedLen` (96), and the corresponding uncompressed sizes. Curve points use `BlsPointFormatCompressed` / `BlsPointFormatUncompressed` with the `*_g1_*` / `*_g2_*` functions. Signature helpers use the `rustcrypto_bls12_381_signature_*` prefix.
+
+Minimal-pk-size (G1 public key, G2 signature/hash, NUL DST): `signature_hash`, `signature_sign`, `signature_verify`, `signature_verify_messages`, and related key helpers.
+
+Minimal-signature-size + message augmentation (G2 public key, G1 signature/hash, AUG DST over `publicKey || message`):
+
+- `rustcrypto_bls12_381_signature_hash_g1_aug`
+- `rustcrypto_bls12_381_signature_verify_g1_aug_hash`
+- `rustcrypto_bls12_381_signature_verify_g1_aug_message`
+
+Prefer the high-level `rustcrypto/algorithm/bls` module when possible.
 
 ## Typical pattern
 
