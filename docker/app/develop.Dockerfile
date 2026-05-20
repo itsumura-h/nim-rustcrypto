@@ -7,6 +7,8 @@ RUN apt update && \
     apt upgrade -y && \
     apt install -y \
         build-essential \
+        # build blst for wasm
+        clang \
         curl \
         git
 

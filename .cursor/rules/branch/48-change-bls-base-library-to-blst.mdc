@@ -1,0 +1,150 @@
+---
+description: 48-change-bls-base-library-to-blstブランチでの開発時に読み込む
+alwaysApply: false
+---
+48-change-bls-base-library-to-blst ブランチルール
+===
+
+このブランチで実装することは以下の通りです。
+- Rust側のBLS12-381 / BLS署名処理で利用している `bls12_381` と `bls-signatures` 依存を `blst` に置き換える
+- Nim側の公開API、型名、関数名、戻り値、例外方針、既存テストの期待値を変えない
+- 既存の minimal-pk-size APIを維持する
+  - public key: G1 compressed 48 bytes
+  - signature/message hash: G2 compressed 96 bytes
+  - DST: `BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_NUL_`
+- 既存の minimal-signature-size + AUG APIを維持する
+  - public key: G2 compressed 96 bytes
+  - signature/message hash: G1 compressed 48 bytes
+  - DST: `BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_AUG_`
+- FFI公開関数名とC ABI互換の引数・戻り値は維持し、Rust内部実装だけを差し替える
+- Rust側のpanicをFFI境界外へ漏らさず、既存エラーコードの意味を保つ
+- 依存関係の追加・削除が必要な場合は、プロジェクトルールに従って `cargo add` / `cargo rm` などCLIで行う
+
+このブランチでは、Nim側APIやテストの変更、BLS APIの名前変更、新しいBLS方式の追加、Ethereum consensus互換API、PoP API、KZG、IBE、VRF、threshold signatureは対象外とする。
+実装作業に進む前に、このブランチルールの設計を読み、既存のNimテストが互換性の受け入れ条件であることを確認する。
+
+## 進捗
+- [x] `.cursor/rules/project.mdc` を読み、FFI、ビルド、TDD、依存追加ルールを確認する
+- [x] `.cursor/rules/branch.mdc` を読み、ブランチルールの形式と記録方針を確認する
+- [x] 現在ブランチ `48-change-bls-base-library-to-blst` に対応する既存ブランチルールがないことを確認する
+- [x] 既存BLS関連ブランチルール `40-add-bls.mdc` と `46-bls-g1-augmented-hash-to-curve-と-pk-in-g2-検証-api.mdc` を確認する
+- [x] 既存Rust BLS実装とNim BLS公開APIの構成を確認する
+- [x] `blst` のRust binding、min_pk / min_sig、serialization、verify、aggregate、build featureを調査する
+- [x] 実装方針と設計をこのブランチルールに記録する
+- [x] `/application/src/rustcrypto-ffi` でCLIを使って `blst` を依存追加する
+- [x] `src/rustcrypto-ffi/src/bls.rs` の内部実装を `blst` ベースへ移行する
+- [x] `Cargo.toml` / `Cargo.lock` から不要になった `bls12_381` / `bls-signatures` / BLS専用補助依存をCLIで削除する（`bls-signatures` は Rust 互換テスト用に `dev-dependencies` に残す）
+- [x] Rust側テストで既存BLS正常系・失敗系を通す
+- [x] Rust staticlibをビルドする
+- [x] Nim側テストを変更せずに実行し、既存公開API互換を確認する
+- [x] README/docsに実装基盤が `blst` へ変わったことだけを必要最小限で反映する
+
+## 参考資料
+- `blst` repository: https://github.com/supranational/blst
+- `blst` crate documentation: https://docs.rs/blst/latest/blst/
+- `blst` crate metadata / features: https://docs.rs/crate/blst/0.3.16
+- `blst` Rust binding source: https://docs.rs/blst/latest/src/blst/lib.rs.html
+- IETF hash-to-curve RFC 9380: https://www.rfc-editor.org/rfc/rfc9380
+- IETF BLS signatures draft: https://www.ietf.org/archive/id/draft-irtf-cfrg-bls-signature-05.html
+- 既存BLS追加時の設計: `.cursor/rules/branch/40-add-bls.mdc`
+- G1 AUG API追加時の設計: `.cursor/rules/branch/46-bls-g1-augmented-hash-to-curve-と-pk-in-g2-検証-api.mdc`
+
+## 調査結果・設計まとめ
+
+### 現状
+- `src/rustcrypto-ffi/Cargo.toml` では `bls12_381 = { version = "0.8.0", features = ["experimental"] }` がBLS処理の主実装として使われている。
+- `bls-signatures = "0.15.0"` は現状 `dev-dependencies` にあり、BLS互換確認用または過去実装の名残として扱う。
+- `src/rustcrypto-ffi/src/bls.rs` は、G1/G2/Scalar/pairing、minimal-pk-size署名、G1 AUG検証をすべて `bls12_381` の型と `hash_to_curve` で実装している。
+- Nim側の `src/nim-rustcrypto/src/rustcrypto/algorithm/bls.nim` は固定長array型と marker type `Bls` を公開している。このブランチではこの公開面を変更しない。
+- Nim側の既存テスト `src/nim-rustcrypto/tests/algorithm/test_bls.nim` を変更せずに通すことを互換性の主要な受け入れ条件にする。
+
+### `blst` 調査メモ
+- `blst` はBLS12-381 signature libraryであり、C/assembly実装とRust bindingを提供する。
+- 2026-05-20時点で docs.rs の最新確認対象は `blst` 0.3.16。
+- `blst` Rust crateは `min_pk` と `min_sig` の2モジュールを提供する。
+  - `blst::min_pk` は public key in G1 / signature in G2 の方式に対応する。
+  - `blst::min_sig` は public key in G2 / signature in G1 の方式に対応する。
+- `min_pk` / `min_sig` には `SecretKey`、`PublicKey`、`Signature`、`AggregatePublicKey`、`AggregateSignature` がある。
+- `SecretKey::key_gen(ikm, key_info)` は32バイト以上のIKMから秘密鍵を生成し、既存の `PrivateKey::new` 相当の入力長制約と合わせやすい。
+- `SecretKey::sign(msg, dst, aug)` はメッセージ、DST、augmentation bytesを受け取る。既存 minimal-pk-size では `aug = []`、G1 AUG方式では `aug = publicKeyBytes` を使う方針にする。
+- `PublicKey::from_bytes` / `PublicKey::key_validate`、`Signature::from_bytes`、`compress` / `serialize` / `to_bytes` を使い、既存のcompressed固定長形式を維持する。
+- `Signature::verify`、`Signature::aggregate_verify`、`AggregateSignature::aggregate` などを優先利用し、自前pairing実装は必要な低レベルAPIに限定する。
+- `blst` crateのfeatureは `portable`、`force-adx`、`no-threads`、`serde`、`serde-secret` がある。Ubuntu x86_64 / ARM64通常ビルドではdefaultを基本にし、配布先CPUでillegal instructionが問題になる場合だけ `portable` を検討する。
+- `blst` はbuild scriptでC/assemblyをコンパイルするため、CIやローカルビルドにはCコンパイラが必要になる。Ubuntu前提では許容するが、docsまたはCIメモに必要なら追記する。
+- WebAssembly向けは別途Cコンパイラ/clang設定が必要になる可能性がある。このブランチではUbuntuの通常ターゲットを優先し、wasm対応は既存挙動を壊さない範囲に留める。
+
+### 移行方針
+- FFI関数名、Nim import名、Nim公開API、固定長型のサイズを変えない。
+- Rust内部では `bls12_381::{G1Affine, G2Affine, Scalar, ...}` 依存を段階的に `blst` の `min_pk` / `min_sig` と低レベル型へ置き換える。
+- minimal-pk-size署名APIは `blst::min_pk` を正規実装にする。
+  - `BlsPrivateKey` は32バイトの秘密鍵serializationを維持する。
+  - `BlsPublicKey` は `min_pk::PublicKey` compressed 48 bytesを維持する。
+  - `BlsSignature` / `BlsMessageHash` は `min_pk::Signature` 相当のG2 compressed 96 bytesを維持する。
+  - `Bls.sign(message, sk)` は `SecretKey::sign(message, CSUITE, &[])` を使う。
+  - `Bls.verify(message, pk, sig)` は `Signature::verify(true, message, CSUITE, &[], &pk, true)` を使う。
+  - `Bls.verifyMessages(aggSig, messages, publicKeys)` は既存と同じく重複メッセージを拒否してから `aggregate_verify` 相当を使う。
+- G1 AUG方式APIは `blst::min_sig` を正規実装にする。
+  - `BlsAugG1PublicKey` は `min_sig::PublicKey` compressed 96 bytesを維持する。
+  - `BlsAugG1Signature` / `BlsAugG1MessageHash` はG1 compressed 48 bytesを維持する。
+  - `hashAugG1(publicKey, message)` は `publicKey || message` を手で連結するのではなく、`blst` のaugmentation引数として `aug = publicKeyBytes` を使う方針を第一候補にする。
+  - 既存テストベクトルとの差分が出る場合のみ、現行実装とIETF AUG仕様の入力列を再確認し、互換維持を優先する。
+- 低レベルG1/G2/Scalar/pairing APIは、`blst` の低レベルC binding関数またはRust wrapperで再実装する。
+  - compressed/uncompressed decodeは `deserialize` / `uncompress` を用途に合わせて使い分ける。
+  - group check / infinity checkは `validate` と低レベル `*_in_g1` / `*_in_g2` / `*_is_inf` 相当を使って既存エラー方針に合わせる。
+  - Scalarは既存Nim APIとの互換のため32バイト little-endian canonical encodingを維持する。`blst_scalar_from_lendian` / `blst_lendian_from_scalar` 系を第一候補にする。
+  - 既存の不正長、不正点、非canonical scalar、identity扱いをテストで固定してから置換する。
+- 乱数生成は既存の `rand_core::OsRng` 方針を維持する。`blst` 自体は乱数を扱わないため、32バイトIKM生成はRust側で継続する。
+- 依存整理では `bls12_381`、`bls-signatures`、BLS専用になった `ff` / `group` / `pairing` / `hkdf` / `sha2_htc` などを、他機能で未使用であることを `rg` / `cargo tree` で確認してから削除する。
+
+### Rust FFI設計
+- `src/rustcrypto-ffi/src/bls.rs` の外部公開関数は原則そのまま残す。
+- 既存の長さ定数は維持する。
+  - `BLS12_381_SCALAR_LEN = 32`
+  - `BLS12_381_G1_COMPRESSED_LEN = 48`
+  - `BLS12_381_G1_UNCOMPRESSED_LEN = 96`
+  - `BLS12_381_G2_COMPRESSED_LEN = 96`
+  - `BLS12_381_G2_UNCOMPRESSED_LEN = 192`
+- `catch_unwind(AssertUnwindSafe(...))` によるpanic変換は維持する。
+- NULL入力、NULL出力、出力不足、長さ不正の検証は既存の `aead_common` helperを引き続き使う。
+- `BLST_ERROR::BLST_VERIFY_FAIL` は `RUSTCRYPTO_ERR_VERIFICATION_FAILED` へ変換する。
+- `BLST_ERROR::BLST_BAD_ENCODING`、`BLST_POINT_NOT_IN_GROUP`、`BLST_PK_IS_INFINITY` など入力形式・group検証系のエラーは既存方針に合わせて `RUSTCRYPTO_ERR_INVALID_PARAMETER` または `RUSTCRYPTO_ERR_INVALID_LENGTH` に寄せる。
+- 検証不一致と入力形式エラーを混ぜない。Nim側で `false` になるのは数学的な検証失敗だけにする。
+
+### テスト方針
+- 実装時はTDDで進める。まずRust側の既存BLSテストを `blst` 移行後も同じ期待値で通す。
+- Nim側テストは変更しない。変更が必要に見える場合は、先にRust側互換性の崩れを疑う。
+- 最低限確認する正常系:
+  - `Bls.privateKeyFromSeed` の決定論的鍵生成
+  - `Bls.publicKey`
+  - `Bls.sign` / `Bls.verify`
+  - `Bls.hash`
+  - `Bls.aggregate`
+  - `Bls.verify` with hashes/public keys
+  - `Bls.verifyMessages`
+  - `Bls.hashAugG1`
+  - `Bls.verifyAugG1`
+  - `Bls.verifyAugG1Message`
+- 最低限確認する失敗系:
+  - 32バイト未満seed
+  - 不正Scalar
+  - 不正G1/G2 encoding
+  - identity public key
+  - 改ざんmessage / public key / signature
+  - aggregate verifyでの重複message
+  - 出力バッファ不足
+  - 長さ付きNULL入力
+- 既存の `bls12_381` 実装と `blst` 実装でserializationやkeygenの出力が一致しない場合は、Nim API互換と既存テスト互換を優先し、差分の理由をこのブランチルールへ追記してから方針を更新する。
+
+### 実装メモ（2026-05-20）
+- `blst` 0.3.16 を `cargo add` で追加。`bls12_381` / `ff` / `group` / `pairing` / `sha2_htc` は `cargo rm` で本番依存から削除。
+- `bls.rs` は `blst::min_pk`（minimal-pk-size 署名）、`blst::min_sig`（G1 AUG 検証）、低レベル `blst_p1` / `blst_p2` / `blst_scalar` / `blst_fp12` で再実装。FFI 関数名・定数は不変。
+- 秘密鍵の `privateKeyFromSeed` は互換のため IETF draft-02 相当の HKDF + `Scalar::from_okm` 手順を維持（`blst_keygen` 直接には切り替えない）。`blst` は署名・検証・曲線演算に使用。
+- G1 AUG の `hashAugG1` は `blst_hash_to_g1` の augmentation 引数（`aug = publicKeyBytes`）で実装。手動 `pk || message` 連結は使わない。
+- 圧縮点の改ざん検出は、decode 後に再 compress して入力バイト列と一致するかを見る canonical チェックで、従来どおり `RUSTCRYPTO_ERR_INVALID_PARAMETER` と検証失敗を分離。
+- Rust `cargo test --lib` 142件、Nim `nimble test` 全件成功。ビルドには C コンパイラが必要（`blst` の build script）。
+
+### docs更新方針
+- README/docsの公開API説明は原則変更しない。
+- 実装基盤の説明に `blst` を使う旨がある箇所だけ更新する。
+- `bls12_381` / `bls-signatures` 互換という表現が残っている場合は、公開API互換と実装ライブラリを分けて記述する。
+- `blst` のCコンパイラ要件や `portable` featureを採用した場合は、ビルド注意点として短く追記する。

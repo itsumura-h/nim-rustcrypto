@@ -126,19 +126,15 @@ elif defined(macosx) and defined(arm64):
     )
     quit(QuitFailure)
 
+  syncArchive(macosSourceArchive, resolvedPackageRoot, version, RustCryptoMacosArm64TargetId, RustCryptoMacosArm64ArchiveName)
+
   let wasmSourceArchive = pickExistingArchive(sourceArchiveCandidates(sourceRoot, RustCryptoWasmTargetId))
-  if wasmSourceArchive.len == 0:
-    stderr.writeLine("rustcrypto FFI wasm archive not found in target/wasm32-unknown-unknown/release or target/wasm32-unknown-unknown/debug.")
-    quit(QuitFailure)
+  if wasmSourceArchive.len > 0:
+    syncArchive(wasmSourceArchive, resolvedPackageRoot, version, RustCryptoWasmTargetId, RustCryptoWasmArchiveName)
 
   let wasiSourceArchive = pickExistingArchive(sourceArchiveCandidates(sourceRoot, RustCryptoWasiTargetId))
-  if wasiSourceArchive.len == 0:
-    stderr.writeLine("rustcrypto FFI wasi archive not found in target/wasm32-wasip1/release or target/wasm32-wasip1/debug.")
-    quit(QuitFailure)
-
-  syncArchive(macosSourceArchive, resolvedPackageRoot, version, RustCryptoMacosArm64TargetId, RustCryptoMacosArm64ArchiveName)
-  syncArchive(wasmSourceArchive, resolvedPackageRoot, version, RustCryptoWasmTargetId, RustCryptoWasmArchiveName)
-  syncArchive(wasiSourceArchive, resolvedPackageRoot, version, RustCryptoWasiTargetId, RustCryptoWasiArchiveName)
+  if wasiSourceArchive.len > 0:
+    syncArchive(wasiSourceArchive, resolvedPackageRoot, version, RustCryptoWasiTargetId, RustCryptoWasiArchiveName)
 
 else:
   {.error: "rustcrypto FFI local sync currently supports only Linux x86_64 and macOS arm64 hosts.".}

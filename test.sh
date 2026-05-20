@@ -7,12 +7,17 @@ echo "==> Rust tests"
 cd "$repo_root/src/rustcrypto-ffi"
 cargo test
 cargo build --release --lib
-rustup target add wasm32-unknown-unknown wasm32-wasip1
-cargo build --release --lib --target wasm32-unknown-unknown
-cargo build --release --lib --target wasm32-wasip1
 test -s target/release/librust_crypto_ffi.a
-test -s target/wasm32-unknown-unknown/release/librust_crypto_ffi.a
-test -s target/wasm32-wasip1/release/librust_crypto_ffi.a
+
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  echo "==> Skip wasm/wasi cross-build on macOS (use Linux CI for wasm targets; blst needs clang with wasm32 support)"
+else
+  rustup target add wasm32-unknown-unknown wasm32-wasip1
+  cargo build --release --lib --target wasm32-unknown-unknown
+  cargo build --release --lib --target wasm32-wasip1
+  test -s target/wasm32-unknown-unknown/release/librust_crypto_ffi.a
+  test -s target/wasm32-wasip1/release/librust_crypto_ffi.a
+fi
 
 echo "==> Sync Rust static library"
 cd "$repo_root/src/nim-rustcrypto"
