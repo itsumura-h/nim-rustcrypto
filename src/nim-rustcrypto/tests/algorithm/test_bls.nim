@@ -1,7 +1,6 @@
-import std/sequtils
-
-import rustcrypto/algorithm/bls
 import unittest
+import std/sequtils
+import rustcrypto/algorithm/bls
 
 suite "bls12-381":
   test "privateKeyFromSeed deterministic":
@@ -60,3 +59,31 @@ suite "bls12-381":
     let inv2 = Bls.scalarInvert(two)
     let g2d = Bls.g2Mul(g2, inv2)
     check Bls.pairingEq(g1, g2, g1d, g2d)
+
+  test "aug g1 hash and verify via FFI":
+    const skHex = "4242424242424242424242424242424242424242424242424242424242424242"
+    let sk = fromHexScalar(skHex)
+    let pkG2 = Bls.g2Mul(Bls.g2Generator(BlsG2Compressed), sk)
+    let message = cast[seq[byte]]("aug g1 test message")
+    let msgHash = Bls.hashAugG1(pkG2, message)
+    let sig = Bls.g1Mul(msgHash, sk)
+    check Bls.verifyAugG1(sig, msgHash, pkG2)
+    check Bls.verifyAugG1Message(sig, message, pkG2)
+
+  test "aug g1 verify rejects wrong message":
+    const skHex = "4242424242424242424242424242424242424242424242424242424242424242"
+    let sk = fromHexScalar(skHex)
+    let pkG2 = Bls.g2Mul(Bls.g2Generator(BlsG2Compressed), sk)
+    let message = cast[seq[byte]]("aug g1 test message")
+    let msgHash = Bls.hashAugG1(pkG2, message)
+    let sig = Bls.g1Mul(msgHash, sk)
+    let other = cast[seq[byte]]("different message")
+    check not Bls.verifyAugG1Message(sig, other, pkG2)
+
+  test "minimal pk size API unchanged":
+    let msg = cast[seq[byte]]("this is the message")
+    let seed = cast[seq[byte]]("this is the key and it is very secret")
+    let sk = Bls.privateKeyFromSeed(seed)
+    let pk = Bls.publicKey(sk)
+    let sig = Bls.sign(msg, sk)
+    check Bls.verify(msg, pk, sig)

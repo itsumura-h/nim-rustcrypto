@@ -1149,3 +1149,30 @@ proc bls12_381SignatureVerifyMessagesRaw*(
     publicKeys: ptr uint8,
     publicKeysLen: csize_t,
   ): cint {.cdecl, importc: "rustcrypto_bls12_381_signature_verify_messages".}
+
+proc bls12_381SignatureHashG1AugRaw*(
+    publicKey: ptr uint8,
+    publicKeyLen: csize_t,
+    message: ptr uint8,
+    messageLen: csize_t,
+    output: ptr uint8,
+    outputLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_bls12_381_signature_hash_g1_aug".}
+
+proc bls12_381SignatureVerifyG1AugHashRaw*(
+    signature: ptr uint8,
+    signatureLen: csize_t,
+    messageHash: ptr uint8,
+    messageHashLen: csize_t,
+    publicKey: ptr uint8,
+    publicKeyLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_bls12_381_signature_verify_g1_aug_hash".}
+
+proc bls12_381SignatureVerifyG1AugMessageRaw*(
+    signature: ptr uint8,
+    signatureLen: csize_t,
+    message: ptr uint8,
+    messageLen: csize_t,
+    publicKey: ptr uint8,
+    publicKeyLen: csize_t,
+  ): cint {.cdecl, importc: "rustcrypto_bls12_381_signature_verify_g1_aug_message".}

@@ -12,6 +12,9 @@ type
   BlsPublicKey* = array[Bls12381G1CompressedLen, byte]
   BlsSignature* = array[Bls12381G2CompressedLen, byte]
   BlsMessageHash* = array[Bls12381G2CompressedLen, byte]
+  BlsAugG1PublicKey* = BlsG2Compressed
+  BlsAugG1Signature* = BlsG1Compressed
+  BlsAugG1MessageHash* = BlsG1Compressed
 
 proc blsBytesHex*(value: openArray[byte]): string =
   ## Hex dump for any BLS-related fixed-size byte representation.
@@ -407,3 +410,52 @@ proc verifyMessages*(
 
 proc verify*(T: type Bls; message: openArray[byte]; publicKey: BlsPublicKey; signature: BlsSignature): bool =
   verifyMessages(T, signature, @[@message], @[publicKey])
+
+proc hashAugG1*(
+    T: type Bls; publicKey: BlsAugG1PublicKey; message: openArray[byte],
+): BlsAugG1MessageHash =
+  ## Hash `publicKey || message` to G1 with `BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_AUG_`.
+  ## This is not the same as `Bls.hash`, which hashes only the message to G2 (minimal-pk-size).
+  var output: BlsAugG1MessageHash
+  raiseIfError(
+    bls12_381SignatureHashG1AugRaw(
+      cast[ptr uint8](unsafeAddr publicKey[0]),
+      csize_t(publicKey.len),
+      bytesPtr(message),
+      csize_t(message.len),
+      cast[ptr uint8](addr output[0]),
+      csize_t(output.len),
+    ),
+    "rustcrypto_bls12_381_signature_hash_g1_aug",
+  )
+  output
+
+proc verifyAugG1*(
+    T: type Bls; signature: BlsAugG1Signature; messageHash: BlsAugG1MessageHash; publicKey: BlsAugG1PublicKey,
+): bool =
+  boolFromVerify(
+    bls12_381SignatureVerifyG1AugHashRaw(
+      cast[ptr uint8](unsafeAddr signature[0]),
+      csize_t(signature.len),
+      cast[ptr uint8](unsafeAddr messageHash[0]),
+      csize_t(messageHash.len),
+      cast[ptr uint8](unsafeAddr publicKey[0]),
+      csize_t(publicKey.len),
+    ),
+    "rustcrypto_bls12_381_signature_verify_g1_aug_hash",
+  )
+
+proc verifyAugG1Message*(
+    T: type Bls; signature: BlsAugG1Signature; message: openArray[byte]; publicKey: BlsAugG1PublicKey,
+): bool =
+  boolFromVerify(
+    bls12_381SignatureVerifyG1AugMessageRaw(
+      cast[ptr uint8](unsafeAddr signature[0]),
+      csize_t(signature.len),
+      bytesPtr(message),
+      csize_t(message.len),
+      cast[ptr uint8](unsafeAddr publicKey[0]),
+      csize_t(publicKey.len),
+    ),
+    "rustcrypto_bls12_381_signature_verify_g1_aug_message",
+  )

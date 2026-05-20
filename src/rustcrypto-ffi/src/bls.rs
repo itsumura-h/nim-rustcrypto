@@ -31,6 +31,7 @@ pub const BLS12_381_G2_COMPRESSED_LEN: usize = 96;
 pub const BLS12_381_G2_UNCOMPRESSED_LEN: usize = 192;
 
 const CSUITE: &[u8] = b"BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_NUL_";
+const AUG_G1_CSUITE: &[u8] = b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_AUG_";
 const KEYGEN_SALT: &[u8] = b"BLS-SIG-KEYGEN-SALT-";
 
 fn compressed_flag(compressed: c_int) -> Result<bool, c_int> {
@@ -47,6 +48,39 @@ fn read_scalar(bytes: &[u8; BLS12_381_SCALAR_LEN]) -> Result<Scalar, c_int> {
 
 fn hash_to_g2(msg: &[u8]) -> G2Projective {
     <G2Projective as HashToCurve<ExpandMsgXmd<Sha256Htc>>>::hash_to_curve(msg, CSUITE)
+}
+
+fn hash_to_g1_aug(public_key: &[u8], message: &[u8]) -> Result<G1Projective, c_int> {
+    let _pk = g2_decode(public_key, true)?;
+    let mut aug_msg = Vec::with_capacity(public_key.len() + message.len());
+    aug_msg.extend_from_slice(public_key);
+    aug_msg.extend_from_slice(message);
+    Ok(<G1Projective as HashToCurve<ExpandMsgXmd<Sha256Htc>>>::hash_to_curve(
+        &aug_msg,
+        AUG_G1_CSUITE,
+    ))
+}
+
+fn verify_g1_aug_hash_impl(signature: &G1Affine, hash: &G1Affine, public_key: &G2Affine) -> c_int {
+    if bool::from(public_key.is_identity()) {
+        return RUSTCRYPTO_ERR_VERIFICATION_FAILED;
+    }
+    if bool::from(signature.is_identity()) {
+        return RUSTCRYPTO_ERR_VERIFICATION_FAILED;
+    }
+    if bool::from(hash.is_identity()) {
+        return RUSTCRYPTO_ERR_VERIFICATION_FAILED;
+    }
+    let g2_neg = -G2Affine::generator();
+    let g2_neg_prep = G2Prepared::from(g2_neg);
+    let pk_prep = G2Prepared::from(*public_key);
+    let ml = Bls12::multi_miller_loop(&[(&signature, &g2_neg_prep)])
+        + Bls12::multi_miller_loop(&[(&hash, &pk_prep)]);
+    if ml.final_exponentiation() == Gt::identity() {
+        RUSTCRYPTO_OK
+    } else {
+        RUSTCRYPTO_ERR_VERIFICATION_FAILED
+    }
 }
 
 fn key_gen_from_ikm(ikm: &[u8]) -> Result<Scalar, c_int> {
@@ -1242,6 +1276,150 @@ pub extern "C" fn rustcrypto_bls12_381_signature_verify_messages(
     .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
 }
 
+// --- BLS minimal-signature-size + message augmentation (G2 pk / G1 sig / G1 hash) ---
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_bls12_381_signature_hash_g1_aug(
+    public_key: *const u8,
+    public_key_len: usize,
+    message: *const u8,
+    message_len: usize,
+    output: *mut u8,
+    output_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        let pkb = match aead_common::fixed_input(
+            public_key,
+            public_key_len,
+            BLS12_381_G2_COMPRESSED_LEN,
+            RUSTCRYPTO_ERR_INVALID_LENGTH,
+        ) {
+            Ok(b) => b,
+            Err(e) => return e,
+        };
+        let msg = match aead_common::optional_input(message, message_len) {
+            Ok(m) => m,
+            Err(e) => return e,
+        };
+        let h = match hash_to_g1_aug(pkb, msg) {
+            Ok(v) => v,
+            Err(e) => return e,
+        };
+        let aff = h.to_affine();
+        let out = match aead_common::output_buffer(output, output_len, BLS12_381_G1_COMPRESSED_LEN) {
+            Ok(o) => o,
+            Err(e) => return e,
+        };
+        out.copy_from_slice(&aff.to_compressed());
+        RUSTCRYPTO_OK
+    }))
+    .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_bls12_381_signature_verify_g1_aug_hash(
+    signature: *const u8,
+    signature_len: usize,
+    message_hash: *const u8,
+    message_hash_len: usize,
+    public_key: *const u8,
+    public_key_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        let sigb = match aead_common::fixed_input(
+            signature,
+            signature_len,
+            BLS12_381_G1_COMPRESSED_LEN,
+            RUSTCRYPTO_ERR_INVALID_LENGTH,
+        ) {
+            Ok(b) => b,
+            Err(e) => return e,
+        };
+        let hb = match aead_common::fixed_input(
+            message_hash,
+            message_hash_len,
+            BLS12_381_G1_COMPRESSED_LEN,
+            RUSTCRYPTO_ERR_INVALID_LENGTH,
+        ) {
+            Ok(b) => b,
+            Err(e) => return e,
+        };
+        let pkb = match aead_common::fixed_input(
+            public_key,
+            public_key_len,
+            BLS12_381_G2_COMPRESSED_LEN,
+            RUSTCRYPTO_ERR_INVALID_LENGTH,
+        ) {
+            Ok(b) => b,
+            Err(e) => return e,
+        };
+        let sig_a = match g1_decode(sigb, true) {
+            Ok(v) => v,
+            Err(e) => return e,
+        };
+        let hash_a = match g1_decode(hb, true) {
+            Ok(v) => v,
+            Err(e) => return e,
+        };
+        let pk_a = match g2_decode(pkb, true) {
+            Ok(v) => v,
+            Err(e) => return e,
+        };
+        verify_g1_aug_hash_impl(&sig_a, &hash_a, &pk_a)
+    }))
+    .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rustcrypto_bls12_381_signature_verify_g1_aug_message(
+    signature: *const u8,
+    signature_len: usize,
+    message: *const u8,
+    message_len: usize,
+    public_key: *const u8,
+    public_key_len: usize,
+) -> c_int {
+    catch_unwind(AssertUnwindSafe(|| {
+        let sigb = match aead_common::fixed_input(
+            signature,
+            signature_len,
+            BLS12_381_G1_COMPRESSED_LEN,
+            RUSTCRYPTO_ERR_INVALID_LENGTH,
+        ) {
+            Ok(b) => b,
+            Err(e) => return e,
+        };
+        let pkb = match aead_common::fixed_input(
+            public_key,
+            public_key_len,
+            BLS12_381_G2_COMPRESSED_LEN,
+            RUSTCRYPTO_ERR_INVALID_LENGTH,
+        ) {
+            Ok(b) => b,
+            Err(e) => return e,
+        };
+        let msg = match aead_common::optional_input(message, message_len) {
+            Ok(m) => m,
+            Err(e) => return e,
+        };
+        let hash_p = match hash_to_g1_aug(pkb, msg) {
+            Ok(v) => v,
+            Err(e) => return e,
+        };
+        let sig_a = match g1_decode(sigb, true) {
+            Ok(v) => v,
+            Err(e) => return e,
+        };
+        let hash_a = hash_p.to_affine();
+        let pk_a = match g2_decode(pkb, true) {
+            Ok(v) => v,
+            Err(e) => return e,
+        };
+        verify_g1_aug_hash_impl(&sig_a, &hash_a, &pk_a)
+    }))
+    .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1355,6 +1533,182 @@ mod tests {
                 2,
                 pkb.as_ptr(),
                 96,
+            )
+        );
+    }
+
+    fn aug_g1_test_vectors() -> ([u8; 96], [u8; 48], [u8; 48], &'static [u8]) {
+        let sk = Scalar::from(0x4242_4242_4242_4242u64);
+        let pk = (G2Projective::generator() * sk).to_affine();
+        let pk_bytes = pk.to_compressed();
+        let message: &'static [u8] = b"aug g1 test message";
+        let hash = hash_to_g1_aug(&pk_bytes, message).expect("hash_to_g1_aug");
+        let sig = (hash * sk).to_affine();
+        (pk_bytes, sig.to_compressed(), hash.to_affine().to_compressed(), message)
+    }
+
+    #[test]
+    fn aug_g1_hash_verify_roundtrip() {
+        let (pk, sig, hash, message) = aug_g1_test_vectors();
+        let mut out_hash = [0u8; 48];
+        assert_eq!(
+            RUSTCRYPTO_OK,
+            rustcrypto_bls12_381_signature_hash_g1_aug(
+                pk.as_ptr(),
+                pk.len(),
+                message.as_ptr(),
+                message.len(),
+                out_hash.as_mut_ptr(),
+                out_hash.len(),
+            )
+        );
+        assert_eq!(out_hash.as_slice(), hash.as_slice());
+        assert_eq!(
+            RUSTCRYPTO_OK,
+            rustcrypto_bls12_381_signature_verify_g1_aug_hash(
+                sig.as_ptr(),
+                sig.len(),
+                hash.as_ptr(),
+                hash.len(),
+                pk.as_ptr(),
+                pk.len(),
+            )
+        );
+        assert_eq!(
+            RUSTCRYPTO_OK,
+            rustcrypto_bls12_381_signature_verify_g1_aug_message(
+                sig.as_ptr(),
+                sig.len(),
+                message.as_ptr(),
+                message.len(),
+                pk.as_ptr(),
+                pk.len(),
+            )
+        );
+    }
+
+    #[test]
+    fn aug_g1_verify_rejects_tampering() {
+        let (pk, sig, hash, message) = aug_g1_test_vectors();
+        let mut bad_msg = message.to_vec();
+        bad_msg.push(b'!');
+        assert_eq!(
+            RUSTCRYPTO_ERR_VERIFICATION_FAILED,
+            rustcrypto_bls12_381_signature_verify_g1_aug_message(
+                sig.as_ptr(),
+                sig.len(),
+                bad_msg.as_ptr(),
+                bad_msg.len(),
+                pk.as_ptr(),
+                pk.len(),
+            )
+        );
+        let mut bad_pk = pk;
+        bad_pk[0] ^= 0x01;
+        assert_eq!(
+            RUSTCRYPTO_ERR_INVALID_PARAMETER,
+            rustcrypto_bls12_381_signature_verify_g1_aug_message(
+                sig.as_ptr(),
+                sig.len(),
+                message.as_ptr(),
+                message.len(),
+                bad_pk.as_ptr(),
+                bad_pk.len(),
+            )
+        );
+        let mut bad_sig = sig;
+        bad_sig[0] ^= 0x01;
+        assert_eq!(
+            RUSTCRYPTO_ERR_INVALID_PARAMETER,
+            rustcrypto_bls12_381_signature_verify_g1_aug_hash(
+                bad_sig.as_ptr(),
+                bad_sig.len(),
+                hash.as_ptr(),
+                hash.len(),
+                pk.as_ptr(),
+                pk.len(),
+            )
+        );
+        let sk_wrong = Scalar::from(0xdead_beef_cafe_babeu64);
+        let wrong_sig = ((hash_to_g1_aug(&pk, message).expect("hash") * sk_wrong).to_affine()).to_compressed();
+        assert_eq!(
+            RUSTCRYPTO_ERR_VERIFICATION_FAILED,
+            rustcrypto_bls12_381_signature_verify_g1_aug_hash(
+                wrong_sig.as_ptr(),
+                wrong_sig.len(),
+                hash.as_ptr(),
+                hash.len(),
+                pk.as_ptr(),
+                pk.len(),
+            )
+        );
+        let sk2 = Scalar::from(0x1337_1337_1337_1337u64);
+        let pk2 = (G2Projective::generator() * sk2).to_affine().to_compressed();
+        assert_eq!(
+            RUSTCRYPTO_ERR_VERIFICATION_FAILED,
+            rustcrypto_bls12_381_signature_verify_g1_aug_hash(
+                sig.as_ptr(),
+                sig.len(),
+                hash.as_ptr(),
+                hash.len(),
+                pk2.as_ptr(),
+                pk2.len(),
+            )
+        );
+    }
+
+    #[test]
+    fn aug_g1_identity_public_key_fails() {
+        let (_, sig, hash, _) = aug_g1_test_vectors();
+        let id_pk = G2Affine::identity().to_compressed();
+        assert_eq!(
+            RUSTCRYPTO_ERR_VERIFICATION_FAILED,
+            rustcrypto_bls12_381_signature_verify_g1_aug_hash(
+                sig.as_ptr(),
+                sig.len(),
+                hash.as_ptr(),
+                hash.len(),
+                id_pk.as_ptr(),
+                id_pk.len(),
+            )
+        );
+    }
+
+    #[test]
+    fn aug_g1_invalid_lengths_are_input_errors() {
+        let (pk, sig, hash, message) = aug_g1_test_vectors();
+        let mut out = [0u8; 48];
+        assert_eq!(
+            RUSTCRYPTO_ERR_INVALID_LENGTH,
+            rustcrypto_bls12_381_signature_hash_g1_aug(
+                pk.as_ptr(),
+                pk.len() - 1,
+                message.as_ptr(),
+                message.len(),
+                out.as_mut_ptr(),
+                out.len(),
+            )
+        );
+        assert_eq!(
+            RUSTCRYPTO_ERR_INVALID_LENGTH,
+            rustcrypto_bls12_381_signature_verify_g1_aug_hash(
+                sig.as_ptr(),
+                sig.len() - 1,
+                hash.as_ptr(),
+                hash.len(),
+                pk.as_ptr(),
+                pk.len(),
+            )
+        );
+        assert_eq!(
+            RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT,
+            rustcrypto_bls12_381_signature_hash_g1_aug(
+                pk.as_ptr(),
+                pk.len(),
+                message.as_ptr(),
+                message.len(),
+                out.as_mut_ptr(),
+                out.len() - 1,
             )
         );
     }
