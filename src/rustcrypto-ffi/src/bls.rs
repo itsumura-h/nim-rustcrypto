@@ -1,6 +1,6 @@
-//! BLS12-381 curve operations and `bls-signatures`-style signing APIs (FFI implementation).
+//! BLS12-381 curve operations and BLS signing APIs (FFI implementation, `blst` backend).
 //!
-//! Scalar encoding matches `bls12_381::Scalar` / `bls-signatures`: 32-byte **little-endian**
+//! Scalar encoding matches the prior `bls12_381` / `bls-signatures` surface: 32-byte **little-endian**
 //! canonical field element representation.
 
 use crate::{
@@ -8,20 +8,24 @@ use crate::{
     RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT, RUSTCRYPTO_ERR_RANDOM_FAILED, RUSTCRYPTO_ERR_VERIFICATION_FAILED,
     RUSTCRYPTO_OK, aead_common,
 };
-use bls12_381::hash_to_curve::{ExpandMsgXmd, HashToCurve};
-use bls12_381::{
-    multi_miller_loop, pairing, Bls12, G1Affine, G1Projective, G2Affine, G2Prepared, G2Projective, Gt,
-    Scalar,
+use blst::{
+    blst_final_exp, blst_fp12_is_one, blst_fp12_mul, blst_fr_add, blst_fr_from_scalar, blst_fr_mul,
+    blst_hash_to_g1, blst_hash_to_g2, blst_lendian_from_scalar, blst_p1_add_or_double_affine,
+    blst_p1_affine_compress, blst_p1_affine_in_g1, blst_p1_affine_is_inf, blst_p1_affine_serialize,
+    blst_p1_cneg, blst_p1_deserialize, blst_p1_from_affine, blst_p1_generator, blst_p1_mult,
+    blst_p1_to_affine, blst_p1_uncompress, blst_p2_add_or_double_affine, blst_p2_affine_compress,
+    blst_p2_affine_in_g2, blst_p2_affine_is_inf, blst_p2_affine_serialize, blst_p2_cneg,
+    blst_p2_deserialize, blst_p2_from_affine, blst_p2_generator, blst_p2_mult, blst_p2_to_affine,
+    blst_p2_uncompress, blst_scalar_from_fr, blst_scalar_from_hexascii, blst_scalar_from_lendian,
+    blst_scalar_from_le_bytes, blst_sk_check, blst_sk_inverse, blst_fp12, blst_fr, blst_p1,
+    blst_p1_affine, blst_p2, blst_p2_affine, blst_scalar, min_pk, min_sig, BLST_ERROR,
 };
-use ff::{Field, PrimeField};
-use group::Curve;
+use core::ffi::c_int;
+use core::mem::MaybeUninit;
 use hkdf::Hkdf;
-use pairing::MultiMillerLoop;
+use sha2::Sha256;
 #[cfg(not(target_arch = "wasm32"))]
 use rand_core::{OsRng, RngCore};
-use sha2::Sha256;
-use sha2_htc::Sha256 as Sha256Htc;
-use core::ffi::c_int;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
 pub const BLS12_381_SCALAR_LEN: usize = 32;
@@ -42,48 +46,47 @@ fn compressed_flag(compressed: c_int) -> Result<bool, c_int> {
     }
 }
 
-fn read_scalar(bytes: &[u8; BLS12_381_SCALAR_LEN]) -> Result<Scalar, c_int> {
-    Option::from(Scalar::from_bytes(bytes)).ok_or(RUSTCRYPTO_ERR_INVALID_PARAMETER)
+fn blst_err_to_cint(err: BLST_ERROR) -> c_int {
+    match err {
+        BLST_ERROR::BLST_SUCCESS => RUSTCRYPTO_OK,
+        BLST_ERROR::BLST_VERIFY_FAIL => RUSTCRYPTO_ERR_VERIFICATION_FAILED,
+        BLST_ERROR::BLST_PK_IS_INFINITY => RUSTCRYPTO_ERR_VERIFICATION_FAILED,
+        _ => RUSTCRYPTO_ERR_INVALID_PARAMETER,
+    }
 }
 
-fn hash_to_g2(msg: &[u8]) -> G2Projective {
-    <G2Projective as HashToCurve<ExpandMsgXmd<Sha256Htc>>>::hash_to_curve(msg, CSUITE)
+fn read_scalar(bytes: &[u8; BLS12_381_SCALAR_LEN]) -> Result<blst_scalar, c_int> {
+    let mut s = blst_scalar::default();
+    unsafe {
+        blst_scalar_from_lendian(&mut s, bytes.as_ptr());
+        if !blst_sk_check(&s) {
+            return Err(RUSTCRYPTO_ERR_INVALID_PARAMETER);
+        }
+    }
+    Ok(s)
 }
 
-fn hash_to_g1_aug(public_key: &[u8], message: &[u8]) -> Result<G1Projective, c_int> {
-    let _pk = g2_decode(public_key, true)?;
-    let mut aug_msg = Vec::with_capacity(public_key.len() + message.len());
-    aug_msg.extend_from_slice(public_key);
-    aug_msg.extend_from_slice(message);
-    Ok(<G1Projective as HashToCurve<ExpandMsgXmd<Sha256Htc>>>::hash_to_curve(
-        &aug_msg,
-        AUG_G1_CSUITE,
-    ))
+fn write_scalar_le(s: &blst_scalar) -> [u8; BLS12_381_SCALAR_LEN] {
+    let mut out = [0u8; BLS12_381_SCALAR_LEN];
+    unsafe {
+        blst_lendian_from_scalar(out.as_mut_ptr(), s);
+    }
+    out
 }
 
-fn verify_g1_aug_hash_impl(signature: &G1Affine, hash: &G1Affine, public_key: &G2Affine) -> c_int {
-    if bool::from(public_key.is_identity()) {
-        return RUSTCRYPTO_ERR_VERIFICATION_FAILED;
-    }
-    if bool::from(signature.is_identity()) {
-        return RUSTCRYPTO_ERR_VERIFICATION_FAILED;
-    }
-    if bool::from(hash.is_identity()) {
-        return RUSTCRYPTO_ERR_VERIFICATION_FAILED;
-    }
-    let g2_neg = -G2Affine::generator();
-    let g2_neg_prep = G2Prepared::from(g2_neg);
-    let pk_prep = G2Prepared::from(*public_key);
-    let ml = Bls12::multi_miller_loop(&[(&signature, &g2_neg_prep)])
-        + Bls12::multi_miller_loop(&[(&hash, &pk_prep)]);
-    if ml.final_exponentiation() == Gt::identity() {
-        RUSTCRYPTO_OK
+fn scalar_from_okm(okm: &[u8; 48]) -> Result<blst_scalar, c_int> {
+    let mut wide = [0u8; 64];
+    wide[16..].copy_from_slice(okm);
+    wide.reverse();
+    let mut s = blst_scalar::default();
+    if unsafe { blst_scalar_from_le_bytes(&mut s, wide.as_ptr(), wide.len()) } {
+        Ok(s)
     } else {
-        RUSTCRYPTO_ERR_VERIFICATION_FAILED
+        Err(RUSTCRYPTO_ERR_INVALID_PARAMETER)
     }
 }
 
-fn key_gen_from_ikm(ikm: &[u8]) -> Result<Scalar, c_int> {
+fn key_gen_from_ikm(ikm: &[u8]) -> Result<blst_scalar, c_int> {
     if ikm.len() < 32 {
         return Err(RUSTCRYPTO_ERR_INVALID_LENGTH);
     }
@@ -93,80 +96,199 @@ fn key_gen_from_ikm(ikm: &[u8]) -> Result<Scalar, c_int> {
     let mut okm = [0u8; 48];
     hk.expand(&[0u8, 48u8], &mut okm)
         .map_err(|_| RUSTCRYPTO_ERR_INVALID_PARAMETER)?;
-    let mut wide = [0u8; 64];
-    wide[16..].copy_from_slice(&okm);
-    wide.reverse();
-    Ok(Scalar::from_bytes_wide(&wide))
+    scalar_from_okm(&okm)
 }
 
-fn g1_decode(point: &[u8], compressed: bool) -> Result<G1Affine, c_int> {
-    if compressed {
+fn min_pk_secret_from_le(bytes: &[u8; BLS12_381_SCALAR_LEN]) -> Result<min_pk::SecretKey, c_int> {
+    let s = read_scalar(bytes)?;
+    if unsafe { blst_sk_check(&s) } {
+        Ok(unsafe { core::mem::transmute::<blst_scalar, min_pk::SecretKey>(s) })
+    } else {
+        Err(RUSTCRYPTO_ERR_INVALID_PARAMETER)
+    }
+}
+
+fn g1_decode(point: &[u8], compressed: bool) -> Result<blst_p1_affine, c_int> {
+    let mut out = blst_p1_affine::default();
+    let err = if compressed {
         if point.len() != BLS12_381_G1_COMPRESSED_LEN {
             return Err(RUSTCRYPTO_ERR_INVALID_LENGTH);
         }
-        let mut arr = [0u8; BLS12_381_G1_COMPRESSED_LEN];
-        arr.copy_from_slice(point);
-        Option::from(G1Affine::from_compressed(&arr)).ok_or(RUSTCRYPTO_ERR_INVALID_PARAMETER)
+        unsafe { blst_p1_uncompress(&mut out, point.as_ptr()) }
     } else if point.len() == BLS12_381_G1_UNCOMPRESSED_LEN {
-        let mut arr = [0u8; BLS12_381_G1_UNCOMPRESSED_LEN];
-        arr.copy_from_slice(point);
-        Option::from(G1Affine::from_uncompressed(&arr)).ok_or(RUSTCRYPTO_ERR_INVALID_PARAMETER)
+        unsafe { blst_p1_deserialize(&mut out, point.as_ptr()) }
     } else {
-        Err(RUSTCRYPTO_ERR_INVALID_LENGTH)
+        return Err(RUSTCRYPTO_ERR_INVALID_LENGTH);
+    };
+    if err != BLST_ERROR::BLST_SUCCESS {
+        return Err(RUSTCRYPTO_ERR_INVALID_PARAMETER);
     }
+    if !unsafe { blst_p1_affine_in_g1(&out) } {
+        return Err(RUSTCRYPTO_ERR_INVALID_PARAMETER);
+    }
+    Ok(out)
 }
 
-fn g2_decode(point: &[u8], compressed: bool) -> Result<G2Affine, c_int> {
-    if compressed {
+fn g2_decode(point: &[u8], compressed: bool) -> Result<blst_p2_affine, c_int> {
+    let mut out = blst_p2_affine::default();
+    let err = if compressed {
         if point.len() != BLS12_381_G2_COMPRESSED_LEN {
             return Err(RUSTCRYPTO_ERR_INVALID_LENGTH);
         }
-        let mut arr = [0u8; BLS12_381_G2_COMPRESSED_LEN];
-        arr.copy_from_slice(point);
-        Option::from(G2Affine::from_compressed(&arr)).ok_or(RUSTCRYPTO_ERR_INVALID_PARAMETER)
+        unsafe { blst_p2_uncompress(&mut out, point.as_ptr()) }
     } else if point.len() == BLS12_381_G2_UNCOMPRESSED_LEN {
-        let mut arr = [0u8; BLS12_381_G2_UNCOMPRESSED_LEN];
-        arr.copy_from_slice(point);
-        Option::from(G2Affine::from_uncompressed(&arr)).ok_or(RUSTCRYPTO_ERR_INVALID_PARAMETER)
+        unsafe { blst_p2_deserialize(&mut out, point.as_ptr()) }
     } else {
-        Err(RUSTCRYPTO_ERR_INVALID_LENGTH)
+        return Err(RUSTCRYPTO_ERR_INVALID_LENGTH);
+    };
+    if err != BLST_ERROR::BLST_SUCCESS {
+        return Err(RUSTCRYPTO_ERR_INVALID_PARAMETER);
     }
+    if !unsafe { blst_p2_affine_in_g2(&out) } {
+        return Err(RUSTCRYPTO_ERR_INVALID_PARAMETER);
+    }
+    Ok(out)
 }
 
-fn g1_encode_affine(p: &G1Affine, compressed: bool, out: &mut [u8]) -> Result<(), c_int> {
+fn g1_encode_affine(p: &blst_p1_affine, compressed: bool, out: &mut [u8]) -> Result<(), c_int> {
     if compressed {
         if out.len() < BLS12_381_G1_COMPRESSED_LEN {
             return Err(RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT);
         }
-        out[..BLS12_381_G1_COMPRESSED_LEN].copy_from_slice(&p.to_compressed());
+        unsafe {
+            blst_p1_affine_compress(out.as_mut_ptr(), p);
+        }
     } else {
         if out.len() < BLS12_381_G1_UNCOMPRESSED_LEN {
             return Err(RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT);
         }
-        out[..BLS12_381_G1_UNCOMPRESSED_LEN].copy_from_slice(&p.to_uncompressed());
+        unsafe {
+            blst_p1_affine_serialize(out.as_mut_ptr(), p);
+        }
     }
     Ok(())
 }
 
-fn g2_encode_affine(p: &G2Affine, compressed: bool, out: &mut [u8]) -> Result<(), c_int> {
+fn g1_is_canonical_compressed(point: &[u8; BLS12_381_G1_COMPRESSED_LEN]) -> bool {
+    let Ok(p) = g1_decode(point, true) else {
+        return false;
+    };
+    let mut buf = [0u8; BLS12_381_G1_COMPRESSED_LEN];
+    unsafe {
+        blst_p1_affine_compress(buf.as_mut_ptr(), &p);
+    }
+    buf == *point
+}
+
+fn g2_is_canonical_compressed(point: &[u8; BLS12_381_G2_COMPRESSED_LEN]) -> bool {
+    let Ok(p) = g2_decode(point, true) else {
+        return false;
+    };
+    let mut buf = [0u8; BLS12_381_G2_COMPRESSED_LEN];
+    unsafe {
+        blst_p2_affine_compress(buf.as_mut_ptr(), &p);
+    }
+    buf == *point
+}
+
+fn g2_encode_affine(p: &blst_p2_affine, compressed: bool, out: &mut [u8]) -> Result<(), c_int> {
     if compressed {
         if out.len() < BLS12_381_G2_COMPRESSED_LEN {
             return Err(RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT);
         }
-        out[..BLS12_381_G2_COMPRESSED_LEN].copy_from_slice(&p.to_compressed());
+        unsafe {
+            blst_p2_affine_compress(out.as_mut_ptr(), p);
+        }
     } else {
         if out.len() < BLS12_381_G2_UNCOMPRESSED_LEN {
             return Err(RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT);
         }
-        out[..BLS12_381_G2_UNCOMPRESSED_LEN].copy_from_slice(&p.to_uncompressed());
+        unsafe {
+            blst_p2_affine_serialize(out.as_mut_ptr(), p);
+        }
     }
     Ok(())
 }
 
+fn g1_affine_to_projective(p: &blst_p1_affine) -> blst_p1 {
+    let mut out = blst_p1::default();
+    unsafe {
+        blst_p1_from_affine(&mut out, p);
+    }
+    out
+}
+
+fn g2_affine_to_projective(p: &blst_p2_affine) -> blst_p2 {
+    let mut out = blst_p2::default();
+    unsafe {
+        blst_p2_from_affine(&mut out, p);
+    }
+    out
+}
+
+fn g1_projective_to_affine(p: &blst_p1) -> blst_p1_affine {
+    let mut out = blst_p1_affine::default();
+    unsafe {
+        blst_p1_to_affine(&mut out, p);
+    }
+    out
+}
+
+fn g2_projective_to_affine(p: &blst_p2) -> blst_p2_affine {
+    let mut out = blst_p2_affine::default();
+    unsafe {
+        blst_p2_to_affine(&mut out, p);
+    }
+    out
+}
+
+fn hash_to_g2(msg: &[u8]) -> blst_p2 {
+    let mut out = blst_p2::default();
+    unsafe {
+        blst_hash_to_g2(
+            &mut out,
+            msg.as_ptr(),
+            msg.len(),
+            CSUITE.as_ptr(),
+            CSUITE.len(),
+            core::ptr::null(),
+            0,
+        );
+    }
+    out
+}
+
+fn hash_to_g1_aug(public_key: &[u8], message: &[u8]) -> Result<blst_p1, c_int> {
+    let _pk = g2_decode(public_key, true)?;
+    let mut out = blst_p1::default();
+    unsafe {
+        blst_hash_to_g1(
+            &mut out,
+            message.as_ptr(),
+            message.len(),
+            AUG_G1_CSUITE.as_ptr(),
+            AUG_G1_CSUITE.len(),
+            public_key.as_ptr(),
+            public_key.len(),
+        );
+    }
+    Ok(out)
+}
+
+fn fp12_mul_assign(acc: &mut blst_fp12, other: &blst_fp12) {
+    unsafe {
+        blst_fp12_mul(acc, acc, other);
+    }
+}
+
+fn fp12_is_identity(f: &blst_fp12) -> bool {
+    unsafe { blst_fp12_is_one(f) }
+}
+
 fn verify_aggregate_impl(
-    signature: &G2Affine,
-    hashes: &[G2Projective],
-    public_keys: &[G1Projective],
+    signature: &blst_p2_affine,
+    hashes: &[blst_p2_affine],
+    public_keys: &[blst_p1_affine],
 ) -> c_int {
     if hashes.is_empty() || public_keys.is_empty() {
         return RUSTCRYPTO_ERR_VERIFICATION_FAILED;
@@ -174,7 +296,7 @@ fn verify_aggregate_impl(
     if hashes.len() != public_keys.len() {
         return RUSTCRYPTO_ERR_VERIFICATION_FAILED;
     }
-    if hashes.len() == 1 && bool::from(public_keys[0].is_identity()) {
+    if hashes.len() == 1 && unsafe { blst_p1_affine_is_inf(&public_keys[0]) } {
         return RUSTCRYPTO_ERR_VERIFICATION_FAILED;
     }
     for i in 0..hashes.len() {
@@ -185,27 +307,92 @@ fn verify_aggregate_impl(
         }
     }
 
-    let mut ml = bls12_381::MillerLoopResult::default();
+    let mut acc = blst_fp12::default();
     let mut ok = true;
     for (pk, h) in public_keys.iter().zip(hashes.iter()) {
-        if bool::from(pk.is_identity()) {
+        if unsafe { blst_p1_affine_is_inf(pk) } {
             ok = false;
         }
-        let pk_a = pk.to_affine();
-        let h_prep = G2Prepared::from(G2Affine::from(h));
-        ml = ml + Bls12::multi_miller_loop(&[(&pk_a, &h_prep)]);
+        fp12_mul_assign(&mut acc, &blst_fp12::miller_loop(h, pk));
     }
     if !ok {
         return RUSTCRYPTO_ERR_VERIFICATION_FAILED;
     }
-    let g1_neg = -G1Affine::generator();
-    let sig_prep = G2Prepared::from(*signature);
-    ml = ml + Bls12::multi_miller_loop(&[(&g1_neg, &sig_prep)]);
-    if ml.final_exponentiation() == Gt::identity() {
+
+    let mut g1_gen = unsafe { *blst_p1_generator() };
+    unsafe {
+        blst_p1_cneg(&mut g1_gen, true);
+    }
+    let g1_neg = g1_projective_to_affine(&g1_gen);
+    fp12_mul_assign(&mut acc, &blst_fp12::miller_loop(signature, &g1_neg));
+
+    let mut fe = MaybeUninit::<blst_fp12>::uninit();
+    unsafe {
+        blst_final_exp(fe.as_mut_ptr(), &acc);
+    }
+    let fe = unsafe { fe.assume_init() };
+    if fp12_is_identity(&fe) {
         RUSTCRYPTO_OK
     } else {
         RUSTCRYPTO_ERR_VERIFICATION_FAILED
     }
+}
+
+fn verify_g1_aug_hash_impl(
+    signature: &blst_p1_affine,
+    hash: &blst_p1_affine,
+    public_key: &blst_p2_affine,
+) -> c_int {
+    if unsafe { blst_p2_affine_is_inf(public_key) } {
+        return RUSTCRYPTO_ERR_VERIFICATION_FAILED;
+    }
+    if unsafe { blst_p1_affine_is_inf(signature) } {
+        return RUSTCRYPTO_ERR_VERIFICATION_FAILED;
+    }
+    if unsafe { blst_p1_affine_is_inf(hash) } {
+        return RUSTCRYPTO_ERR_VERIFICATION_FAILED;
+    }
+
+    let mut g2_gen = unsafe { *blst_p2_generator() };
+    unsafe {
+        blst_p2_cneg(&mut g2_gen, true);
+    }
+    let g2_neg = g2_projective_to_affine(&g2_gen);
+
+    let mut acc = blst_fp12::miller_loop(&g2_neg, signature);
+    fp12_mul_assign(&mut acc, &blst_fp12::miller_loop(public_key, hash));
+
+    let mut fe = MaybeUninit::<blst_fp12>::uninit();
+    unsafe {
+        blst_final_exp(fe.as_mut_ptr(), &acc);
+    }
+    let fe = unsafe { fe.assume_init() };
+    if fp12_is_identity(&fe) {
+        RUSTCRYPTO_OK
+    } else {
+        RUSTCRYPTO_ERR_VERIFICATION_FAILED
+    }
+}
+
+type FrBinOp = unsafe extern "C" fn(*mut blst_fr, *const blst_fr, *const blst_fr);
+
+fn scalar_fr_binop(lhs: &blst_scalar, rhs: &blst_scalar, op: FrBinOp) -> Result<blst_scalar, c_int> {
+    let mut la = blst_fr::default();
+    let mut ra = blst_fr::default();
+    let mut out = blst_fr::default();
+    unsafe {
+        blst_fr_from_scalar(&mut la, lhs);
+        blst_fr_from_scalar(&mut ra, rhs);
+        op(&mut out, &la, &ra);
+    }
+    let mut s = blst_scalar::default();
+    unsafe {
+        blst_scalar_from_fr(&mut s, &out);
+    }
+    if !unsafe { blst_sk_check(&s) } {
+        return Err(RUSTCRYPTO_ERR_INVALID_PARAMETER);
+    }
+    Ok(s)
 }
 
 // --- FFI: scalar ---
@@ -250,9 +437,15 @@ fn scalar_random_impl(output: *mut u8, output_len: usize) -> c_int {
             Ok(o) => o,
             Err(e) => return e,
         };
-        let s = Scalar::random(&mut OsRng);
-        out.copy_from_slice(&s.to_bytes());
-        RUSTCRYPTO_OK
+        for _ in 0..64 {
+            OsRng.fill_bytes(out);
+            let mut arr = [0u8; BLS12_381_SCALAR_LEN];
+            arr.copy_from_slice(out);
+            if read_scalar(&arr).is_ok() {
+                return RUSTCRYPTO_OK;
+            }
+        }
+        RUSTCRYPTO_ERR_RANDOM_FAILED
     }
 }
 
@@ -265,8 +458,10 @@ pub extern "C" fn rustcrypto_bls12_381_scalar_add(
     output: *mut u8,
     output_len: usize,
 ) -> c_int {
-    catch_unwind(AssertUnwindSafe(|| scalar_binop_impl(lhs, lhs_len, rhs, rhs_len, output, output_len, |a, b| a + b)))
-        .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
+    catch_unwind(AssertUnwindSafe(|| {
+        scalar_binop_impl(lhs, lhs_len, rhs, rhs_len, output, output_len, blst_fr_add)
+    }))
+    .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
 }
 
 #[unsafe(no_mangle)]
@@ -278,8 +473,10 @@ pub extern "C" fn rustcrypto_bls12_381_scalar_mul(
     output: *mut u8,
     output_len: usize,
 ) -> c_int {
-    catch_unwind(AssertUnwindSafe(|| scalar_binop_impl(lhs, lhs_len, rhs, rhs_len, output, output_len, |a, b| a * b)))
-        .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
+    catch_unwind(AssertUnwindSafe(|| {
+        scalar_binop_impl(lhs, lhs_len, rhs, rhs_len, output, output_len, blst_fr_mul)
+    }))
+    .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
 }
 
 fn scalar_binop_impl(
@@ -289,7 +486,7 @@ fn scalar_binop_impl(
     rhs_len: usize,
     output: *mut u8,
     output_len: usize,
-    op: impl FnOnce(Scalar, Scalar) -> Scalar,
+    op: FrBinOp,
 ) -> c_int {
     let lb = match aead_common::fixed_input(
         lhs,
@@ -321,11 +518,15 @@ fn scalar_binop_impl(
         Ok(v) => v,
         Err(e) => return e,
     };
+    let r = match scalar_fr_binop(&a, &b, op) {
+        Ok(v) => v,
+        Err(e) => return e,
+    };
     let out = match aead_common::output_buffer(output, output_len, BLS12_381_SCALAR_LEN) {
         Ok(o) => o,
         Err(e) => return e,
     };
-    out.copy_from_slice(&op(a, b).to_bytes());
+    out.copy_from_slice(&write_scalar_le(&r));
     RUSTCRYPTO_OK
 }
 
@@ -356,18 +557,18 @@ fn scalar_invert_impl(scalar: *const u8, scalar_len: usize, output: *mut u8, out
         Ok(v) => v,
         Err(e) => return e,
     };
-    if bool::from(s.is_zero()) {
+    let mut inv = blst_scalar::default();
+    unsafe {
+        blst_sk_inverse(&mut inv, &s);
+    }
+    if !unsafe { blst_sk_check(&inv) } {
         return RUSTCRYPTO_ERR_INVALID_PARAMETER;
     }
-    let inv: Scalar = match Option::from(s.invert()) {
-        Some(x) => x,
-        None => return RUSTCRYPTO_ERR_INVALID_PARAMETER,
-    };
     let out = match aead_common::output_buffer(output, output_len, BLS12_381_SCALAR_LEN) {
         Ok(o) => o,
         Err(e) => return e,
     };
-    out.copy_from_slice(&inv.to_bytes());
+    out.copy_from_slice(&write_scalar_le(&inv));
     RUSTCRYPTO_OK
 }
 
@@ -393,7 +594,7 @@ pub extern "C" fn rustcrypto_bls12_381_g1_generator(
             Ok(o) => o,
             Err(e) => return e,
         };
-        let g = G1Affine::generator();
+        let g = g1_projective_to_affine(unsafe { &*blst_p1_generator() });
         if g1_encode_affine(&g, compressed, out).is_err() {
             return RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT;
         }
@@ -422,7 +623,7 @@ pub extern "C" fn rustcrypto_bls12_381_g2_generator(
             Ok(o) => o,
             Err(e) => return e,
         };
-        let g = G2Affine::generator();
+        let g = g2_projective_to_affine(unsafe { &*blst_p2_generator() });
         if g2_encode_affine(&g, compressed, out).is_err() {
             return RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT;
         }
@@ -567,8 +768,11 @@ fn g1_g2_add_impl(
             Ok(v) => v,
             Err(e) => return e,
         };
-        let sum = G1Projective::from(a) + G1Projective::from(b);
-        let aff = sum.to_affine();
+        let mut sum = blst_p1::default();
+        unsafe {
+            blst_p1_add_or_double_affine(&mut sum, &g1_affine_to_projective(&a), &b);
+        }
+        let aff = g1_projective_to_affine(&sum);
         if g1_encode_affine(&aff, compressed, out).is_err() {
             return RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT;
         }
@@ -581,8 +785,11 @@ fn g1_g2_add_impl(
             Ok(v) => v,
             Err(e) => return e,
         };
-        let sum = G2Projective::from(a) + G2Projective::from(b);
-        let aff = sum.to_affine();
+        let mut sum = blst_p2::default();
+        unsafe {
+            blst_p2_add_or_double_affine(&mut sum, &g2_affine_to_projective(&a), &b);
+        }
+        let aff = g2_projective_to_affine(&sum);
         if g2_encode_affine(&aff, compressed, out).is_err() {
             return RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT;
         }
@@ -650,8 +857,11 @@ fn g_neg_impl(
             Ok(v) => v,
             Err(e) => return e,
         };
-        let n = -G1Projective::from(p);
-        let aff = n.to_affine();
+        let mut n = g1_affine_to_projective(&p);
+        unsafe {
+            blst_p1_cneg(&mut n, true);
+        }
+        let aff = g1_projective_to_affine(&n);
         if g1_encode_affine(&aff, compressed, out).is_err() {
             return RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT;
         }
@@ -660,8 +870,11 @@ fn g_neg_impl(
             Ok(v) => v,
             Err(e) => return e,
         };
-        let n = -G2Projective::from(p);
-        let aff = n.to_affine();
+        let mut n = g2_affine_to_projective(&p);
+        unsafe {
+            blst_p2_cneg(&mut n, true);
+        }
+        let aff = g2_projective_to_affine(&n);
         if g2_encode_affine(&aff, compressed, out).is_err() {
             return RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT;
         }
@@ -679,8 +892,10 @@ pub extern "C" fn rustcrypto_bls12_381_g1_mul(
     output_len: usize,
     compressed: c_int,
 ) -> c_int {
-    catch_unwind(AssertUnwindSafe(|| g_mul_impl(point, point_len, scalar, scalar_len, output, output_len, compressed, true)))
-        .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
+    catch_unwind(AssertUnwindSafe(|| {
+        g_mul_impl(point, point_len, scalar, scalar_len, output, output_len, compressed, true)
+    }))
+    .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
 }
 
 #[unsafe(no_mangle)]
@@ -693,8 +908,10 @@ pub extern "C" fn rustcrypto_bls12_381_g2_mul(
     output_len: usize,
     compressed: c_int,
 ) -> c_int {
-    catch_unwind(AssertUnwindSafe(|| g_mul_impl(point, point_len, scalar, scalar_len, output, output_len, compressed, false)))
-        .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
+    catch_unwind(AssertUnwindSafe(|| {
+        g_mul_impl(point, point_len, scalar, scalar_len, output, output_len, compressed, false)
+    }))
+    .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
 }
 
 fn g_mul_impl(
@@ -745,13 +962,22 @@ fn g_mul_impl(
         Ok(o) => o,
         Err(e) => return e,
     };
+    let scalar_le = write_scalar_le(&s);
     if is_g1 {
         let p = match g1_decode(pb, compressed) {
             Ok(v) => v,
             Err(e) => return e,
         };
-        let r = G1Projective::from(p) * s;
-        let aff = r.to_affine();
+        let mut r = blst_p1::default();
+        unsafe {
+            blst_p1_mult(
+                &mut r,
+                &g1_affine_to_projective(&p),
+                scalar_le.as_ptr(),
+                BLS12_381_SCALAR_LEN * 8,
+            );
+        }
+        let aff = g1_projective_to_affine(&r);
         if g1_encode_affine(&aff, compressed, out).is_err() {
             return RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT;
         }
@@ -760,8 +986,16 @@ fn g_mul_impl(
             Ok(v) => v,
             Err(e) => return e,
         };
-        let r = G2Projective::from(p) * s;
-        let aff = r.to_affine();
+        let mut r = blst_p2::default();
+        unsafe {
+            blst_p2_mult(
+                &mut r,
+                &g2_affine_to_projective(&p),
+                scalar_le.as_ptr(),
+                BLS12_381_SCALAR_LEN * 8,
+            );
+        }
+        let aff = g2_projective_to_affine(&r);
         if g2_encode_affine(&aff, compressed, out).is_err() {
             return RUSTCRYPTO_ERR_OUTPUT_TOO_SHORT;
         }
@@ -798,7 +1032,7 @@ fn pairing_eq_impl(
     g2_rhs: *const u8,
     g2_rhs_len: usize,
 ) -> c_int {
-    let a1b = match aead_common::fixed_input(
+    let a1 = match aead_common::fixed_input(
         g1_lhs,
         g1_lhs_len,
         BLS12_381_G1_COMPRESSED_LEN,
@@ -807,7 +1041,7 @@ fn pairing_eq_impl(
         Ok(b) => b,
         Err(e) => return e,
     };
-    let a2b = match aead_common::fixed_input(
+    let a2 = match aead_common::fixed_input(
         g2_lhs,
         g2_lhs_len,
         BLS12_381_G2_COMPRESSED_LEN,
@@ -816,7 +1050,7 @@ fn pairing_eq_impl(
         Ok(b) => b,
         Err(e) => return e,
     };
-    let b1b = match aead_common::fixed_input(
+    let b1 = match aead_common::fixed_input(
         g1_rhs,
         g1_rhs_len,
         BLS12_381_G1_COMPRESSED_LEN,
@@ -825,7 +1059,7 @@ fn pairing_eq_impl(
         Ok(b) => b,
         Err(e) => return e,
     };
-    let b2b = match aead_common::fixed_input(
+    let b2 = match aead_common::fixed_input(
         g2_rhs,
         g2_rhs_len,
         BLS12_381_G2_COMPRESSED_LEN,
@@ -834,25 +1068,25 @@ fn pairing_eq_impl(
         Ok(b) => b,
         Err(e) => return e,
     };
-    let a1 = match g1_decode(a1b, true) {
+    let a1a = match g1_decode(a1, true) {
         Ok(v) => v,
         Err(e) => return e,
     };
-    let a2 = match g2_decode(a2b, true) {
+    let a2a = match g2_decode(a2, true) {
         Ok(v) => v,
         Err(e) => return e,
     };
-    let b1 = match g1_decode(b1b, true) {
+    let b1a = match g1_decode(b1, true) {
         Ok(v) => v,
         Err(e) => return e,
     };
-    let b2 = match g2_decode(b2b, true) {
+    let b2a = match g2_decode(b2, true) {
         Ok(v) => v,
         Err(e) => return e,
     };
-    let p1 = pairing(&a1, &a2);
-    let p2 = pairing(&b1, &b2);
-    if p1 == p2 {
+    let p1 = blst_fp12::miller_loop(&a2a, &a1a).final_exp();
+    let p2 = blst_fp12::miller_loop(&b2a, &b1a).final_exp();
+    if blst_fp12::finalverify(&p1, &p2) {
         RUSTCRYPTO_OK
     } else {
         RUSTCRYPTO_ERR_VERIFICATION_FAILED
@@ -903,35 +1137,29 @@ fn pairing_product_identity_impl(
     }
     let g1s = unsafe { core::slice::from_raw_parts(g1_points, g1_points_len) };
     let g2s = unsafe { core::slice::from_raw_parts(g2_points, g2_points_len) };
-    let mut g1_affines: Vec<G1Affine> = Vec::with_capacity(pair_count);
-    let mut g2_prep: Vec<G2Prepared> = Vec::with_capacity(pair_count);
+    let mut acc = blst_fp12::default();
     for i in 0..pair_count {
         let g1b = &g1s[i * BLS12_381_G1_COMPRESSED_LEN..(i + 1) * BLS12_381_G1_COMPRESSED_LEN];
         let g2b = &g2s[i * BLS12_381_G2_COMPRESSED_LEN..(i + 1) * BLS12_381_G2_COMPRESSED_LEN];
-        g1_affines.push(match g1_decode(g1b, true) {
+        let g1a = match g1_decode(g1b, true) {
             Ok(v) => v,
             Err(e) => return e,
-        });
+        };
         let g2a = match g2_decode(g2b, true) {
             Ok(v) => v,
             Err(e) => return e,
         };
-        g2_prep.push(G2Prepared::from(g2a));
+        fp12_mul_assign(&mut acc, &blst_fp12::miller_loop(&g2a, &g1a));
     }
-    let refs: Vec<(&G1Affine, &G2Prepared)> = g1_affines
-        .iter()
-        .zip(g2_prep.iter())
-        .map(|(a, p)| (a, p))
-        .collect();
-    let ml = multi_miller_loop(&refs);
-    if ml.final_exponentiation() == Gt::identity() {
+    let fe = acc.final_exp();
+    if fp12_is_identity(&fe) {
         RUSTCRYPTO_OK
     } else {
         RUSTCRYPTO_ERR_VERIFICATION_FAILED
     }
 }
 
-// --- BLS signatures (bls-signatures 0.15 style) ---
+// --- BLS signatures (minimal-pk-size) ---
 
 #[unsafe(no_mangle)]
 pub extern "C" fn rustcrypto_bls12_381_signature_private_key_from_seed(
@@ -953,7 +1181,7 @@ pub extern "C" fn rustcrypto_bls12_381_signature_private_key_from_seed(
             Ok(o) => o,
             Err(e) => return e,
         };
-        out.copy_from_slice(&sk.to_bytes());
+        out.copy_from_slice(&write_scalar_le(&sk));
         RUSTCRYPTO_OK
     }))
     .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
@@ -981,7 +1209,7 @@ pub extern "C" fn rustcrypto_bls12_381_signature_private_key_generate(output: *m
                 Ok(o) => o,
                 Err(e) => return e,
             };
-            out.copy_from_slice(&sk.to_bytes());
+            out.copy_from_slice(&write_scalar_le(&sk));
             RUSTCRYPTO_OK
         }
     }))
@@ -1004,15 +1232,18 @@ pub extern "C" fn rustcrypto_bls12_381_signature_private_key_from_decimal_string
             Ok(s) => s,
             Err(_) => return RUSTCRYPTO_ERR_INVALID_PARAMETER,
         };
-        let sk = match Scalar::from_str_vartime(s) {
-            Some(v) => v,
-            None => return RUSTCRYPTO_ERR_INVALID_PARAMETER,
-        };
+        let mut sk = blst_scalar::default();
+        unsafe {
+            blst_scalar_from_hexascii(&mut sk, s.as_ptr());
+            if !blst_sk_check(&sk) {
+                return RUSTCRYPTO_ERR_INVALID_PARAMETER;
+            }
+        }
         let out = match aead_common::output_buffer(output, output_len, BLS12_381_SCALAR_LEN) {
             Ok(o) => o,
             Err(e) => return e,
         };
-        out.copy_from_slice(&sk.to_bytes());
+        out.copy_from_slice(&write_scalar_le(&sk));
         RUSTCRYPTO_OK
     }))
     .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
@@ -1037,17 +1268,16 @@ pub extern "C" fn rustcrypto_bls12_381_signature_public_key(
         };
         let mut arr = [0u8; BLS12_381_SCALAR_LEN];
         arr.copy_from_slice(kb);
-        let sk = match read_scalar(&arr) {
+        let sk = match min_pk_secret_from_le(&arr) {
             Ok(v) => v,
             Err(e) => return e,
         };
-        let pk = G1Projective::generator() * sk;
-        let aff = pk.to_affine();
+        let pk = sk.sk_to_pk();
         let out = match aead_common::output_buffer(output, output_len, BLS12_381_G1_COMPRESSED_LEN) {
             Ok(o) => o,
             Err(e) => return e,
         };
-        out.copy_from_slice(&aff.to_compressed());
+        out.copy_from_slice(&pk.compress());
         RUSTCRYPTO_OK
     }))
     .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
@@ -1065,13 +1295,16 @@ pub extern "C" fn rustcrypto_bls12_381_signature_hash(
             Ok(m) => m,
             Err(e) => return e,
         };
-        let h = hash_to_g2(msg);
-        let aff = h.to_affine();
+        let h = g2_projective_to_affine(&hash_to_g2(msg));
         let out = match aead_common::output_buffer(output, output_len, BLS12_381_G2_COMPRESSED_LEN) {
             Ok(o) => o,
             Err(e) => return e,
         };
-        out.copy_from_slice(&aff.to_compressed());
+        let mut buf = [0u8; BLS12_381_G2_COMPRESSED_LEN];
+        unsafe {
+            blst_p2_affine_compress(buf.as_mut_ptr(), &h);
+        }
+        out.copy_from_slice(&buf);
         RUSTCRYPTO_OK
     }))
     .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
@@ -1102,18 +1335,16 @@ pub extern "C" fn rustcrypto_bls12_381_signature_sign(
         };
         let mut arr = [0u8; BLS12_381_SCALAR_LEN];
         arr.copy_from_slice(kb);
-        let sk = match read_scalar(&arr) {
+        let sk = match min_pk_secret_from_le(&arr) {
             Ok(v) => v,
             Err(e) => return e,
         };
-        let mut sig = hash_to_g2(msg);
-        sig *= sk;
-        let aff = sig.to_affine();
+        let sig = sk.sign(msg, CSUITE, &[]);
         let out = match aead_common::output_buffer(output, output_len, BLS12_381_G2_COMPRESSED_LEN) {
             Ok(o) => o,
             Err(e) => return e,
         };
-        out.copy_from_slice(&aff.to_compressed());
+        out.copy_from_slice(&sig.compress());
         RUSTCRYPTO_OK
     }))
     .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
@@ -1142,21 +1373,31 @@ pub extern "C" fn rustcrypto_bls12_381_signature_aggregate(
             return RUSTCRYPTO_ERR_NULL_INPUT_WITH_DATA;
         }
         let slab = unsafe { core::slice::from_raw_parts(signatures, signatures_len) };
-        let mut acc = G2Projective::identity();
+        let mut acc = blst_p2::default();
+        let mut first = true;
         for i in 0..signature_count {
             let chunk = &slab[i * BLS12_381_G2_COMPRESSED_LEN..(i + 1) * BLS12_381_G2_COMPRESSED_LEN];
             let p = match g2_decode(chunk, true) {
                 Ok(v) => v,
                 Err(e) => return e,
             };
-            acc += G2Projective::from(p);
+            if first {
+                acc = g2_affine_to_projective(&p);
+                first = false;
+            } else {
+                unsafe {
+                    blst_p2_add_or_double_affine(&mut acc, &acc, &p);
+                }
+            }
         }
-        let aff = acc.to_affine();
+        let aff = g2_projective_to_affine(&acc);
         let out = match aead_common::output_buffer(output, output_len, BLS12_381_G2_COMPRESSED_LEN) {
             Ok(o) => o,
             Err(e) => return e,
         };
-        out.copy_from_slice(&aff.to_compressed());
+        unsafe {
+            blst_p2_affine_compress(out.as_mut_ptr(), &aff);
+        }
         RUSTCRYPTO_OK
     }))
     .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
@@ -1199,23 +1440,21 @@ pub extern "C" fn rustcrypto_bls12_381_signature_verify(
         };
         let hslab = unsafe { core::slice::from_raw_parts(hashes, hashes_len) };
         let pkslab = unsafe { core::slice::from_raw_parts(public_keys, public_keys_len) };
-        let mut hashes_p: Vec<G2Projective> = Vec::with_capacity(pair_count);
-        let mut pks: Vec<G1Projective> = Vec::with_capacity(pair_count);
+        let mut hashes_a: Vec<blst_p2_affine> = Vec::with_capacity(pair_count);
+        let mut pks: Vec<blst_p1_affine> = Vec::with_capacity(pair_count);
         for i in 0..pair_count {
             let hb = &hslab[i * BLS12_381_G2_COMPRESSED_LEN..(i + 1) * BLS12_381_G2_COMPRESSED_LEN];
             let pk = &pkslab[i * BLS12_381_G1_COMPRESSED_LEN..(i + 1) * BLS12_381_G1_COMPRESSED_LEN];
-            let ha = match g2_decode(hb, true) {
+            hashes_a.push(match g2_decode(hb, true) {
                 Ok(v) => v,
                 Err(e) => return e,
-            };
-            let pk_a = match g1_decode(pk, true) {
+            });
+            pks.push(match g1_decode(pk, true) {
                 Ok(v) => v,
                 Err(e) => return e,
-            };
-            hashes_p.push(G2Projective::from(ha));
-            pks.push(G1Projective::from(pk_a));
+            });
         }
-        verify_aggregate_impl(&sig_a, &hashes_p, &pks)
+        verify_aggregate_impl(&sig_a, &hashes_a, &pks)
     }))
     .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
 }
@@ -1249,29 +1488,42 @@ pub extern "C" fn rustcrypto_bls12_381_signature_verify_messages(
             Ok(b) => b,
             Err(e) => return e,
         };
-        let sig_a = match g2_decode(sigb, true) {
+        let sig = match min_pk::Signature::from_bytes(sigb) {
             Ok(v) => v,
-            Err(e) => return e,
+            Err(e) => return blst_err_to_cint(e),
         };
         let mptrs = unsafe { core::slice::from_raw_parts(messages, message_count) };
         let mlens = unsafe { core::slice::from_raw_parts(message_lens, message_count) };
         let pkslab = unsafe { core::slice::from_raw_parts(public_keys, public_keys_len) };
-        let mut hashes_p: Vec<G2Projective> = Vec::with_capacity(message_count);
-        let mut pks: Vec<G1Projective> = Vec::with_capacity(message_count);
+
+        let mut msgs: Vec<Vec<u8>> = Vec::with_capacity(message_count);
+        let mut pks: Vec<min_pk::PublicKey> = Vec::with_capacity(message_count);
         for i in 0..message_count {
             let msg = match aead_common::optional_input(mptrs[i], mlens[i]) {
                 Ok(m) => m,
                 Err(e) => return e,
             };
-            hashes_p.push(hash_to_g2(msg));
-            let pk = &pkslab[i * BLS12_381_G1_COMPRESSED_LEN..(i + 1) * BLS12_381_G1_COMPRESSED_LEN];
-            let pk_a = match g1_decode(pk, true) {
+            msgs.push(msg.to_vec());
+            let pk_bytes =
+                &pkslab[i * BLS12_381_G1_COMPRESSED_LEN..(i + 1) * BLS12_381_G1_COMPRESSED_LEN];
+            let pk = match min_pk::PublicKey::from_bytes(pk_bytes) {
                 Ok(v) => v,
-                Err(e) => return e,
+                Err(e) => return blst_err_to_cint(e),
             };
-            pks.push(G1Projective::from(pk_a));
+            pks.push(pk);
         }
-        verify_aggregate_impl(&sig_a, &hashes_p, &pks)
+
+        for i in 0..message_count {
+            for j in (i + 1)..message_count {
+                if msgs[i] == msgs[j] {
+                    return RUSTCRYPTO_ERR_VERIFICATION_FAILED;
+                }
+            }
+        }
+
+        let msg_refs: Vec<&[u8]> = msgs.iter().map(|m| m.as_slice()).collect();
+        let pk_refs: Vec<&min_pk::PublicKey> = pks.iter().collect();
+        blst_err_to_cint(sig.aggregate_verify(true, &msg_refs, CSUITE, &pk_refs, true))
     }))
     .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
 }
@@ -1305,12 +1557,14 @@ pub extern "C" fn rustcrypto_bls12_381_signature_hash_g1_aug(
             Ok(v) => v,
             Err(e) => return e,
         };
-        let aff = h.to_affine();
+        let aff = g1_projective_to_affine(&h);
         let out = match aead_common::output_buffer(output, output_len, BLS12_381_G1_COMPRESSED_LEN) {
             Ok(o) => o,
             Err(e) => return e,
         };
-        out.copy_from_slice(&aff.to_compressed());
+        unsafe {
+            blst_p1_affine_compress(out.as_mut_ptr(), &aff);
+        }
         RUSTCRYPTO_OK
     }))
     .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
@@ -1353,6 +1607,21 @@ pub extern "C" fn rustcrypto_bls12_381_signature_verify_g1_aug_hash(
             Ok(b) => b,
             Err(e) => return e,
         };
+        let mut sig_arr = [0u8; BLS12_381_G1_COMPRESSED_LEN];
+        sig_arr.copy_from_slice(sigb);
+        if !g1_is_canonical_compressed(&sig_arr) {
+            return RUSTCRYPTO_ERR_INVALID_PARAMETER;
+        }
+        let mut hash_arr = [0u8; BLS12_381_G1_COMPRESSED_LEN];
+        hash_arr.copy_from_slice(hb);
+        if !g1_is_canonical_compressed(&hash_arr) {
+            return RUSTCRYPTO_ERR_INVALID_PARAMETER;
+        }
+        let mut pk_arr = [0u8; BLS12_381_G2_COMPRESSED_LEN];
+        pk_arr.copy_from_slice(pkb);
+        if !g2_is_canonical_compressed(&pk_arr) {
+            return RUSTCRYPTO_ERR_INVALID_PARAMETER;
+        }
         let sig_a = match g1_decode(sigb, true) {
             Ok(v) => v,
             Err(e) => return e,
@@ -1402,20 +1671,25 @@ pub extern "C" fn rustcrypto_bls12_381_signature_verify_g1_aug_message(
             Ok(m) => m,
             Err(e) => return e,
         };
-        let hash_p = match hash_to_g1_aug(pkb, msg) {
+        let mut sig_arr = [0u8; BLS12_381_G1_COMPRESSED_LEN];
+        sig_arr.copy_from_slice(sigb);
+        if !g1_is_canonical_compressed(&sig_arr) {
+            return RUSTCRYPTO_ERR_INVALID_PARAMETER;
+        }
+        let mut pk_arr = [0u8; BLS12_381_G2_COMPRESSED_LEN];
+        pk_arr.copy_from_slice(pkb);
+        if !g2_is_canonical_compressed(&pk_arr) {
+            return RUSTCRYPTO_ERR_INVALID_PARAMETER;
+        }
+        let sig = match min_sig::Signature::from_bytes(sigb) {
             Ok(v) => v,
-            Err(e) => return e,
+            Err(e) => return blst_err_to_cint(e),
         };
-        let sig_a = match g1_decode(sigb, true) {
+        let pk = match min_sig::PublicKey::from_bytes(pkb) {
             Ok(v) => v,
-            Err(e) => return e,
+            Err(e) => return blst_err_to_cint(e),
         };
-        let hash_a = hash_p.to_affine();
-        let pk_a = match g2_decode(pkb, true) {
-            Ok(v) => v,
-            Err(e) => return e,
-        };
-        verify_g1_aug_hash_impl(&sig_a, &hash_a, &pk_a)
+        blst_err_to_cint(sig.verify(true, msg, AUG_G1_CSUITE, pkb, &pk, true))
     }))
     .unwrap_or(crate::RUSTCRYPTO_ERR_PANIC)
 }
@@ -1478,17 +1752,24 @@ mod tests {
     fn pairing_bilinearity_smoke() {
         let mut g = [0u8; 48];
         rustcrypto_bls12_381_g1_generator(g.as_mut_ptr(), 48, 1);
-        let s = Scalar::from(2u64);
+        let s = read_scalar(&{
+            let mut tmp = [0u8; 32];
+            tmp[0] = 2;
+            tmp
+        })
+        .unwrap();
+        let s_bytes = write_scalar_le(&s);
         let mut g2 = [0u8; 48];
-        rustcrypto_bls12_381_g1_mul(g.as_ptr(), 48, s.to_bytes().as_ptr(), 32, g2.as_mut_ptr(), 48, 1);
+        rustcrypto_bls12_381_g1_mul(g.as_ptr(), 48, s_bytes.as_ptr(), 32, g2.as_mut_ptr(), 48, 1);
         let mut h = [0u8; 96];
         rustcrypto_bls12_381_g2_generator(h.as_mut_ptr(), 96, 1);
-        let s_inv: Scalar = match Option::from(s.invert()) {
-            Some(v) => v,
-            None => panic!("invert"),
-        };
+        let mut inv = blst_scalar::default();
+        unsafe {
+            blst_sk_inverse(&mut inv, &s);
+        }
+        let s_inv = write_scalar_le(&inv);
         let mut h2 = [0u8; 96];
-        rustcrypto_bls12_381_g2_mul(h.as_ptr(), 96, s_inv.to_bytes().as_ptr(), 32, h2.as_mut_ptr(), 96, 1);
+        rustcrypto_bls12_381_g2_mul(h.as_ptr(), 96, s_inv.as_ptr(), 32, h2.as_mut_ptr(), 96, 1);
         assert_eq!(
             RUSTCRYPTO_OK,
             rustcrypto_bls12_381_pairing_eq(g.as_ptr(), 48, h.as_ptr(), 96, g2.as_ptr(), 48, h2.as_ptr(), 96)
@@ -1538,13 +1819,26 @@ mod tests {
     }
 
     fn aug_g1_test_vectors() -> ([u8; 96], [u8; 48], [u8; 48], &'static [u8]) {
-        let sk = Scalar::from(0x4242_4242_4242_4242u64);
-        let pk = (G2Projective::generator() * sk).to_affine();
-        let pk_bytes = pk.to_compressed();
+        let mut sk_bytes = [0u8; 32];
+        sk_bytes[..8].copy_from_slice(&0x4242_4242_4242_4242u64.to_le_bytes());
+        let sk = read_scalar(&sk_bytes).expect("scalar");
+        let sk_le = write_scalar_le(&sk);
+        let mut pk = [0u8; 96];
+        rustcrypto_bls12_381_g2_generator(pk.as_mut_ptr(), 96, 1);
+        rustcrypto_bls12_381_g2_mul(pk.as_ptr(), 96, sk_le.as_ptr(), 32, pk.as_mut_ptr(), 96, 1);
         let message: &'static [u8] = b"aug g1 test message";
-        let hash = hash_to_g1_aug(&pk_bytes, message).expect("hash_to_g1_aug");
-        let sig = (hash * sk).to_affine();
-        (pk_bytes, sig.to_compressed(), hash.to_affine().to_compressed(), message)
+        let mut hash = [0u8; 48];
+        rustcrypto_bls12_381_signature_hash_g1_aug(
+            pk.as_ptr(),
+            pk.len(),
+            message.as_ptr(),
+            message.len(),
+            hash.as_mut_ptr(),
+            hash.len(),
+        );
+        let mut sig = [0u8; 48];
+        rustcrypto_bls12_381_g1_mul(hash.as_ptr(), 48, sk_le.as_ptr(), 32, sig.as_mut_ptr(), 48, 1);
+        (pk, sig, hash, message)
     }
 
     #[test]
@@ -1629,8 +1923,11 @@ mod tests {
                 pk.len(),
             )
         );
-        let sk_wrong = Scalar::from(0xdead_beef_cafe_babeu64);
-        let wrong_sig = ((hash_to_g1_aug(&pk, message).expect("hash") * sk_wrong).to_affine()).to_compressed();
+        let mut sk_wrong = [0u8; 32];
+        sk_wrong[..8].copy_from_slice(&0xdead_beef_cafe_babeu64.to_le_bytes());
+        let sk_wrong_le = write_scalar_le(&read_scalar(&sk_wrong).unwrap());
+        let mut wrong_sig = [0u8; 48];
+        rustcrypto_bls12_381_g1_mul(hash.as_ptr(), 48, sk_wrong_le.as_ptr(), 32, wrong_sig.as_mut_ptr(), 48, 1);
         assert_eq!(
             RUSTCRYPTO_ERR_VERIFICATION_FAILED,
             rustcrypto_bls12_381_signature_verify_g1_aug_hash(
@@ -1642,8 +1939,12 @@ mod tests {
                 pk.len(),
             )
         );
-        let sk2 = Scalar::from(0x1337_1337_1337_1337u64);
-        let pk2 = (G2Projective::generator() * sk2).to_affine().to_compressed();
+        let mut sk2_bytes = [0u8; 32];
+        sk2_bytes[..8].copy_from_slice(&0x1337_1337_1337_1337u64.to_le_bytes());
+        let sk2_le = write_scalar_le(&read_scalar(&sk2_bytes).unwrap());
+        let mut pk2 = [0u8; 96];
+        rustcrypto_bls12_381_g2_generator(pk2.as_mut_ptr(), 96, 1);
+        rustcrypto_bls12_381_g2_mul(pk2.as_ptr(), 96, sk2_le.as_ptr(), 32, pk2.as_mut_ptr(), 96, 1);
         assert_eq!(
             RUSTCRYPTO_ERR_VERIFICATION_FAILED,
             rustcrypto_bls12_381_signature_verify_g1_aug_hash(
@@ -1660,7 +1961,8 @@ mod tests {
     #[test]
     fn aug_g1_identity_public_key_fails() {
         let (_, sig, hash, _) = aug_g1_test_vectors();
-        let id_pk = G2Affine::identity().to_compressed();
+        let mut id_pk = [0u8; 96];
+        id_pk[0] = 0xc0;
         assert_eq!(
             RUSTCRYPTO_ERR_VERIFICATION_FAILED,
             rustcrypto_bls12_381_signature_verify_g1_aug_hash(
