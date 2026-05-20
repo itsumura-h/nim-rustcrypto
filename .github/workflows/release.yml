@@ -184,9 +184,6 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Add Rust wasm targets
-        run: rustup target add wasm32-unknown-unknown wasm32-wasip1
-
       - name: Install Nim toolchain
         uses: jiro4989/setup-nim-action@v2
         with:
@@ -216,15 +213,12 @@ jobs:
           cd src/rustcrypto-ffi
           cargo test
 
+      # wasm/wasi（blst の C ビルド）は Linux ジョブで生成する。macOS の clang は wasm32-unknown-unknown 非対応。
       - name: Build Rust static library (Apple Silicon)
         run: |
           cd src/rustcrypto-ffi
           cargo build --release --lib
           test -s target/release/librust_crypto_ffi.a
-          cargo build --release --lib --target wasm32-unknown-unknown
-          test -s target/wasm32-unknown-unknown/release/librust_crypto_ffi.a
-          cargo build --release --lib --target wasm32-wasip1
-          test -s target/wasm32-wasip1/release/librust_crypto_ffi.a
 
       - name: Sync Rust static library to Nim vendor tree
         run: |
